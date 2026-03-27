@@ -352,6 +352,12 @@ class LeadSerializer(serializers.ModelSerializer):
 
 
 class CreateLeadSerializer(serializers.ModelSerializer):
+    assigned_to = serializers.PrimaryKeyRelatedField(
+        queryset=Staff.objects.filter(role=Staff.Role.STAFF, is_active=True),
+        required=False,
+        allow_null=True,
+    )
+
     class Meta:
         model = Lead
         fields = (
@@ -365,6 +371,12 @@ class CreateLeadSerializer(serializers.ModelSerializer):
 
 
 class UpdateLeadSerializer(serializers.ModelSerializer):
+    assigned_to = serializers.PrimaryKeyRelatedField(
+        queryset=Staff.objects.filter(role=Staff.Role.STAFF, is_active=True),
+        required=False,
+        allow_null=True,
+    )
+
     class Meta:
         model = Lead
         fields = (
@@ -374,6 +386,16 @@ class UpdateLeadSerializer(serializers.ModelSerializer):
             "assigned_to",
             "notes",
         )
+
+
+class LeadImportUploadSerializer(serializers.Serializer):
+    file = serializers.FileField()
+
+    def validate_file(self, value):
+        file_name = str(getattr(value, "name", "")).lower()
+        if not file_name.endswith((".csv", ".xlsx", ".xlsm")):
+            raise serializers.ValidationError("Upload a CSV or Excel file.")
+        return value
 
 
 class SessionSerializer(serializers.ModelSerializer):

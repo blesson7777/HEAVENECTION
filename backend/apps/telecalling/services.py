@@ -1,4 +1,7 @@
-from collections import Counter
+import csv
+import io
+import re
+from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal
 
@@ -19,6 +22,11 @@ from backend.apps.telecalling.models import (
     TrainingLesson,
 )
 
+try:
+    from openpyxl import load_workbook
+except ImportError:  # pragma: no cover - dependency installed in runtime
+    load_workbook = None
+
 
 ONLINE_WINDOW_SECONDS = 90
 SHORT_CALL_SECONDS = 5
@@ -27,6 +35,50 @@ IDLE_WARNING_AFTER_SECONDS = 5 * 60
 IDLE_WARNING_GRACE_SECONDS = 5 * 60
 IDLE_OFFLINE_AFTER_SECONDS = IDLE_WARNING_AFTER_SECONDS + IDLE_WARNING_GRACE_SECONDS
 TWOPLACES = Decimal("0.01")
+LEAD_QUEUE_LIMIT = 20
+ACTIVE_QUEUE_STATUSES = (
+    Lead.Status.NEW,
+    Lead.Status.CALL_BACK,
+    Lead.Status.INTERESTED,
+)
+TERMINAL_QUEUE_STATUSES = (
+    Lead.Status.NOT_INTERESTED,
+    Lead.Status.NO_ANSWER,
+    Lead.Status.CONVERTED,
+)
+NAME_COLUMN_ALIASES = {
+    "name",
+    "leadname",
+    "lead name",
+    "customername",
+    "customer name",
+    "customer",
+    "fullname",
+    "full name",
+    "clientname",
+    "client name",
+    "client",
+}
+PHONE_COLUMN_ALIASES = {
+    "phone",
+    "phone no",
+    "phone no.",
+    "phonenumber",
+    "phone number",
+    "mobile",
+    "mobile no",
+    "mobile no.",
+    "mobilenumber",
+    "mobile number",
+    "contact",
+    "contact no",
+    "contact no.",
+    "contactnumber",
+    "contact number",
+    "number",
+    "whatsapp",
+    "whatsapp number",
+}
 
 
 class TrainingRequiredError(Exception):
@@ -410,6 +462,231 @@ def _staff_online_label(session, active_cutoff):
 
 def _staff_queryset():
     return Staff.objects.filter(role=Staff.Role.STAFF).order_by("name")
+
+
+def _normalize_phone(phone_value):
+    return re.sub(r"\D+", "", str(phone_value or "")).strip()
+
+
+def _normalize_column_name(value):
+    text = re.sub(r"[^a-z0-9]+", " ", str(value or "").strip().lower())
+    return " ".join(text.split())
+
+
+def _lead_queue_queryset():
+    return Lead.objects.filter(status__in=ACTIVE_QUEUE_STATUSES)
+
+
+def _is_active_queue_status(status):
+    return status in ACTIVE_QUEUE_STATUSES
+
+
+def _daily_completed_call_counts():
+    _, start, end = _today_range()
+    qualifying_statuses = [
+        Call.Status.INTERESTED,
+        Call.Status.NOT_INTERESTED,
+        Call.Status.NO_ANSWER,
+        Call.Status.CALL_BACK,
+        Call.Status.CONVERTED,
+    ]
+    return {
+        row["staff_id"]: row["count"]
+        for row in Call.objects.filter(start_time__range=(start, end), status__in=qualifying_statuses)
+        .values("staff_id")
+        .annotate(count=Count("id"))
+    }
+
+
+def release_staff_queue(staff):
+    if not staff:
+        return 0
+    released = Lead.objects.filter(
+        assigned_to=staff,
+        status__in=ACTIVE_QUEUE_STATUSES,
+    ).update(assigned_to=None, updated_at=timezone.now())
+    return released
+
+
+def auto_allocate_leads(*, target_staff=None):
+    staff_queryset = _staff_queryset().filter(is_active=True)
+    if target_staff is not None:
+        staff_queryset = staff_queryset.filter(id=target_staff.id)
+
+    staff_members = list(staff_queryset)
+    if not staff_members:
+        return {"assigned_count": 0, "remaining_unassigned_count": _lead_queue_queryset().filter(assigned_to=None).count()}
+
+    active_counts = {
+        row["assigned_to"]: row["count"]
+        for row in _lead_queue_queryset()
+        .exclude(assigned_to=None)
+        .values("assigned_to")
+        .annotate(count=Count("id"))
+    }
+    completed_today_counts = _daily_completed_call_counts()
+    open_lead_ids = list(
+        _lead_queue_queryset()
+        .filter(assigned_to=None)
+        .order_by("created_at", "id")
+        .values_list("id", flat=True)
+    )
+    if not open_lead_ids:
+        return {"assigned_count": 0, "remaining_unassigned_count": 0}
+
+    staff_slots = [
+        {
+            "staff_id": staff.id,
+            "name": staff.name.lower(),
+            "active_count": active_counts.get(staff.id, 0),
+            "completed_today": completed_today_counts.get(staff.id, 0),
+        }
+        for staff in staff_members
+    ]
+
+    assigned_by_staff = defaultdict(list)
+    while open_lead_ids:
+        staff_slots.sort(
+            key=lambda item: (
+                item["active_count"],
+                -item["completed_today"],
+                item["name"],
+            )
+        )
+        assigned_in_pass = False
+        for slot in staff_slots:
+            if slot["active_count"] >= LEAD_QUEUE_LIMIT:
+                continue
+            lead_id = open_lead_ids.pop(0)
+            assigned_by_staff[slot["staff_id"]].append(lead_id)
+            slot["active_count"] += 1
+            assigned_in_pass = True
+            if not open_lead_ids:
+                break
+        if not assigned_in_pass:
+            break
+
+    assigned_count = 0
+    assigned_at = timezone.now()
+    for staff_id, lead_ids in assigned_by_staff.items():
+        assigned_count += len(lead_ids)
+        Lead.objects.filter(id__in=lead_ids).update(
+            assigned_to_id=staff_id,
+            updated_at=assigned_at,
+        )
+
+    return {
+        "assigned_count": assigned_count,
+        "remaining_unassigned_count": len(open_lead_ids),
+    }
+
+
+def _decode_csv_bytes(file_bytes):
+    for encoding in ("utf-8-sig", "utf-8", "latin-1"):
+        try:
+            return file_bytes.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return file_bytes.decode("utf-8", errors="ignore")
+
+
+def _read_lead_rows_from_upload(uploaded_file):
+    file_name = str(getattr(uploaded_file, "name", "")).lower()
+    uploaded_file.seek(0)
+
+    if file_name.endswith(".csv"):
+        content = _decode_csv_bytes(uploaded_file.read())
+        return [row for row in csv.reader(io.StringIO(content)) if any(str(cell or "").strip() for cell in row)]
+
+    if file_name.endswith(".xlsx") or file_name.endswith(".xlsm"):
+        if load_workbook is None:
+            raise ValueError("Excel import support is not available right now.")
+        workbook = load_workbook(uploaded_file, read_only=True, data_only=True)
+        worksheet = workbook.active
+        rows = []
+        for row in worksheet.iter_rows(values_only=True):
+            normalized_row = ["" if cell is None else str(cell).strip() for cell in row]
+            if any(normalized_row):
+                rows.append(normalized_row)
+        return rows
+
+    raise ValueError("Upload a CSV or XLSX file.")
+
+
+def _detect_lead_column_indexes(rows):
+    if not rows:
+        raise ValueError("The uploaded file is empty.")
+
+    header = rows[0]
+    normalized_header = [_normalize_column_name(cell) for cell in header]
+    name_index = None
+    phone_index = None
+
+    for index, value in enumerate(normalized_header):
+        if name_index is None and value in NAME_COLUMN_ALIASES:
+            name_index = index
+        if phone_index is None and value in PHONE_COLUMN_ALIASES:
+            phone_index = index
+
+    has_header_match = name_index is not None or phone_index is not None
+    if not has_header_match:
+        if len(header) < 2:
+            raise ValueError("The file must contain name and phone columns.")
+        return 0, 1, rows
+
+    if name_index is None or phone_index is None:
+        raise ValueError("The file must include both name and phone columns.")
+
+    return name_index, phone_index, rows[1:]
+
+
+def import_leads_from_upload(uploaded_file):
+    rows = _read_lead_rows_from_upload(uploaded_file)
+    name_index, phone_index, data_rows = _detect_lead_column_indexes(rows)
+
+    existing_numbers = {
+        _normalize_phone(phone)
+        for phone in Lead.objects.values_list("phone", flat=True)
+    }
+    created_leads = []
+    batch_numbers = set()
+    skipped_rows = 0
+
+    for row in data_rows:
+        row_values = list(row)
+        if max(name_index, phone_index) >= len(row_values):
+            skipped_rows += 1
+            continue
+
+        name = str(row_values[name_index] or "").strip()
+        phone = _normalize_phone(row_values[phone_index])
+        if not name or len(phone) < 7:
+            skipped_rows += 1
+            continue
+        if phone in existing_numbers or phone in batch_numbers:
+            skipped_rows += 1
+            continue
+
+        batch_numbers.add(phone)
+        created_leads.append(
+            Lead(
+                name=name[:150],
+                phone=phone,
+                status=Lead.Status.NEW,
+            )
+        )
+
+    if created_leads:
+        Lead.objects.bulk_create(created_leads)
+
+    allocation = auto_allocate_leads()
+    return {
+        "created_count": len(created_leads),
+        "skipped_count": skipped_rows,
+        "assigned_count": allocation["assigned_count"],
+        "remaining_unassigned_count": allocation["remaining_unassigned_count"],
+        "queue_limit": LEAD_QUEUE_LIMIT,
+    }
 
 
 def _training_lessons_queryset():
@@ -837,7 +1114,7 @@ def build_team_management_payload():
     }
     assigned_totals = {
         row["assigned_to"]: row["count"]
-        for row in Lead.objects.exclude(assigned_to=None)
+        for row in _lead_queue_queryset().exclude(assigned_to=None)
         .values("assigned_to")
         .annotate(count=Count("id"))
     }
@@ -1052,6 +1329,7 @@ def build_settings_payload(current_user):
 
 def build_lead_management_payload():
     leads = Lead.objects.select_related("assigned_to").order_by("-updated_at")
+    active_queue = _lead_queue_queryset()
     staff_options = [
         {"id": str(staff.id), "name": staff.name}
         for staff in _staff_queryset().filter(is_active=True)
@@ -1077,6 +1355,12 @@ def build_lead_management_payload():
     return {
         "lead_rows": lead_rows,
         "staff_options": staff_options,
+        "queue_summary": {
+            "active_queue_total": active_queue.count(),
+            "unassigned_total": active_queue.filter(assigned_to=None).count(),
+            "staff_active_count": _staff_queryset().filter(is_active=True).count(),
+            "queue_limit": LEAD_QUEUE_LIMIT,
+        },
     }
 
 
@@ -1191,6 +1475,7 @@ def start_staff_session(staff):
         )
         raise TrainingRequiredError(pending_payload)
 
+    auto_allocate_leads(target_staff=staff)
     session = Session.objects.create(
         staff=staff,
         login_time=now,
@@ -1342,7 +1627,12 @@ def build_staff_today_payload(staff):
 
 
 def get_assigned_leads(staff):
-    return Lead.objects.filter(assigned_to=staff).select_related("assigned_to").order_by("-updated_at")
+    auto_allocate_leads(target_staff=staff)
+    return (
+        Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES)
+        .select_related("assigned_to")
+        .order_by("-updated_at")
+    )
 
 
 def start_staff_call(staff, lead):
@@ -1463,6 +1753,8 @@ def update_staff_call_status(call, status):
         app_state=session.last_known_state if session else None,
         metadata={"status": status},
     )
+    if status in TERMINAL_QUEUE_STATUSES:
+        auto_allocate_leads(target_staff=call.staff)
     return call
 
 

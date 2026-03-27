@@ -13,6 +13,7 @@ urlpatterns = [
     path("admin/profile/", views.admin_profile_api, name="api-admin-profile"),
     path("company/profile/", views.company_profile_api, name="api-company-profile"),
     path("leads/", views.leads_api, name="api-leads"),
+    path("leads/import/", views.import_leads_api, name="api-leads-import"),
     path("leads/<uuid:lead_id>/", views.lead_detail_api, name="api-lead-detail"),
     path("training/", views.training_lessons_api, name="api-training-lessons"),
     path("training/<uuid:lesson_id>/", views.training_lesson_detail_api, name="api-training-lesson-detail"),

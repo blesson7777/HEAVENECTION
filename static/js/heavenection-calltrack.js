@@ -97,6 +97,40 @@
         return payload;
     }
 
+    async function requestForm(url, formData, options) {
+        let response;
+        try {
+            response = await fetch(url, {
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "X-CSRFToken": getCsrfToken(),
+                    ...(options?.headers || {}),
+                },
+                ...options,
+                body: formData,
+            });
+        } catch (error) {
+            window.heavenectionNetworkState?.show(
+                "Connection lost. Check your internet or server and wait for recovery.",
+            );
+            throw new Error("Network connection lost.");
+        }
+
+        let payload = null;
+        try {
+            payload = await response.json();
+        } catch (error) {
+            payload = null;
+        }
+
+        if (!response.ok) {
+            throw new Error(extractErrorMessage(payload));
+        }
+
+        return payload;
+    }
+
     function extractErrorMessage(payload) {
         if (!payload || typeof payload !== "object") {
             return "Unable to complete the request right now.";
@@ -489,6 +523,67 @@
         });
     }
 
+    function bindLeadImport() {
+        const config = window.heavenectionAdmin;
+        const modalNode = document.getElementById("leadImportModal");
+        const form = document.getElementById("leadImportForm");
+        if (!config?.leadImportUrl || !modalNode || !form) {
+            return;
+        }
+
+        const fileInput = document.getElementById("leadImportFile");
+        const feedback = document.getElementById("leadImportFeedback");
+        const submitButton = document.getElementById("leadImportSubmitButton");
+
+        function showFeedback(message, isError) {
+            feedback.textContent = message;
+            feedback.classList.remove("d-none", "is-success", "is-error");
+            feedback.classList.add(isError ? "is-error" : "is-success");
+        }
+
+        function clearFeedback() {
+            feedback.textContent = "";
+            feedback.classList.add("d-none");
+            feedback.classList.remove("is-success", "is-error");
+        }
+
+        function resetForm() {
+            form.reset();
+            clearFeedback();
+        }
+
+        document.getElementById("openLeadImportModal")?.addEventListener("click", resetForm);
+        modalNode.addEventListener("hidden.bs.modal", clearFeedback);
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            clearFeedback();
+
+            const file = fileInput?.files?.[0];
+            if (!file) {
+                showFeedback("Choose a CSV or Excel file to continue.", true);
+                return;
+            }
+
+            submitButton.disabled = true;
+            const formData = new FormData();
+            formData.append("file", file);
+
+            try {
+                const result = await requestForm(config.leadImportUrl, formData, { method: "POST" });
+                showFeedback(
+                    `Imported ${result.created_count} leads, skipped ${result.skipped_count}, assigned ${result.assigned_count}, waiting ${result.remaining_unassigned_count}.`,
+                    false,
+                );
+                window.setTimeout(() => window.location.reload(), 900);
+            } catch (error) {
+                showFeedback(error.message, true);
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+    }
+
     function bindTrainingCrud() {
         const config = window.heavenectionAdmin;
         const modalNode = document.getElementById("trainingModal");
@@ -738,6 +833,7 @@
     renderCharts();
     bindStaffCrud();
     bindLeadCrud();
+    bindLeadImport();
     bindTrainingCrud();
     bindSalaryControlCrud();
     bindSidebarSections();

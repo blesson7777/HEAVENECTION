@@ -23,6 +23,7 @@ from backend.apps.telecalling.serializers import (
     EndCallSerializer,
     HeartbeatSerializer,
     LeadSerializer,
+    LeadImportUploadSerializer,
     LoginSerializer,
     SalarySettingsSerializer,
     SessionSerializer,
@@ -35,6 +36,7 @@ from backend.apps.telecalling.serializers import (
     UpdateTrainingLessonSerializer,
 )
 from backend.apps.telecalling.services import (
+    auto_allocate_leads,
     authenticate_staff,
     build_call_detail_payload,
     build_dashboard_payload,
@@ -52,10 +54,11 @@ from backend.apps.telecalling.services import (
     end_staff_session,
     get_assigned_leads,
     get_company_profile,
-    get_pending_mandatory_lessons,
+    import_leads_from_upload,
     mark_staff_seen,
     read_root_file,
     record_session_heartbeat,
+    release_staff_queue,
     start_staff_call,
     start_staff_session,
     TrainingRequiredError,
@@ -502,7 +505,22 @@ def leads_api(request):
     serializer = CreateLeadSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     lead = serializer.save()
+    if lead.assigned_to_id is None and lead.status in (
+        Lead.Status.NEW,
+        Lead.Status.CALL_BACK,
+        Lead.Status.INTERESTED,
+    ):
+        auto_allocate_leads()
     return Response(LeadSerializer(lead).data, status=201)
+
+
+@api_view(["POST"])
+@permission_classes([IsAdminStaff])
+def import_leads_api(request):
+    serializer = LeadImportUploadSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    summary = import_leads_from_upload(serializer.validated_data["file"])
+    return Response(summary, status=201)
 
 
 @api_view(["GET", "PATCH", "DELETE"])
@@ -517,12 +535,20 @@ def lead_detail_api(request, lead_id):
         return Response(LeadSerializer(lead).data)
 
     if request.method == "DELETE":
+        deleted_was_active = lead.status in (
+            Lead.Status.NEW,
+            Lead.Status.CALL_BACK,
+            Lead.Status.INTERESTED,
+        )
         lead.delete()
+        if deleted_was_active:
+            auto_allocate_leads()
         return Response(status=204)
 
     serializer = UpdateLeadSerializer(lead, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     lead = serializer.save()
+    auto_allocate_leads()
     return Response(LeadSerializer(lead).data)
 
 
@@ -621,6 +647,8 @@ def team_members_api(request):
     serializer = CreateStaffSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     staff = serializer.save()
+    if staff.is_active:
+        auto_allocate_leads(target_staff=staff)
     return Response(StaffSerializer(staff).data, status=201)
 
 
@@ -637,11 +665,18 @@ def team_member_detail_api(request, staff_id):
 
     if request.method == "DELETE":
         staff.delete()
+        auto_allocate_leads()
         return Response(status=204)
 
+    was_active = staff.is_active
     serializer = UpdateStaffSerializer(staff, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     staff = serializer.save()
+    if was_active and not staff.is_active:
+        release_staff_queue(staff)
+        auto_allocate_leads()
+    elif staff.is_active:
+        auto_allocate_leads(target_staff=staff)
     return Response(StaffSerializer(staff).data)
 
 
