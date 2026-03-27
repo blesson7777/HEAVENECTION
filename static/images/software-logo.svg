@@ -1,0 +1,17 @@
+<svg width="460" height="96" viewBox="0 0 460 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="48" cy="48" r="40" fill="#6A76B8"/>
+  <path d="M24 42H56L83 19" stroke="#F8FAFC" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M28 74L64 62" stroke="#F8FAFC" stroke-width="4.6" stroke-linecap="round"/>
+  <circle cx="24" cy="42" r="4" fill="#F8FAFC"/>
+  <circle cx="28" cy="74" r="4" fill="#F8FAFC"/>
+  <circle cx="64" cy="62" r="4" fill="#F8FAFC"/>
+  <circle cx="83" cy="19" r="4" fill="#F8FAFC"/>
+  <path d="M28 74L45 42.2L55.8 39L42 72Z" fill="#F8FAFC"/>
+  <path d="M56.2 39.4L64 34.7L62.6 63L52.4 65.4Z" fill="#F8FAFC"/>
+  <path d="M46.7 52L52.1 39.9L60.2 37.8L56.8 58.6Z" fill="#6A76B8"/>
+  <circle cx="48.8" cy="52.5" r="6" fill="#6A76B8" stroke="#F8FAFC" stroke-width="2"/>
+  <path d="M45 52.2C45.9 50.8 47.1 50.2 48.5 50.3C49.8 50.4 50.9 51 51.8 52.2" stroke="#F8FAFC" stroke-width="1.6" stroke-linecap="round"/>
+  <path d="M46.2 54.2L48 52.8L49.9 54.2" stroke="#F8FAFC" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="104" y="42" fill="#112233" font-size="31" font-family="Manrope, Arial, sans-serif" font-weight="800" letter-spacing="0.06em">HEAVENECTION</text>
+  <text x="104" y="68" fill="#475882" font-size="20" font-family="Manrope, Arial, sans-serif" font-weight="600">CallTrack Management Suite</text>
+</svg>

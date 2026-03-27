@@ -1,0 +1,265 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="application-name" content="Heavenection CallTrack">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Heavenection CallTrack">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#4d5c90">
+    <title>Heavenection CallTrack System</title>
+    <link rel="manifest" href="{% url 'pwa-manifest' %}">
+    <link rel="apple-touch-icon" href="{% static 'pwa/icon-192.png' %}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'css/heavenection-calltrack.css' %}">
+</head>
+<body class="mf-theme-admin hc-admin-web">
+<div class="mf-shell">
+    <div class="mf-overlay" id="mfOverlay"></div>
+    <aside class="mf-sidebar" id="mfSidebar">
+        <div class="mf-sidebar-head">
+            <a href="#overview" class="mf-brand d-flex align-items-center gap-3 text-decoration-none">
+                <img src="{% static 'images/logo.svg' %}" alt="Heavenection" class="hc-brand-logo">
+            </a>
+        </div>
+        <div class="mf-nav-group">Telecalling Control</div>
+        <nav class="mf-nav">
+            <a href="#overview" class="mf-nav-link hc-nav-link active"><i class="bi bi-speedometer2"></i>Overview</a>
+            <a href="#leads" class="mf-nav-link hc-nav-link"><i class="bi bi-person-lines-fill"></i>Leads</a>
+            <a href="#team" class="mf-nav-link hc-nav-link"><i class="bi bi-broadcast-pin"></i>Live Team</a>
+            <a href="#reports" class="mf-nav-link hc-nav-link"><i class="bi bi-bar-chart-fill"></i>Reports</a>
+            <a href="#salary" class="mf-nav-link hc-nav-link"><i class="bi bi-cash-stack"></i>Salary</a>
+        </nav>
+        <div class="mf-sidebar-card mt-4">
+            <h6 class="mb-2">Installable Web</h6>
+            <p class="mb-3">Keep the admin dashboard on the home screen and use it like a lightweight app.</p>
+            <button type="button" class="btn btn-light btn-sm d-none" id="heavenectionInstallButton">Install Web App</button>
+        </div>
+    </aside>
+
+    <div class="mf-main">
+        <header class="mf-header">
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-icon" id="sidebarToggle" aria-label="Toggle sidebar"><i class="bi bi-list"></i></button>
+                <div class="hc-header-copy">
+                    <strong>HEAVENECTION CallTrack Admin</strong>
+                    <small>Leads, live calls, activity time, and payouts</small>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
+                <span class="hc-sync-pill"><i class="bi bi-cloud-check-fill"></i> Auto sync healthy</span>
+                <div class="mf-header-clock" id="mfHeaderClock">
+                    <span class="mf-header-clock-label">System Time</span>
+                    <strong class="mf-header-clock-value">--:--:--</strong>
+                </div>
+            </div>
+        </header>
+
+        <main class="mf-content">
+            <div class="container-fluid px-0">
+                <div class="mf-db2-shell">
+                    <section class="mf-db2-hero animate-on-scroll" id="overview">
+                        <div class="mf-db2-hero-main">
+                            <div class="mf-db2-topline">
+                                <span class="mf-db2-kicker">Heavenection CallTrack System</span>
+                                <span class="mf-db2-date-pill"><i class="bi bi-calendar2-week"></i> {{ dashboard.today_label }}</span>
+                            </div>
+                            <h1>Telecalling control room for faster follow-up and cleaner payouts.</h1>
+                            <p>Use one installable admin surface to assign leads, monitor active team members, review call outcomes, and calculate salary with the Heavenection theme.</p>
+
+                            <div class="mf-db2-snapshot-row">
+                                <article class="mf-db2-snapshot-card">
+                                    <span class="mf-db2-label">Team Active</span>
+                                    <strong class="hc-animate-value" data-count="{{ dashboard.staff_active }}">{{ dashboard.staff_active }}</strong>
+                                    <small>Live heartbeat received from active calling sessions.</small>
+                                </article>
+                                <article class="mf-db2-snapshot-card">
+                                    <span class="mf-db2-label">Calls Today</span>
+                                    <strong class="hc-animate-value" data-count="{{ dashboard.calls_today }}">{{ dashboard.calls_today }}</strong>
+                                    <small>Calls shorter than 5 seconds are excluded.</small>
+                                </article>
+                                <article class="mf-db2-snapshot-card">
+                                    <span class="mf-db2-label">Conversion Rate</span>
+                                    <strong>{{ dashboard.conversion_rate }}</strong>
+                                    <small>Interested and converted outcomes across active team members.</small>
+                                </article>
+                                <article class="mf-db2-snapshot-card">
+                                    <span class="mf-db2-label">Call Backs</span>
+                                    <strong class="hc-animate-value" data-count="{{ dashboard.callbacks }}">{{ dashboard.callbacks }}</strong>
+                                    <small>Priority leads still waiting for another attempt.</small>
+                                </article>
+                            </div>
+
+                            <div class="mf-db2-command-row">
+                                <a href="#leads" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-person-lines-fill"></i></span><span><strong>Lead Desk</strong><small>Add, assign, and review</small></span></a>
+                                <a href="#team" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-people-fill"></i></span><span><strong>Live Team</strong><small>Watch work status and load</small></span></a>
+                                <a href="#reports" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-graph-up-arrow"></i></span><span><strong>Reports</strong><small>Daily and monthly insight</small></span></a>
+                                <a href="#salary" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-cash-coin"></i></span><span><strong>Salary</strong><small>Performance-based payout</small></span></a>
+                            </div>
+                        </div>
+
+                        <div class="mf-db2-signal-grid">
+                            <article class="mf-db2-signal-card mf-db2-signal-card-primary">
+                                <div class="mf-db2-ring-wrap">
+                                    <div class="progress-circle green mf-db2-ring" style="--ratio: {{ dashboard.work_coverage }};"><span>{{ dashboard.work_coverage }}%</span></div>
+                                </div>
+                                <div class="mf-db2-signal-copy">
+                                    <strong>{{ dashboard.work_coverage }}% work coverage</strong>
+                                    <small>Most assigned team members have an active session and recent heartbeat activity.</small>
+                                </div>
+                            </article>
+                            <article class="mf-db2-signal-card">
+                                <div class="mf-db2-signal-head"><span class="mf-db2-kicker">Short Calls Blocked</span><i class="bi bi-shield-check"></i></div>
+                                <div class="mf-db2-signal-value">{{ dashboard.short_calls_blocked }}</div>
+                                <small>Very short calls were prevented from affecting incentives.</small>
+                            </article>
+                            <article class="mf-db2-signal-card">
+                                <div class="mf-db2-signal-head"><span class="mf-db2-kicker">Salary Ready</span><i class="bi bi-wallet2"></i></div>
+                                <div class="mf-db2-signal-value">{{ dashboard.salary_ready }}</div>
+                                <small>Team members have enough data to generate salary drafts now.</small>
+                            </article>
+                        </div>
+                    </section>
+
+                    <section class="mf-db2-stat-band animate-on-scroll">
+                        <article class="mf-db2-stat-tile"><div class="mf-db2-stat-icon"><i class="bi bi-telephone-plus-fill"></i></div><div><span class="mf-db2-label">Total Leads</span><strong class="hc-animate-value" data-count="{{ dashboard.total_leads }}">{{ dashboard.total_leads }}</strong></div></article>
+                        <article class="mf-db2-stat-tile"><div class="mf-db2-stat-icon"><i class="bi bi-telephone-x-fill"></i></div><div><span class="mf-db2-label">No Answer</span><strong class="hc-animate-value" data-count="{{ dashboard.no_answer }}">{{ dashboard.no_answer }}</strong></div></article>
+                        <article class="mf-db2-stat-tile"><div class="mf-db2-stat-icon"><i class="bi bi-hand-thumbs-up-fill"></i></div><div><span class="mf-db2-label">Interested</span><strong class="hc-animate-value" data-count="{{ dashboard.interested }}">{{ dashboard.interested }}</strong></div></article>
+                        <article class="mf-db2-stat-tile"><div class="mf-db2-stat-icon"><i class="bi bi-award-fill"></i></div><div><span class="mf-db2-label">Converted</span><strong class="hc-animate-value" data-count="{{ dashboard.converted }}">{{ dashboard.converted }}</strong></div></article>
+                    </section>
+
+                    <section class="row g-4 animate-on-scroll" id="reports">
+                        <div class="col-xl-8">
+                            <div class="mf-db2-analytics-grid">
+                                <div class="card mf-db2-chart-panel mf-db2-chart-panel-wide"><div class="card-body"><div class="mf-db2-panel-head"><div><span class="mf-db2-kicker">Calling Trend</span><h5>Daily call volume and conversions</h5></div><button type="button" class="btn btn-outline-primary btn-sm">Export CSV</button></div><canvas id="callVolumeChart" height="250"></canvas></div></div>
+                                <div class="card mf-db2-chart-panel"><div class="card-body"><div class="mf-db2-panel-head"><div><span class="mf-db2-kicker">Lead Pipeline</span><h5>Status distribution</h5></div></div><canvas id="leadPipelineChart" height="250"></canvas></div></div>
+                                <div class="card mf-db2-chart-panel"><div class="card-body"><div class="mf-db2-panel-head"><div><span class="mf-db2-kicker">Time Value</span><h5>Active hours vs call minutes</h5></div></div><canvas id="activityBalanceChart" height="250"></canvas></div></div>
+                            </div>
+                        </div>
+                        <div class="col-xl-4" id="team">
+                            <div class="card mf-db2-feed-panel h-100">
+                                <div class="card-body">
+                                    <div class="mf-db2-panel-head"><div><span class="mf-db2-kicker">Live Team</span><h5>Current activity</h5></div><button type="button" class="btn btn-outline-primary btn-sm">Refresh</button></div>
+                                    <div class="hc-staff-stack">
+                                        {% for staff in live_staff %}
+                                        <article class="hc-staff-tile">
+                                            <div><strong>{{ staff.name }}</strong><small>{{ staff.status_text }}</small></div>
+                                            <span class="hc-live-dot{% if not staff.is_online %} is-offline{% endif %}"></span>
+                                        </article>
+                                        {% empty %}
+                                        <article class="hc-staff-tile">
+                                            <div><strong>No team data yet</strong><small>Run demo seed data or start using the system to populate live activity.</small></div>
+                                            <span class="hc-live-dot is-offline"></span>
+                                        </article>
+                                        {% endfor %}
+                                    </div>
+                                    <div class="mf-db2-side-note"><i class="bi bi-info-circle-fill"></i><span>Heartbeat freshness and session duration make it easy to spot idle team members or connectivity gaps.</span></div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="hc-surface-card animate-on-scroll" id="leads">
+                        <div class="mf-db2-panel-head mb-3">
+                            <div><span class="mf-db2-kicker">Lead Desk</span><h5>Lead queue and assignment overview</h5></div>
+                            <div class="d-flex gap-2 flex-wrap"><button type="button" class="btn btn-primary">Add Lead</button><button type="button" class="btn btn-outline-primary">Bulk Assign</button></div>
+                        </div>
+                        <div class="hc-filter-row">
+                            <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All {{ dashboard.total_leads }}</button>
+                            <button type="button" class="hc-filter-chip" data-filter-status="new">New</button>
+                            <button type="button" class="hc-filter-chip" data-filter-status="call_back">Call Back</button>
+                            <button type="button" class="hc-filter-chip" data-filter-status="converted">Converted</button>
+                        </div>
+                        <div class="hc-search-box"><i class="bi bi-search"></i><input type="search" id="leadSearchInput" placeholder="Search lead, phone, or assigned team member"></div>
+                        <div class="table-responsive">
+                            <table class="table hc-table align-middle mb-0">
+                                <thead><tr><th>Lead</th><th>Phone</th><th>Status</th><th>Assigned To</th><th>Last Call</th><th>Next Action</th></tr></thead>
+                                <tbody id="leadTableBody">
+                                    {% for lead in lead_rows %}
+                                    <tr data-status="{{ lead.status }}">
+                                        <td><strong>{{ lead.name }}</strong></td>
+                                        <td>{{ lead.phone }}</td>
+                                        <td><span class="hc-status hc-status-{% if lead.status == 'new' %}new{% elif lead.status == 'call_back' %}warning{% elif lead.status == 'interested' %}success{% elif lead.status == 'converted' %}primary{% else %}muted{% endif %}">{{ lead.status_label }}</span></td>
+                                        <td>{{ lead.assigned_to }}</td>
+                                        <td>{{ lead.last_call }}</td>
+                                        <td>{{ lead.next_action }}</td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr><td colspan="6" class="text-center py-4">No leads yet. Run demo seed data or start adding records.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section class="mf-db2-bottom-grid animate-on-scroll" id="salary">
+                        <article class="mf-db2-bottom-card">
+                            <span class="mf-db2-kicker">Daily Report</span>
+                            <h5>Active hours captured</h5>
+                            <strong>{{ dashboard.active_hours }}</strong>
+                            <p>Session plus heartbeat logic keeps work-time reporting fair and traceable.</p>
+                        </article>
+                        <article class="mf-db2-bottom-card">
+                            <span class="mf-db2-kicker">Salary Module</span>
+                            <h5>Estimated payout today</h5>
+                            <strong>{{ dashboard.salary_estimate }}</strong>
+                            <p>Active hour value, call incentive, and conversion bonus combined in one draft output.</p>
+                        </article>
+                        <article class="mf-db2-bottom-card">
+                            <span class="mf-db2-kicker">Offline Support</span>
+                            <h5>Local queue and sync</h5>
+                            <strong>Ready</strong>
+                            <p>The web page is prepared for install prompts and resilient navigation with a service worker.</p>
+                        </article>
+                    </section>
+
+                    <section class="hc-surface-card animate-on-scroll mt-4">
+                        <div class="mf-db2-panel-head mb-3">
+                            <div><span class="mf-db2-kicker">Salary Sheet</span><h5>Current payout preview by team member</h5></div>
+                            <a href="{% url 'api-salary-summary' %}" class="btn btn-outline-primary btn-sm">Open API</a>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table hc-table align-middle mb-0">
+                                <thead><tr><th>Team Member</th><th>Hours</th><th>Call Time</th><th>Bonus</th><th>Final</th></tr></thead>
+                                <tbody>
+                                    {% for salary in salary_records %}
+                                    <tr>
+                                        <td><strong>{{ salary.name }}</strong></td>
+                                        <td>{{ salary.hours }}</td>
+                                        <td>{{ salary.call_time }}</td>
+                                        <td>{{ salary.bonus }}</td>
+                                        <td>{{ salary.final_salary }}</td>
+                                    </tr>
+                                    {% empty %}
+                                    <tr><td colspan="5" class="text-center py-4">No salary data yet.</td></tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+
+{{ chart_payload|json_script:"heavenectionDashboardPayload" }}
+<script>
+window.heavenectionPwa = { serviceWorkerUrl: "{% url 'pwa-service-worker' %}" };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'js/dashboard-ux.js' %}"></script>
+<script src="{% static 'js/heavenection-calltrack.js' %}"></script>
+<script src="{% static 'js/heavenection-pwa.js' %}"></script>
+</body>
+</html>

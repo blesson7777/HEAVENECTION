@@ -1,0 +1,17 @@
+<svg width="264" height="52" viewBox="0 0 264 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="27" cy="27" r="23" fill="#6A76B8"/>
+  <path d="M13.8 24H31.8L47 11" stroke="#F8FAFC" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M16 42L36.5 35.3" stroke="#F8FAFC" stroke-width="2.8" stroke-linecap="round"/>
+  <circle cx="13.8" cy="24" r="2.4" fill="#F8FAFC"/>
+  <circle cx="16" cy="42" r="2.4" fill="#F8FAFC"/>
+  <circle cx="36.5" cy="35.3" r="2.4" fill="#F8FAFC"/>
+  <circle cx="47" cy="11" r="2.4" fill="#F8FAFC"/>
+  <path d="M16 42L26 24.1L32 22.3L24 40.9Z" fill="#F8FAFC"/>
+  <path d="M32.2 22.4L36.7 19.8L36 35.7L30.5 37Z" fill="#F8FAFC"/>
+  <path d="M27 29.8L30.3 22.8L35 21.6L33.1 33.3Z" fill="#6A76B8"/>
+  <circle cx="28.1" cy="30.1" r="3.2" fill="#6A76B8" stroke="#F8FAFC" stroke-width="1.3"/>
+  <path d="M26 29.9C26.5 29.1 27.2 28.7 28 28.8C28.7 28.8 29.3 29.2 29.8 30" stroke="#F8FAFC" stroke-width="0.85" stroke-linecap="round"/>
+  <path d="M26.7 31.1L27.7 30.3L28.8 31.1" stroke="#F8FAFC" stroke-width="0.85" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="59" y="22" fill="#18233C" font-size="15" font-family="Public Sans, Arial, sans-serif" font-weight="800" letter-spacing="0.12em">HEAVENECTION</text>
+  <text x="59" y="35" fill="#5D6C92" font-size="10" font-family="Public Sans, Arial, sans-serif" font-weight="700" letter-spacing="0.2em">CALLTRACK</text>
+</svg>
