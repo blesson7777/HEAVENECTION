@@ -38,16 +38,42 @@
         </div>
         <div class="col-xl-3 col-md-6">
             <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Active Slot</span>
+                <span class="mf-db2-kicker">Target / Staff</span>
                 <h3 class="mb-1">{{ queue_summary.queue_limit }}</h3>
-                <p class="mb-0 text-muted">Each staff member works on one active lead at a time.</p>
+                <p class="mb-0 text-muted">The system keeps this many active leads with each staff member whenever enough leads are waiting.</p>
             </div>
         </div>
     </div>
 
     <div class="alert alert-primary border-0 mb-4" role="alert">
-        Upload CSV or Excel files with name and phone columns. New leads are assigned automatically without duplicating them across staff, and each staff member receives only the next lead in line.
+        Upload CSV or Excel files with name and phone columns. New leads are assigned automatically without duplicating them across staff, and the system keeps every active staff member topped up to the target lead count.
     </div>
+
+    <form method="post" action="{% url 'leads-page' %}" class="row g-3 align-items-end mb-4">
+        {% csrf_token %}
+        <input type="hidden" name="lead_action" value="queue_settings">
+        <div class="col-lg-4 col-md-6">
+            <label class="form-label fw-semibold" for="leadQueueTargetPerStaff">Lead target per staff</label>
+            <input
+                type="number"
+                min="1"
+                class="form-control"
+                id="leadQueueTargetPerStaff"
+                name="lead_queue_target_per_staff"
+                value="{{ queue_summary.queue_limit }}"
+                required
+            >
+            <div class="form-text">Example: set `50` to keep each staff member supplied with up to 50 active leads.</div>
+        </div>
+        <div class="col-lg-5 col-md-6">
+            <div class="alert alert-light border mb-0">
+                When a staff member completes one lead, the next waiting lead is assigned automatically to maintain this target.
+            </div>
+        </div>
+        <div class="col-lg-3">
+            <button type="submit" class="btn btn-primary w-100">Save Lead Target</button>
+        </div>
+    </form>
 
     <div class="hc-filter-row">
         <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
@@ -192,7 +218,7 @@
                         </div>
                     </div>
                     <div class="alert alert-light border mb-0" role="alert">
-                        Each staff member keeps one active lead. As soon as that lead is completed, the next waiting lead is assigned automatically.
+                        Imported leads are assigned automatically until each active staff member reaches the target count shown above. As soon as one lead is completed, the next waiting lead is assigned automatically.
                     </div>
                     <div id="leadImportFeedback" class="hc-form-feedback d-none mt-3"></div>
                     <div class="d-flex justify-content-end gap-2 mt-4">

@@ -145,6 +145,12 @@
                                 <input type="text" class="form-control{% if company_errors.support_phone %} is-invalid{% endif %}" id="supportPhone" name="support_phone" value="{{ company_form_data.support_phone }}">
                                 {% if company_errors.support_phone %}<div class="invalid-feedback">{{ company_errors.support_phone }}</div>{% endif %}
                             </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="leadQueueTargetPerStaff">Lead Target Per Staff</label>
+                                <input type="number" min="1" class="form-control{% if company_errors.lead_queue_target_per_staff %} is-invalid{% endif %}" id="leadQueueTargetPerStaff" name="lead_queue_target_per_staff" value="{{ company_form_data.lead_queue_target_per_staff }}">
+                                {% if company_errors.lead_queue_target_per_staff %}<div class="invalid-feedback">{{ company_errors.lead_queue_target_per_staff }}</div>{% endif %}
+                                <div class="form-text">The system keeps this many active leads assigned to each active staff member whenever enough leads are waiting.</div>
+                            </div>
                             <div class="col-md-8">
                                 <label class="form-label fw-semibold" for="addressLine1">Address Line 1</label>
                                 <input type="text" class="form-control{% if company_errors.address_line_1 %} is-invalid{% endif %}" id="addressLine1" name="address_line_1" value="{{ company_form_data.address_line_1 }}">

@@ -89,6 +89,7 @@ class CompanyProfile(models.Model):
     postal_code = models.CharField(max_length=20, blank=True)
     country = models.CharField(max_length=100, blank=True, default="India")
     tax_identifier = models.CharField(max_length=50, blank=True)
+    lead_queue_target_per_staff = models.PositiveIntegerField(default=1)
     description = models.TextField(blank=True)
     logo = models.FileField(upload_to="branding/", blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)

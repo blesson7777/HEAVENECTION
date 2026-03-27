@@ -202,6 +202,7 @@ def settings_page(request):
         "postal_code": company_profile.postal_code,
         "country": company_profile.country,
         "tax_identifier": company_profile.tax_identifier,
+        "lead_queue_target_per_staff": company_profile.lead_queue_target_per_staff,
         "description": company_profile.description,
         "remove_logo": False,
     }
@@ -249,6 +250,7 @@ def settings_page(request):
                 "postal_code": request.POST.get("postal_code", "").strip(),
                 "country": request.POST.get("country", "").strip(),
                 "tax_identifier": request.POST.get("tax_identifier", "").strip(),
+                "lead_queue_target_per_staff": request.POST.get("lead_queue_target_per_staff", "").strip(),
                 "description": request.POST.get("description", "").strip(),
                 "remove_logo": request.POST.get("remove_logo") == "on",
             }
@@ -309,7 +311,8 @@ def leads_page(request):
         return redirect("web-login")
 
     if request.method == "POST":
-        if request.POST.get("lead_action") == "import":
+        lead_action = request.POST.get("lead_action")
+        if lead_action == "import":
             serializer = LeadImportUploadSerializer(data={"file": request.FILES.get("file")})
             if serializer.is_valid():
                 try:
@@ -329,6 +332,28 @@ def leads_page(request):
                 request,
                 "Lead import failed. "
                 + " ".join(_normalize_errors(serializer.errors).values()),
+            )
+            return redirect("leads-page")
+
+        if lead_action == "queue_settings":
+            raw_value = request.POST.get("lead_queue_target_per_staff", "").strip()
+            try:
+                queue_target = int(raw_value)
+            except (TypeError, ValueError):
+                messages.error(request, "Enter a valid lead target per staff.")
+                return redirect("leads-page")
+
+            if queue_target < 1:
+                messages.error(request, "Lead target per staff must be at least 1.")
+                return redirect("leads-page")
+
+            company_profile = get_company_profile()
+            company_profile.lead_queue_target_per_staff = queue_target
+            company_profile.save(update_fields=["lead_queue_target_per_staff", "updated_at"])
+            auto_allocate_leads()
+            messages.success(
+                request,
+                f"Lead target updated. The system will now maintain {queue_target} active leads per staff whenever enough waiting leads are available.",
             )
             return redirect("leads-page")
 

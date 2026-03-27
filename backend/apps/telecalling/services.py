@@ -35,7 +35,7 @@ IDLE_WARNING_AFTER_SECONDS = 5 * 60
 IDLE_WARNING_GRACE_SECONDS = 5 * 60
 IDLE_OFFLINE_AFTER_SECONDS = IDLE_WARNING_AFTER_SECONDS + IDLE_WARNING_GRACE_SECONDS
 TWOPLACES = Decimal("0.01")
-LEAD_QUEUE_LIMIT = 1
+DEFAULT_LEAD_QUEUE_LIMIT = 1
 ACTIVE_QUEUE_STATUSES = (
     Lead.Status.NEW,
     Lead.Status.CALL_BACK,
@@ -96,6 +96,11 @@ def get_company_profile():
         },
     )
     return profile
+
+
+def get_lead_queue_limit():
+    profile = get_company_profile()
+    return max(1, int(profile.lead_queue_target_per_staff or DEFAULT_LEAD_QUEUE_LIMIT))
 
 
 def _today_range():
@@ -509,6 +514,7 @@ def release_staff_queue(staff):
 
 
 def _normalize_active_queue_assignments(*, target_staff=None):
+    queue_limit = get_lead_queue_limit()
     queue_queryset = _lead_queue_queryset().select_related("assigned_to").exclude(assigned_to=None)
     if target_staff is not None:
         queue_queryset = queue_queryset.filter(assigned_to=target_staff)
@@ -528,7 +534,7 @@ def _normalize_active_queue_assignments(*, target_staff=None):
             continue
 
         kept_counts[assigned_staff.id] += 1
-        if kept_counts[assigned_staff.id] > LEAD_QUEUE_LIMIT:
+        if kept_counts[assigned_staff.id] > queue_limit:
             release_ids.append(lead.id)
 
     if not release_ids:
@@ -541,6 +547,7 @@ def _normalize_active_queue_assignments(*, target_staff=None):
 
 
 def auto_allocate_leads(*, target_staff=None):
+    queue_limit = get_lead_queue_limit()
     _normalize_active_queue_assignments(target_staff=target_staff)
     staff_queryset = _staff_queryset().filter(is_active=True)
     if target_staff is not None:
@@ -588,7 +595,7 @@ def auto_allocate_leads(*, target_staff=None):
         )
         assigned_in_pass = False
         for slot in staff_slots:
-            if slot["active_count"] >= LEAD_QUEUE_LIMIT:
+            if slot["active_count"] >= queue_limit:
                 continue
             lead_id = open_lead_ids.pop(0)
             assigned_by_staff[slot["staff_id"]].append(lead_id)
@@ -718,7 +725,7 @@ def import_leads_from_upload(uploaded_file):
         "skipped_count": skipped_rows,
         "assigned_count": allocation["assigned_count"],
         "remaining_unassigned_count": allocation["remaining_unassigned_count"],
-        "queue_limit": LEAD_QUEUE_LIMIT,
+        "queue_limit": get_lead_queue_limit(),
     }
 
 
@@ -1332,6 +1339,7 @@ def build_settings_payload(current_user):
         ("Website", company_profile.website or "Not added yet"),
         ("Tax ID", company_profile.tax_identifier or "Not added yet"),
         ("Country", company_profile.country or "Not added yet"),
+        ("Lead Target / Staff", str(get_lead_queue_limit())),
     ]
     address_parts = [
         company_profile.address_line_1,
@@ -1364,6 +1372,7 @@ def build_lead_management_payload():
     auto_allocate_leads()
     leads = Lead.objects.select_related("assigned_to").order_by("-updated_at")
     active_queue = _lead_queue_queryset()
+    queue_limit = get_lead_queue_limit()
     staff_options = [
         {"id": str(staff.id), "name": staff.name}
         for staff in _staff_queryset().filter(is_active=True)
@@ -1393,7 +1402,7 @@ def build_lead_management_payload():
             "active_queue_total": active_queue.count(),
             "unassigned_total": active_queue.filter(assigned_to=None).count(),
             "staff_active_count": _staff_queryset().filter(is_active=True).count(),
-            "queue_limit": LEAD_QUEUE_LIMIT,
+            "queue_limit": queue_limit,
         },
     }
 
