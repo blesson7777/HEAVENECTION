@@ -18,6 +18,49 @@
         linear-gradient(180deg, #212a4a 0%, #344170 100%);
 }
 
+.hc-admin-web .mf-nav-section {
+    border-color: rgba(199, 211, 255, 0.08);
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.hc-admin-web .mf-nav-section[open] {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(199, 211, 255, 0.14);
+}
+
+.hc-admin-web .mf-nav-toggle {
+    min-height: 52px;
+    color: #f3f6ff;
+}
+
+.hc-admin-web .mf-nav-toggle:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.hc-admin-web .mf-nav-toggle-meta {
+    font-size: 0.94rem;
+    letter-spacing: 0.01em;
+}
+
+.hc-admin-web .mf-nav-toggle-meta i {
+    width: 20px;
+    text-align: center;
+    color: #dce5ff;
+}
+
+.hc-admin-web .mf-nav-children {
+    padding-top: 0.1rem;
+}
+
+.hc-admin-web .mf-nav-children .mf-nav-link {
+    margin-left: 0;
+    border: 1px solid transparent;
+}
+
+.hc-admin-web .mf-nav-children .mf-nav-link:hover {
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
 .hc-admin-web .mf-nav-link.active {
     background: linear-gradient(135deg, #4d5c90, #6f80ba);
     box-shadow: 0 10px 20px rgba(77, 92, 144, 0.32);

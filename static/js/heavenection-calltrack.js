@@ -478,6 +478,31 @@
         });
     }
 
+    function bindSidebarAccordion() {
+        const sections = Array.from(document.querySelectorAll(".hc-sidebar-nav .mf-nav-section"));
+        if (!sections.length) {
+            return;
+        }
+
+        const activeSection = sections.find((section) => section.querySelector(".mf-nav-link.active"));
+        if (activeSection) {
+            activeSection.open = true;
+        }
+
+        sections.forEach((section) => {
+            section.addEventListener("toggle", () => {
+                if (!section.open) {
+                    return;
+                }
+                sections.forEach((otherSection) => {
+                    if (otherSection !== section) {
+                        otherSection.open = false;
+                    }
+                });
+            });
+        });
+    }
+
     if (typeof initMateriallyLayout === "function") {
         initMateriallyLayout();
     }
@@ -492,4 +517,5 @@
     renderCharts();
     bindStaffCrud();
     bindLeadCrud();
+    bindSidebarAccordion();
 })();

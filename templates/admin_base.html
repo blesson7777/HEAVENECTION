@@ -31,13 +31,58 @@
                 <img src="{% static 'images/logo.svg' %}" alt="Heavenection" class="hc-brand-logo">
             </a>
         </div>
-        <div class="mf-nav-group">Telecalling Control</div>
-        <nav class="mf-nav">
-            <a href="{% url 'dashboard' %}" class="mf-nav-link hc-nav-link{% if active_page == 'dashboard' %} active{% endif %}"><i class="bi bi-speedometer2"></i>Dashboard</a>
-            <a href="{% url 'staff-page' %}" class="mf-nav-link hc-nav-link{% if active_page == 'staff' %} active{% endif %}"><i class="bi bi-people-fill"></i>Staff</a>
-            <a href="{% url 'leads-page' %}" class="mf-nav-link hc-nav-link{% if active_page == 'leads' %} active{% endif %}"><i class="bi bi-person-lines-fill"></i>Leads</a>
-            <a href="{% url 'calls-page' %}" class="mf-nav-link hc-nav-link{% if active_page == 'calls' %} active{% endif %}"><i class="bi bi-telephone-forward-fill"></i>Call Details</a>
-            <a href="{% url 'working-hours-page' %}" class="mf-nav-link hc-nav-link{% if active_page == 'hours' %} active{% endif %}"><i class="bi bi-clock-history"></i>Working Hours</a>
+        <div class="mf-nav-group">Workspace Navigation</div>
+        <nav class="mf-nav mf-nav-accordion hc-sidebar-nav">
+            <details class="mf-nav-section"{% if active_page == 'dashboard' %} open{% endif %}>
+                <summary class="mf-nav-toggle">
+                    <span class="mf-nav-toggle-meta">
+                        <i class="bi bi-grid-1x2-fill"></i>
+                        Overview
+                    </span>
+                    <i class="bi bi-chevron-down mf-nav-caret"></i>
+                </summary>
+                <div class="mf-nav-children">
+                    <a href="{% url 'dashboard' %}" class="mf-nav-link hc-nav-link{% if active_page == 'dashboard' %} active{% endif %}">
+                        <i class="bi bi-speedometer2"></i>Dashboard
+                    </a>
+                </div>
+            </details>
+
+            <details class="mf-nav-section"{% if active_page == 'staff' or active_page == 'leads' %} open{% endif %}>
+                <summary class="mf-nav-toggle">
+                    <span class="mf-nav-toggle-meta">
+                        <i class="bi bi-diagram-3-fill"></i>
+                        Operations
+                    </span>
+                    <i class="bi bi-chevron-down mf-nav-caret"></i>
+                </summary>
+                <div class="mf-nav-children">
+                    <a href="{% url 'staff-page' %}" class="mf-nav-link hc-nav-link{% if active_page == 'staff' %} active{% endif %}">
+                        <i class="bi bi-people-fill"></i>Staff Management
+                    </a>
+                    <a href="{% url 'leads-page' %}" class="mf-nav-link hc-nav-link{% if active_page == 'leads' %} active{% endif %}">
+                        <i class="bi bi-person-lines-fill"></i>Lead Management
+                    </a>
+                </div>
+            </details>
+
+            <details class="mf-nav-section"{% if active_page == 'calls' or active_page == 'hours' %} open{% endif %}>
+                <summary class="mf-nav-toggle">
+                    <span class="mf-nav-toggle-meta">
+                        <i class="bi bi-broadcast-pin"></i>
+                        Monitoring
+                    </span>
+                    <i class="bi bi-chevron-down mf-nav-caret"></i>
+                </summary>
+                <div class="mf-nav-children">
+                    <a href="{% url 'calls-page' %}" class="mf-nav-link hc-nav-link{% if active_page == 'calls' %} active{% endif %}">
+                        <i class="bi bi-telephone-forward-fill"></i>Call Details
+                    </a>
+                    <a href="{% url 'working-hours-page' %}" class="mf-nav-link hc-nav-link{% if active_page == 'hours' %} active{% endif %}">
+                        <i class="bi bi-clock-history"></i>Working Hours
+                    </a>
+                </div>
+            </details>
         </nav>
         <div class="mf-sidebar-card mt-4">
             <h6 class="mb-2">Installable Web</h6>
