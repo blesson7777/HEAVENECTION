@@ -179,6 +179,14 @@ class ApiClient {
     return CallRecord.fromJson(_decodeMap(response.body));
   }
 
+  Future<CallRecord> retryPendingCall({required String callId}) async {
+    final response = await _send(
+      'POST',
+      '/api/staff/calls/$callId/retry/',
+    );
+    return CallRecord.fromJson(_decodeMap(response.body));
+  }
+
   Future<CallRecord> updateCallStatus({
     required String callId,
     required String status,

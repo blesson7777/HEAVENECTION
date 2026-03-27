@@ -2298,6 +2298,48 @@ def start_staff_call(staff, lead):
     return call
 
 
+def retry_pending_staff_call(call):
+    if call.end_time is None or call.status != Call.Status.STARTED:
+        return call
+
+    now = timezone.now()
+    session = get_open_session(call.staff, reconcile=True)
+    if session:
+        _touch_session_interaction(session, now, metadata={"source": "call_retry"})
+    else:
+        session, _ = start_staff_session(call.staff, source="auto_call_retry")
+
+    call.start_time = now
+    call.end_time = None
+    call.duration_seconds = 0
+    call.is_qualifying = False
+    call.callback_window = ""
+    call.save(
+        update_fields=[
+            "start_time",
+            "end_time",
+            "duration_seconds",
+            "is_qualifying",
+            "callback_window",
+            "updated_at",
+        ]
+    )
+
+    call.lead.last_contacted_at = now
+    call.lead.save(update_fields=["last_contacted_at", "updated_at"])
+    mark_staff_seen(call.staff, now)
+    _log_staff_action(
+        call.staff,
+        StaffAction.ActionType.CALL_STARTED,
+        session=session,
+        call=call,
+        lead=call.lead,
+        app_state=session.last_known_state if session else None,
+        metadata={"lead_name": call.lead.name, "source": "retry_pending"},
+    )
+    return call
+
+
 def end_staff_call(call, status=None, *, duration_seconds=None, ended_at=None, source="app", callback_window=""):
     if call.end_time:
         return call

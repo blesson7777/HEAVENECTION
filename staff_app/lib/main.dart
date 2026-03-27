@@ -128,6 +128,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   String? _activeCallLeadId;
   PendingDialerCall? _pendingDialerCall;
   String? _pendingStatusCallId;
+  String? _pendingStatusLeadId;
   String _pendingStatusLeadName = '';
   String _pendingStatusLeadPhone = '';
   Duration _elapsed = Duration.zero;
@@ -240,6 +241,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   void _syncPendingCallStatusFromSummary() {
     if (_summary.pendingCallStatusRequired && _summary.pendingCallId.isNotEmpty) {
       _pendingStatusCallId = _summary.pendingCallId;
+      _pendingStatusLeadId = _summary.pendingCallLeadId;
       _pendingStatusLeadName = _summary.pendingCallLeadName;
       _pendingStatusLeadPhone = _summary.pendingCallLeadPhone;
       return;
@@ -249,6 +251,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   void _clearPendingCallStatus() {
     _pendingStatusCallId = null;
+    _pendingStatusLeadId = null;
     _pendingStatusLeadName = '';
     _pendingStatusLeadPhone = '';
   }
@@ -282,16 +285,174 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     });
   }
 
-  Future<bool> _ensurePendingCallStatusResolved() async {
+  Future<void> _retryPendingCustomerCall() async {
+    final callId = _pendingStatusCallId;
+    final leadPhone = _pendingStatusLeadPhone;
+    if (callId == null || callId.isEmpty || leadPhone.isEmpty) {
+      _schedulePendingCallStatusPrompt();
+      return;
+    }
+
+    final canReadCallLog = await _ensureCallLogAccess();
+    if (!canReadCallLog) {
+      return;
+    }
+
+    if (!_summary.workingNow) {
+      await _startWork();
+      if (!_summary.workingNow) {
+        return;
+      }
+    }
+
+    final dialStartedAt = DateTime.now();
+    try {
+      final call = await _apiClient.retryPendingCall(callId: callId);
+      final launched = await FlutterPhoneDirectCaller.callNumber(leadPhone);
+      if (launched != true) {
+        await _apiClient.endCall(
+          callId: call.id,
+          durationSeconds: 0,
+          endedAt: dialStartedAt,
+          source: 'retry_direct_call_failed',
+        );
+        _showMessage('Unable to place the recent customer call.', isError: true);
+        return;
+      }
+
+      _callTimer?.cancel();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _activeCallId = call.id;
+        _activeCallLeadId = _pendingStatusLeadId;
+        _pendingDialerCall = PendingDialerCall(
+          callId: call.id,
+          leadId: _pendingStatusLeadId ?? '',
+          phone: leadPhone,
+          startedAt: dialStartedAt,
+        );
+        _lastCallActivityAt = dialStartedAt;
+        _elapsed = Duration.zero;
+      });
+      _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) {
+          return;
+        }
+        setState(() => _elapsed += const Duration(seconds: 1));
+      });
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+        return;
+      }
+      if (error.code == 'network_error') {
+        _showNetworkError('Connection lost while retrying the recent customer.');
+        return;
+      }
+      _showMessage(error.message, isError: true);
+    }
+  }
+
+  Future<bool> _showPendingCallGuardPrompt(LeadItem? attemptedLead) async {
+    if (!mounted || !_hasPendingCallStatus) {
+      return true;
+    }
+
+    final attemptedLeadName = attemptedLead?.name ?? 'the next lead';
+    final action = await showDialog<_PendingCallAction>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: const Text('Previous Call Needs Action'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Before calling $attemptedLeadName, finish the recent customer action below.',
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: kSoft,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (_pendingStatusLeadName.isNotEmpty)
+                      Text(
+                        _pendingStatusLeadName,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    if (_pendingStatusLeadPhone.isNotEmpty)
+                      Text(
+                        _pendingStatusLeadPhone,
+                        style: const TextStyle(color: Colors.black54),
+                      ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'You can either call this recent customer again or mark the result now.',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(_PendingCallAction.cancel);
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(_PendingCallAction.markStatus);
+              },
+              child: const Text('Mark Status'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(_PendingCallAction.callRecent);
+              },
+              child: const Text('Call Recent Customer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    switch (action) {
+      case _PendingCallAction.markStatus:
+        await _showPendingCallStatusPrompt();
+        return !_hasPendingCallStatus;
+      case _PendingCallAction.callRecent:
+        await _retryPendingCustomerCall();
+        return false;
+      case _PendingCallAction.cancel:
+      case null:
+        return false;
+    }
+  }
+
+  Future<bool> _ensurePendingCallStatusResolved([LeadItem? attemptedLead]) async {
     if (!_hasPendingCallStatus) {
       return true;
     }
-    _showMessage(
-      'Mark the previous call result before moving to the next lead.',
-      isError: true,
-    );
-    _schedulePendingCallStatusPrompt();
-    return false;
+    return _showPendingCallGuardPrompt(attemptedLead);
   }
 
   void _updatePreferredOrientations() {
@@ -778,11 +939,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   Future<void> _startCall() async {
     _registerInteraction(syncServer: false);
-    if (!await _ensurePendingCallStatusResolved()) {
-      return;
-    }
     if (_leads.isEmpty) {
       _showMessage('No assigned leads available.', isError: true);
+      return;
+    }
+    final lead = _leads[_safeLeadIndex];
+    if (!await _ensurePendingCallStatusResolved(lead)) {
       return;
     }
     if (!_summary.workingNow) {
@@ -798,8 +960,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       );
       return;
     }
-
-    final lead = _leads[_safeLeadIndex];
     try {
       await _placeCallForLead(lead);
     } on ApiException catch (error) {
@@ -2286,7 +2446,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (index < 0 || index >= _leads.length) {
       return;
     }
-    if (!await _ensurePendingCallStatusResolved()) {
+    if (!await _ensurePendingCallStatusResolved(_leads[index])) {
       return;
     }
     if (!mounted) {
@@ -3180,6 +3340,8 @@ class PendingDialerCall {
 }
 
 enum ShortCallDecision { markNoResponse, markRejected, callAgain }
+
+enum _PendingCallAction { markStatus, callRecent, cancel }
 
 class InfoCard extends StatelessWidget {
   const InfoCard({

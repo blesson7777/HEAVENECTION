@@ -64,6 +64,7 @@ from backend.apps.telecalling.services import (
     read_root_file,
     record_session_heartbeat,
     release_staff_queue,
+    retry_pending_staff_call,
     start_staff_call,
     start_staff_session,
     TrainingRequiredError,
@@ -1099,6 +1100,37 @@ def end_call_api(request, call_id):
         source=serializer.validated_data.get("source", "app"),
         callback_window=serializer.validated_data.get("callback_window", ""),
     )
+    return Response(CallSerializer(call).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsCallingStaff])
+def retry_call_api(request, call_id):
+    try:
+        call = request.user.calls.select_related("lead", "staff").get(id=call_id)
+    except request.user.calls.model.DoesNotExist:
+        return Response({"detail": "Call not found."}, status=404)
+
+    if call.status != Call.Status.STARTED or call.end_time is None:
+        return Response(
+            {
+                "detail": "Only a pending call result can be retried.",
+                "code": "retry_not_allowed",
+            },
+            status=409,
+        )
+
+    latest_pending = get_pending_status_call(request.user)
+    if not latest_pending or latest_pending.id != call.id:
+        return Response(
+            {
+                "detail": "Retry the latest pending call before moving forward.",
+                "code": "retry_not_allowed",
+            },
+            status=409,
+        )
+
+    call = retry_pending_staff_call(call)
     return Response(CallSerializer(call).data)
 
 

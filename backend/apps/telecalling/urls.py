@@ -35,5 +35,6 @@ urlpatterns = [
     path("staff/heartbeat/", views.heartbeat_api, name="api-heartbeat"),
     path("staff/calls/start/", views.start_call_api, name="api-call-start"),
     path("staff/calls/<uuid:call_id>/end/", views.end_call_api, name="api-call-end"),
+    path("staff/calls/<uuid:call_id>/retry/", views.retry_call_api, name="api-call-retry"),
     path("staff/calls/<uuid:call_id>/status/", views.update_call_status_api, name="api-call-status"),
 ]
