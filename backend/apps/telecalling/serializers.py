@@ -135,11 +135,6 @@ class CreateStaffSerializer(serializers.Serializer):
         return phone
 
     def validate(self, attrs):
-        compensation_type = attrs.get("compensation_type", Staff.CompensationType.HOURLY)
-        if compensation_type == Staff.CompensationType.WEEKLY and not attrs.get("weekly_salary"):
-            raise serializers.ValidationError({"weekly_salary": "Weekly salary is required for weekly pay mode."})
-        if compensation_type == Staff.CompensationType.MONTHLY and not attrs.get("monthly_salary"):
-            raise serializers.ValidationError({"monthly_salary": "Monthly salary is required for monthly pay mode."})
         return attrs
 
     def create(self, validated_data):
@@ -180,17 +175,6 @@ class UpdateStaffSerializer(serializers.Serializer):
         return phone
 
     def validate(self, attrs):
-        instance = getattr(self, "instance", None)
-        compensation_type = attrs.get(
-            "compensation_type",
-            getattr(instance, "compensation_type", Staff.CompensationType.HOURLY),
-        )
-        weekly_salary = attrs.get("weekly_salary", getattr(instance, "weekly_salary", None))
-        monthly_salary = attrs.get("monthly_salary", getattr(instance, "monthly_salary", None))
-        if compensation_type == Staff.CompensationType.WEEKLY and not weekly_salary:
-            raise serializers.ValidationError({"weekly_salary": "Weekly salary is required for weekly pay mode."})
-        if compensation_type == Staff.CompensationType.MONTHLY and not monthly_salary:
-            raise serializers.ValidationError({"monthly_salary": "Monthly salary is required for monthly pay mode."})
         return attrs
 
     def update(self, instance, validated_data):

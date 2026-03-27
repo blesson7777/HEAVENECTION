@@ -761,8 +761,6 @@
         const phoneInput = document.getElementById("salaryControlPhone");
         const compensationTypeInput = document.getElementById("salaryCompensationType");
         const hourlyRateInput = document.getElementById("salaryHourlyRate");
-        const weeklyAmountInput = document.getElementById("salaryWeeklyAmount");
-        const monthlyAmountInput = document.getElementById("salaryMonthlyAmount");
         const targetWeekInput = document.getElementById("salaryTargetHoursWeek");
         const targetMonthInput = document.getElementById("salaryTargetHoursMonth");
         const callRateInput = document.getElementById("salaryCallRate");
@@ -792,8 +790,6 @@
                 phoneInput.value = button.dataset.phone || "";
                 compensationTypeInput.value = button.dataset.compensationType || "hourly";
                 hourlyRateInput.value = button.dataset.hourlyRate || "150";
-                weeklyAmountInput.value = button.dataset.weeklySalary || "0";
-                monthlyAmountInput.value = button.dataset.monthlySalary || "0";
                 targetWeekInput.value = button.dataset.targetHoursWeek || "48";
                 targetMonthInput.value = button.dataset.targetHoursMonth || "208";
                 callRateInput.value = button.dataset.callRate || "3";
@@ -818,8 +814,6 @@
             const payload = {
                 compensation_type: compensationTypeInput.value,
                 hourly_rate: hourlyRateInput.value || "0",
-                weekly_salary: weeklyAmountInput.value || "0",
-                monthly_salary: monthlyAmountInput.value || "0",
                 target_hours_per_week: targetWeekInput.value || "48",
                 target_hours_per_month: targetMonthInput.value || "208",
                 call_rate: callRateInput.value || "0",

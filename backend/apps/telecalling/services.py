@@ -235,20 +235,6 @@ def _staff_period_totals(start, end):
 
 def _calculate_base_pay(staff, active_hours):
     active_hours = Decimal(active_hours or 0)
-    compensation_type = staff.compensation_type or Staff.CompensationType.HOURLY
-
-    if compensation_type == Staff.CompensationType.WEEKLY:
-        target_hours = Decimal(str(staff.target_hours_per_week or 0))
-        if target_hours <= 0:
-            return Decimal("0.00")
-        return _money((active_hours / target_hours) * staff.weekly_salary)
-
-    if compensation_type == Staff.CompensationType.MONTHLY:
-        target_hours = Decimal(str(staff.target_hours_per_month or 0))
-        if target_hours <= 0:
-            return Decimal("0.00")
-        return _money((active_hours / target_hours) * staff.monthly_salary)
-
     return _money(active_hours * staff.hourly_rate)
 
 
@@ -272,16 +258,27 @@ def calculate_staff_payout(staff, *, active_seconds=0, call_seconds=0, converted
 
 def _current_cycle_payout(staff, weekly_breakdown, monthly_breakdown):
     if staff.compensation_type == Staff.CompensationType.WEEKLY:
-        return weekly_breakdown["total_pay"], "This Week"
-    return monthly_breakdown["total_pay"], "This Month"
+        return weekly_breakdown["total_pay"], "Weekly Payout"
+    if staff.compensation_type == Staff.CompensationType.MONTHLY:
+        return monthly_breakdown["total_pay"], "Monthly Payout"
+    return monthly_breakdown["total_pay"], "Hourly Running Total"
 
 
 def _salary_setting_target_label(staff):
+    hourly_label = f"Rs. {float(staff.hourly_rate):,.2f} / hour"
     if staff.compensation_type == Staff.CompensationType.WEEKLY:
-        return f"{staff.target_hours_per_week} hrs / week"
+        return f"{hourly_label} | Paid Weekly"
     if staff.compensation_type == Staff.CompensationType.MONTHLY:
-        return f"{staff.target_hours_per_month} hrs / month"
-    return f"Rs. {float(staff.hourly_rate):,.2f} / hour"
+        return f"{hourly_label} | Paid Monthly"
+    return f"{hourly_label} | Running Hourly"
+
+
+def _payout_cycle_label(staff):
+    if staff.compensation_type == Staff.CompensationType.WEEKLY:
+        return "Weekly"
+    if staff.compensation_type == Staff.CompensationType.MONTHLY:
+        return "Monthly"
+    return "Hourly"
 
 
 def _bounded_elapsed_seconds(previous, current, max_seconds=ONLINE_WINDOW_SECONDS):
@@ -1691,16 +1688,15 @@ def build_staff_profile_payload(staff):
 
 
 def build_salary_control_payload():
-    hourly_count = 0
+    hourly_tracking_count = 0
     weekly_count = 0
     monthly_count = 0
     salary_rows = []
     for staff in _staff_queryset():
-        if staff.compensation_type == Staff.CompensationType.HOURLY:
-            hourly_count += 1
-        elif staff.compensation_type == Staff.CompensationType.WEEKLY:
+        hourly_tracking_count += 1
+        if staff.compensation_type == Staff.CompensationType.WEEKLY:
             weekly_count += 1
-        else:
+        elif staff.compensation_type == Staff.CompensationType.MONTHLY:
             monthly_count += 1
 
         salary_rows.append(
@@ -1710,7 +1706,7 @@ def build_salary_control_payload():
                 "phone": staff.phone,
                 "is_active": staff.is_active,
                 "compensation_type": staff.compensation_type,
-                "compensation_type_label": staff.get_compensation_type_display(),
+                "compensation_type_label": _payout_cycle_label(staff),
                 "hourly_rate": _format_currency(staff.hourly_rate),
                 "hourly_rate_raw": str(staff.hourly_rate),
                 "weekly_salary": _format_currency(staff.weekly_salary),
@@ -1729,7 +1725,7 @@ def build_salary_control_payload():
 
     return {
         "summary": {
-            "hourly_count": hourly_count,
+            "hourly_tracking_count": hourly_tracking_count,
             "weekly_count": weekly_count,
             "monthly_count": monthly_count,
         },
@@ -1747,8 +1743,11 @@ def build_salary_page_payload():
     weekly_total = Decimal("0.00")
     monthly_total = Decimal("0.00")
     current_cycle_total = Decimal("0.00")
-    hourly_staff_count = 0
-    fixed_staff_count = 0
+    weekly_hours_total = Decimal("0.00")
+    monthly_hours_total = Decimal("0.00")
+    hourly_tracking_count = 0
+    weekly_cycle_count = 0
+    monthly_cycle_count = 0
     salary_rows = []
 
     for staff in _staff_queryset():
@@ -1769,11 +1768,13 @@ def build_salary_page_payload():
         weekly_total += weekly_breakdown["total_pay"]
         monthly_total += monthly_breakdown["total_pay"]
         current_cycle_total += current_payable
-
-        if staff.compensation_type == Staff.CompensationType.HOURLY:
-            hourly_staff_count += 1
-        else:
-            fixed_staff_count += 1
+        weekly_hours_total += weekly_breakdown["active_hours"]
+        monthly_hours_total += monthly_breakdown["active_hours"]
+        hourly_tracking_count += 1
+        if staff.compensation_type == Staff.CompensationType.WEEKLY:
+            weekly_cycle_count += 1
+        elif staff.compensation_type == Staff.CompensationType.MONTHLY:
+            monthly_cycle_count += 1
 
         salary_rows.append(
             {
@@ -1781,8 +1782,9 @@ def build_salary_page_payload():
                 "name": staff.name,
                 "phone": staff.phone,
                 "compensation_type": staff.compensation_type,
-                "compensation_type_label": staff.get_compensation_type_display(),
+                "compensation_type_label": _payout_cycle_label(staff),
                 "target_label": _salary_setting_target_label(staff),
+                "hourly_rate": _format_currency(staff.hourly_rate),
                 "weekly_hours": round(float(weekly_breakdown["active_hours"]), 2),
                 "monthly_hours": round(float(monthly_breakdown["active_hours"]), 2),
                 "weekly_hours_label": f"{round(float(weekly_breakdown['active_hours']), 1)}h",
@@ -1817,8 +1819,11 @@ def build_salary_page_payload():
             "weekly_total": _format_currency(weekly_total),
             "monthly_total": _format_currency(monthly_total),
             "current_cycle_total": _format_currency(current_cycle_total),
-            "hourly_staff_count": hourly_staff_count,
-            "fixed_staff_count": fixed_staff_count,
+            "weekly_hours_total": f"{round(float(weekly_hours_total), 1)}h",
+            "monthly_hours_total": f"{round(float(monthly_hours_total), 1)}h",
+            "hourly_tracking_count": hourly_tracking_count,
+            "weekly_cycle_count": weekly_cycle_count,
+            "monthly_cycle_count": monthly_cycle_count,
             "top_payout_name": top_row["name"] if top_row else "No staff data",
             "top_payout_value": top_row["current_payable"] if top_row else _format_currency(0),
         },
