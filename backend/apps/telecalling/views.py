@@ -45,6 +45,7 @@ from backend.apps.telecalling.services import (
     build_followup_payload,
     build_learning_management_payload,
     build_lead_management_payload,
+    build_recovery_lead_payload,
     build_salary_control_payload,
     build_salary_page_payload,
     build_settings_payload,
@@ -64,6 +65,7 @@ from backend.apps.telecalling.services import (
     read_root_file,
     record_session_heartbeat,
     release_staff_queue,
+    reactivate_oldest_recovery_leads,
     retry_pending_staff_call,
     start_staff_call,
     start_staff_session,
@@ -545,6 +547,54 @@ def followups_page(request):
         extra_context=build_followup_payload(),
     )
     return render(request, "admin_followups.html", context)
+
+
+@require_http_methods(["GET", "POST"])
+def recovery_leads_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    if request.method == "POST":
+        recovery_action = request.POST.get("recovery_action")
+        if recovery_action == "reactivate_oldest":
+            raw_count = request.POST.get("readd_count", "").strip()
+            scope = request.POST.get("readd_scope", "all").strip() or "all"
+            try:
+                readd_count = int(raw_count)
+            except (TypeError, ValueError):
+                messages.error(request, "Enter a valid number of leads to re-add.")
+                return redirect("recovery-leads-page")
+
+            if readd_count < 1:
+                messages.error(request, "Re-add count must be at least 1.")
+                return redirect("recovery-leads-page")
+
+            summary = reactivate_oldest_recovery_leads(readd_count, scope=scope)
+            if summary["reactivated_count"] == 0:
+                messages.warning(request, "No rejected or no response leads were available for re-allocation.")
+            else:
+                messages.success(
+                    request,
+                    "Recovery leads re-added. "
+                    f"Moved {summary['reactivated_count']} oldest leads back to the active queue, "
+                    f"assigned {summary['assigned_count']}, waiting {summary['remaining_unassigned_count']}.",
+                )
+            return redirect("recovery-leads-page")
+
+        messages.error(request, "Recovery lead request could not be processed.")
+        return redirect("recovery-leads-page")
+
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="recovery",
+        page_title="Rejected & No Response",
+        page_heading="Rejected & No Response",
+        page_subtitle="Review closed leads oldest first and move the oldest rows back into the active queue when needed.",
+        extra_context=build_recovery_lead_payload(),
+    )
+    return render(request, "admin_recovery_leads.html", context)
 
 
 @require_GET

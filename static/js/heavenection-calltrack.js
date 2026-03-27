@@ -193,6 +193,7 @@
         const setups = [
             { inputId: "leadSearchInput", tableBodyId: "leadTableBody" },
             { inputId: "followupSearchInput", tableBodyId: "followupTableBody" },
+            { inputId: "recoverySearchInput", tableBodyId: "recoveryTableBody" },
             { inputId: "callSearchInput", tableBodyId: "callTableBody" },
             { inputId: "staffSearchInput", tableBodyId: "staffTableBody" },
             { inputId: "learningSearchInput", tableBodyId: "learningTableBody" },

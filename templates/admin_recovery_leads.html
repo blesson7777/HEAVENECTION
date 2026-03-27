@@ -1,0 +1,129 @@
+{% extends "admin_base.html" %}
+
+{% block page_actions %}
+<a href="{% url 'leads-page' %}" class="btn btn-outline-primary btn-sm">Lead Desk</a>
+{% endblock %}
+
+{% block admin_content %}
+<section class="hc-surface-card animate-on-scroll">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Recovery Queue</span>
+            <h5>Rejected and no response leads</h5>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Total</span>
+                <h3 class="mb-1">{{ recovery_summary.total_count }}</h3>
+                <p class="mb-0 text-muted">Rejected and no response leads waiting in the recovery list.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Rejected</span>
+                <h3 class="mb-1">{{ recovery_summary.rejected_count }}</h3>
+                <p class="mb-0 text-muted">Leads marked rejected by staff.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">No Response</span>
+                <h3 class="mb-1">{{ recovery_summary.no_response_count }}</h3>
+                <p class="mb-0 text-muted">Leads that did not answer or did not continue.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Oldest</span>
+                <h3 class="mb-1">{{ recovery_summary.oldest_lead_name }}</h3>
+                <p class="mb-0 text-muted">{{ recovery_summary.oldest_lead_updated_at }}</p>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" action="{% url 'recovery-leads-page' %}" class="row g-3 align-items-end mb-4">
+        {% csrf_token %}
+        <input type="hidden" name="recovery_action" value="reactivate_oldest">
+        <div class="col-lg-3 col-md-4">
+            <label class="form-label fw-semibold" for="readdCount">Re-add oldest count</label>
+            <input
+                type="number"
+                min="1"
+                class="form-control"
+                id="readdCount"
+                name="readd_count"
+                value="{{ recovery_summary.queue_limit }}"
+                required
+            >
+        </div>
+        <div class="col-lg-4 col-md-4">
+            <label class="form-label fw-semibold" for="readdScope">Lead type</label>
+            <select class="form-select" id="readdScope" name="readd_scope">
+                <option value="all">Rejected and No Response</option>
+                <option value="rejected">Rejected only</option>
+                <option value="no_response">No Response only</option>
+            </select>
+        </div>
+        <div class="col-lg-5 col-md-4">
+            <div class="alert alert-light border mb-0">
+                The system re-adds the oldest listed leads first, resets them to the active queue, and tries to allocate that batch before other waiting leads.
+            </div>
+        </div>
+        <div class="col-12">
+            <button type="submit" class="btn btn-primary">Re-Add Oldest Leads</button>
+        </div>
+    </form>
+
+    <div class="hc-filter-row">
+        <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="not_interested">Rejected</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="no_answer">No Response</button>
+    </div>
+
+    <div class="hc-search-box">
+        <i class="bi bi-search"></i>
+        <input type="search" id="recoverySearchInput" placeholder="Search lead, phone, note, or staff">
+    </div>
+
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Lead</th>
+                    <th>Phone</th>
+                    <th>Status</th>
+                    <th>Assigned To</th>
+                    <th>Last Contact</th>
+                    <th>Marked On</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody id="recoveryTableBody">
+                {% for lead in recovery_rows %}
+                <tr data-status="{{ lead.status }}">
+                    <td>
+                        <strong>{{ lead.name }}</strong>
+                        <div class="text-muted small">{{ lead.notes|default:"No notes" }}</div>
+                    </td>
+                    <td>{{ lead.phone }}</td>
+                    <td>
+                        <span class="hc-status hc-status-{% if lead.status == 'not_interested' %}muted{% else %}warning{% endif %}">
+                            {{ lead.status_label }}
+                        </span>
+                    </td>
+                    <td>{{ lead.assigned_to }}</td>
+                    <td>{{ lead.last_contacted }}</td>
+                    <td>{{ lead.updated_at }}</td>
+                    <td>{{ lead.created_at }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center py-4">No rejected or no response leads are waiting in the recovery queue.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

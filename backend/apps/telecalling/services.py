@@ -7,7 +7,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db.models import Case, Count, IntegerField, Q, Sum, Value, When
-from django.db.models.functions import TruncDate
+from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 
 from backend.apps.telecalling.models import (
@@ -47,6 +47,10 @@ ACTIVE_QUEUE_STATUSES = (
 FOLLOW_UP_STATUSES = (
     Lead.Status.INTERESTED,
     Lead.Status.CALL_BACK,
+)
+RECOVERY_LEAD_STATUSES = (
+    Lead.Status.NOT_INTERESTED,
+    Lead.Status.NO_ANSWER,
 )
 TERMINAL_QUEUE_STATUSES = (
     Lead.Status.NOT_INTERESTED,
@@ -567,6 +571,10 @@ def _follow_up_queryset():
     return Lead.objects.filter(status__in=FOLLOW_UP_STATUSES)
 
 
+def _recovery_lead_queryset():
+    return Lead.objects.filter(status__in=RECOVERY_LEAD_STATUSES)
+
+
 def _normalize_status_value(value):
     normalized = _normalize_column_name(value)
     status_map = {
@@ -609,7 +617,7 @@ def _current_callback_window(now=None):
     return ""
 
 
-def _with_lead_priority(queryset, *, now=None):
+def _with_lead_priority(queryset, *, now=None, prioritized_lead_ids=None):
     current_slot = _current_callback_window(now)
     if current_slot:
         queue_priority = Case(
@@ -628,15 +636,30 @@ def _with_lead_priority(queryset, *, now=None):
             default=Value(3),
             output_field=IntegerField(),
         )
-    return queryset.annotate(queue_priority=queue_priority)
+    ordered_queryset = queryset.annotate(queue_priority=queue_priority)
+    if prioritized_lead_ids:
+        ordered_queryset = ordered_queryset.annotate(
+            manual_priority=Case(
+                When(id__in=list(prioritized_lead_ids), then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            )
+        )
+    return ordered_queryset
 
 
-def _ordered_lead_queryset(queryset, *, now=None, include_assignee=False):
-    ordered_queryset = _with_lead_priority(queryset, now=now)
+def _ordered_lead_queryset(queryset, *, now=None, include_assignee=False, prioritized_lead_ids=None):
+    ordered_queryset = _with_lead_priority(
+        queryset,
+        now=now,
+        prioritized_lead_ids=prioritized_lead_ids,
+    ).annotate(lead_sequence_anchor=Coalesce("last_contacted_at", "created_at"))
     order_fields = []
     if include_assignee:
         order_fields.append("assigned_to_id")
-    order_fields.extend(["queue_priority", "last_contacted_at", "created_at", "id"])
+    if prioritized_lead_ids:
+        order_fields.append("manual_priority")
+    order_fields.extend(["queue_priority", "lead_sequence_anchor", "created_at", "id"])
     return ordered_queryset.order_by(*order_fields)
 
 
@@ -695,7 +718,7 @@ def _normalize_active_queue_assignments(*, target_staff=None):
     )
 
 
-def auto_allocate_leads(*, target_staff=None):
+def auto_allocate_leads(*, target_staff=None, prioritized_lead_ids=None):
     now = timezone.now()
     queue_limit = get_lead_queue_limit()
     active_staff_ids = _currently_active_staff_ids(now=now)
@@ -721,6 +744,7 @@ def auto_allocate_leads(*, target_staff=None):
         _ordered_lead_queryset(
             _lead_queue_queryset().filter(assigned_to=None),
             now=now,
+            prioritized_lead_ids=prioritized_lead_ids,
         ).values("id", "status", "callback_window")
     )
     if not open_leads:
@@ -1970,6 +1994,87 @@ def build_followup_csv_response():
         )
 
     return response.getvalue()
+
+
+def _recovery_status_scope(scope):
+    if scope == "rejected":
+        return (Lead.Status.NOT_INTERESTED,)
+    if scope == "no_response":
+        return (Lead.Status.NO_ANSWER,)
+    return RECOVERY_LEAD_STATUSES
+
+
+def build_recovery_lead_payload():
+    recovery_leads = (
+        _recovery_lead_queryset()
+        .select_related("assigned_to")
+        .order_by("updated_at", "last_contacted_at", "created_at", "id")
+    )
+
+    recovery_rows = []
+    for lead in recovery_leads:
+        recovery_rows.append(
+            {
+                "id": str(lead.id),
+                "name": lead.name,
+                "phone": lead.phone,
+                "status": lead.status,
+                "status_label": lead.get_status_display(),
+                "assigned_to": lead.assigned_to.name if lead.assigned_to else "Unassigned",
+                "notes": lead.notes,
+                "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
+                "updated_at": _format_datetime(lead.updated_at),
+                "created_at": _format_datetime(lead.created_at),
+            }
+        )
+
+    rejected_count = sum(1 for row in recovery_rows if row["status"] == Lead.Status.NOT_INTERESTED)
+    no_response_count = sum(1 for row in recovery_rows if row["status"] == Lead.Status.NO_ANSWER)
+    oldest_row = recovery_rows[0] if recovery_rows else None
+    return {
+        "recovery_rows": recovery_rows,
+        "recovery_summary": {
+            "total_count": len(recovery_rows),
+            "rejected_count": rejected_count,
+            "no_response_count": no_response_count,
+            "queue_limit": get_lead_queue_limit(),
+            "oldest_lead_name": oldest_row["name"] if oldest_row else "No leads in this list",
+            "oldest_lead_updated_at": oldest_row["updated_at"] if oldest_row else "No waiting recovery leads",
+        },
+    }
+
+
+def reactivate_oldest_recovery_leads(count, *, scope="all"):
+    count = max(1, int(count))
+    recovery_statuses = _recovery_status_scope(scope)
+    selected_leads = list(
+        Lead.objects.filter(status__in=recovery_statuses)
+        .order_by("updated_at", "last_contacted_at", "created_at", "id")[:count]
+    )
+
+    if not selected_leads:
+        return {
+            "reactivated_count": 0,
+            "assigned_count": 0,
+            "remaining_unassigned_count": _lead_queue_queryset().filter(assigned_to=None).count(),
+            "scope_label": scope,
+        }
+
+    now = timezone.now()
+    selected_ids = [lead.id for lead in selected_leads]
+    Lead.objects.filter(id__in=selected_ids).update(
+        status=Lead.Status.NEW,
+        callback_window="",
+        assigned_to=None,
+        updated_at=now,
+    )
+    allocation = auto_allocate_leads(prioritized_lead_ids=selected_ids)
+    return {
+        "reactivated_count": len(selected_ids),
+        "assigned_count": allocation["assigned_count"],
+        "remaining_unassigned_count": allocation["remaining_unassigned_count"],
+        "scope_label": scope,
+    }
 
 
 def build_call_detail_payload(limit=200):
