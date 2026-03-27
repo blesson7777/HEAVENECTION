@@ -46,6 +46,17 @@
     border-color: #4d5c90;
 }
 
+.hc-admin-web .btn-outline-danger {
+    color: #c14e4e;
+    border-color: rgba(193, 78, 78, 0.28);
+}
+
+.hc-admin-web .btn-outline-danger:hover,
+.hc-admin-web .btn-outline-danger:focus {
+    background: #c14e4e;
+    border-color: #c14e4e;
+}
+
 .hc-admin-web .mf-header {
     background:
         linear-gradient(180deg, rgba(246, 248, 253, 0.92) 0%, rgba(238, 242, 251, 0.88) 100%);
@@ -279,6 +290,16 @@
     border-color: #d7deef;
 }
 
+.hc-modal-card .form-select,
+.hc-modal-card textarea.form-control {
+    border-radius: 16px;
+    border-color: #d7deef;
+}
+
+.hc-modal-card textarea.form-control {
+    min-height: 120px;
+}
+
 .hc-form-feedback {
     padding: 0.8rem 0.95rem;
     border-radius: 16px;
@@ -329,6 +350,10 @@
 .hc-status-muted {
     background: rgba(108, 120, 145, 0.14);
     color: #63728c;
+}
+
+.hc-table td strong + .text-muted {
+    margin-top: 0.25rem;
 }
 
 @media (max-width: 767.98px) {

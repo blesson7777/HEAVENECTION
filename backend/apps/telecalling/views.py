@@ -5,14 +5,14 @@ from django.views.decorators.http import require_GET, require_http_methods
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from backend.apps.telecalling.auth import clear_auth_cookies, get_staff_from_request, issue_tokens_for_user, set_auth_cookies
-from backend.apps.telecalling.models import Lead, Salary, Staff, StaffAction
+from backend.apps.telecalling.models import Call, Lead, Salary, Staff, StaffAction
 from backend.apps.telecalling.permissions import IsAdminStaff, IsCallingStaff
 from backend.apps.telecalling.serializers import (
     CallSerializer,
     CallStatusSerializer,
+    CreateLeadSerializer,
     CreateStaffSerializer,
     EndCallSerializer,
     HeartbeatSerializer,
@@ -23,11 +23,17 @@ from backend.apps.telecalling.serializers import (
     StaffActionSerializer,
     StaffSerializer,
     StartCallSerializer,
+    UpdateLeadSerializer,
+    UpdateStaffSerializer,
 )
 from backend.apps.telecalling.services import (
     authenticate_staff,
+    build_call_detail_payload,
     build_dashboard_payload,
+    build_lead_management_payload,
     build_staff_today_payload,
+    build_team_management_payload,
+    build_work_hours_payload,
     end_staff_call,
     end_staff_session,
     get_assigned_leads,
@@ -38,6 +44,27 @@ from backend.apps.telecalling.services import (
     start_staff_session,
     update_staff_call_status,
 )
+
+
+def _admin_web_context(request, current_user, *, active_page, page_title, page_heading, page_subtitle, extra_context=None):
+    mark_staff_seen(current_user)
+    context = {
+        "admin_user": current_user,
+        "active_page": active_page,
+        "page_title": page_title,
+        "page_heading": page_heading,
+        "page_subtitle": page_subtitle,
+    }
+    if extra_context:
+        context.update(extra_context)
+    return context
+
+
+def _get_admin_user_or_redirect(request):
+    current_user = get_staff_from_request(request)
+    if not current_user or current_user.role != Staff.Role.ADMIN or not current_user.is_active:
+        return None
+    return current_user
 
 
 @require_http_methods(["GET", "POST"])
@@ -88,22 +115,102 @@ def web_logout(request):
 
 @require_GET
 def dashboard_page(request):
-    current_user = get_staff_from_request(request)
-    if not current_user or current_user.role != Staff.Role.ADMIN or not current_user.is_active:
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
         return redirect("web-login")
 
-    mark_staff_seen(current_user)
     payload = build_dashboard_payload()
-    context = {
-        "admin_user": current_user,
-        "dashboard": payload["dashboard"],
-        "live_staff": payload["live_staff"],
-        "lead_rows": payload["lead_rows"],
-        "salary_records": payload["salary_records"],
-        "team_directory": payload["team_directory"],
-        "chart_payload": payload["chart_payload"],
-    }
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="dashboard",
+        page_title="Dashboard",
+        page_heading="Dashboard",
+        page_subtitle="Overview of live activity, lead flow, and salary projection.",
+        extra_context={
+            "dashboard": payload["dashboard"],
+            "live_staff": payload["live_staff"],
+            "lead_rows": payload["lead_rows"],
+            "salary_records": payload["salary_records"],
+            "team_directory": payload["team_directory"],
+            "chart_payload": payload["chart_payload"],
+        },
+    )
     return render(request, "heavenection_calltrack_web.html", context)
+
+
+@require_GET
+def staff_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    payload = build_team_management_payload()
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="staff",
+        page_title="Staff Management",
+        page_heading="Staff Management",
+        page_subtitle="Create, update, activate, and review telecalling staff members.",
+        extra_context=payload,
+    )
+    return render(request, "admin_staff.html", context)
+
+
+@require_GET
+def leads_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    payload = build_lead_management_payload()
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="leads",
+        page_title="Lead Management",
+        page_heading="Lead Management",
+        page_subtitle="Add new leads, assign them to staff, and monitor their latest call outcome.",
+        extra_context=payload,
+    )
+    return render(request, "admin_leads.html", context)
+
+
+@require_GET
+def calls_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="calls",
+        page_title="Call Details",
+        page_heading="Call Details",
+        page_subtitle="Review call history, outcomes, and duration after staff calling activity.",
+        extra_context=build_call_detail_payload(),
+    )
+    return render(request, "admin_calls.html", context)
+
+
+@require_GET
+def working_hours_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="hours",
+        page_title="Working Hours",
+        page_heading="Working Hours",
+        page_subtitle="Track work sessions, active time, and the current state of each staff member.",
+        extra_context=build_work_hours_payload(),
+    )
+    return render(request, "admin_working_hours.html", context)
 
 
 @require_GET
@@ -157,14 +264,61 @@ def dashboard_data_api(request):
     return Response(build_dashboard_payload())
 
 
-@api_view(["GET"])
+@api_view(["GET", "POST"])
 @permission_classes([IsAdminStaff])
 def leads_api(request):
     queryset = Lead.objects.select_related("assigned_to").order_by("-updated_at")
+    if request.method == "GET":
+        status_value = request.query_params.get("status")
+        if status_value and status_value != "all":
+            queryset = queryset.filter(status=status_value)
+        return Response(LeadSerializer(queryset[:100], many=True).data)
+
+    serializer = CreateLeadSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    lead = serializer.save()
+    return Response(LeadSerializer(lead).data, status=201)
+
+
+@api_view(["GET", "PATCH", "DELETE"])
+@permission_classes([IsAdminStaff])
+def lead_detail_api(request, lead_id):
+    try:
+        lead = Lead.objects.select_related("assigned_to").get(id=lead_id)
+    except Lead.DoesNotExist:
+        return Response({"detail": "Lead not found."}, status=404)
+
+    if request.method == "GET":
+        return Response(LeadSerializer(lead).data)
+
+    if request.method == "DELETE":
+        lead.delete()
+        return Response(status=204)
+
+    serializer = UpdateLeadSerializer(lead, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    lead = serializer.save()
+    return Response(LeadSerializer(lead).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminStaff])
+def calls_api(request):
+    queryset = Call.objects.select_related("staff", "lead").order_by("-start_time")
     status_value = request.query_params.get("status")
     if status_value and status_value != "all":
         queryset = queryset.filter(status=status_value)
-    return Response(LeadSerializer(queryset[:100], many=True).data)
+    staff_id = request.query_params.get("staff_id")
+    if staff_id:
+        queryset = queryset.filter(staff_id=staff_id)
+    return Response(CallSerializer(queryset[:200], many=True).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminStaff])
+def working_hours_api(request):
+    payload = build_work_hours_payload()
+    return Response(payload)
 
 
 @api_view(["GET"])
@@ -185,6 +339,27 @@ def team_members_api(request):
     serializer.is_valid(raise_exception=True)
     staff = serializer.save()
     return Response(StaffSerializer(staff).data, status=201)
+
+
+@api_view(["GET", "PATCH", "DELETE"])
+@permission_classes([IsAdminStaff])
+def team_member_detail_api(request, staff_id):
+    try:
+        staff = Staff.objects.get(id=staff_id, role=Staff.Role.STAFF)
+    except Staff.DoesNotExist:
+        return Response({"detail": "Staff not found."}, status=404)
+
+    if request.method == "GET":
+        return Response(StaffSerializer(staff).data)
+
+    if request.method == "DELETE":
+        staff.delete()
+        return Response(status=204)
+
+    serializer = UpdateStaffSerializer(staff, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    staff = serializer.save()
+    return Response(StaffSerializer(staff).data)
 
 
 @api_view(["GET"])

@@ -47,62 +47,108 @@
         });
     }
 
-    function bindLeadFilters() {
-        const chips = document.querySelectorAll(".hc-filter-chip");
-        const rows = document.querySelectorAll("#leadTableBody tr");
-        const searchInput = document.getElementById("leadSearchInput");
-
-        function render() {
-            const activeChip = document.querySelector(".hc-filter-chip.is-active");
-            const filter = activeChip?.dataset.filterStatus || "all";
-            const query = (searchInput?.value || "").trim().toLowerCase();
-
-            rows.forEach((row) => {
-                const rowText = row.textContent.toLowerCase();
-                const matchesStatus = filter === "all" || row.dataset.status === filter;
-                const matchesQuery = !query || rowText.includes(query);
-                row.hidden = !(matchesStatus && matchesQuery);
-            });
+    function getCsrfToken() {
+        const explicitToken = window.heavenectionAdmin?.csrfToken;
+        if (explicitToken && explicitToken !== "NOTPROVIDED") {
+            return explicitToken;
         }
 
-        chips.forEach((chip) => {
-            chip.addEventListener("click", () => {
-                chips.forEach((item) => item.classList.remove("is-active"));
-                chip.classList.add("is-active");
-                render();
-            });
-        });
-
-        searchInput?.addEventListener("input", render);
-        render();
+        const tokenCookie = document.cookie
+            .split(";")
+            .map((part) => part.trim())
+            .find((part) => part.startsWith("csrftoken="));
+        if (!tokenCookie) {
+            return "";
+        }
+        return decodeURIComponent(tokenCookie.split("=")[1] || "");
     }
 
-    function bindSectionSpy() {
-        const links = Array.from(document.querySelectorAll(".hc-nav-link"));
-        const sections = links
-            .map((link) => document.querySelector(link.getAttribute("href")))
-            .filter(Boolean);
-
-        if (!links.length || !sections.length || !("IntersectionObserver" in window)) {
-            return;
-        }
-
-        const observer = new IntersectionObserver((entries) => {
-            const visible = entries
-                .filter((entry) => entry.isIntersecting)
-                .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-            if (!visible) {
-                return;
-            }
-            links.forEach((link) => {
-                link.classList.toggle("active", link.getAttribute("href") === `#${visible.target.id}`);
-            });
-        }, {
-            threshold: 0.32,
-            rootMargin: "-15% 0px -55% 0px",
+    async function requestJson(url, options) {
+        const response = await fetch(url, {
+            credentials: "same-origin",
+            headers: {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCsrfToken(),
+                ...(options?.headers || {}),
+            },
+            ...options,
         });
 
-        sections.forEach((section) => observer.observe(section));
+        let payload = null;
+        try {
+            payload = await response.json();
+        } catch (error) {
+            payload = null;
+        }
+
+        if (!response.ok) {
+            throw new Error(extractErrorMessage(payload));
+        }
+
+        return payload;
+    }
+
+    function extractErrorMessage(payload) {
+        if (!payload || typeof payload !== "object") {
+            return "Unable to complete the request right now.";
+        }
+        if (payload.detail) {
+            return String(payload.detail);
+        }
+        const firstKey = Object.keys(payload)[0];
+        if (!firstKey) {
+            return "Unable to complete the request right now.";
+        }
+        const value = payload[firstKey];
+        if (Array.isArray(value) && value.length) {
+            return String(value[0]);
+        }
+        return String(value);
+    }
+
+    function bindSearchAndFilters() {
+        const setups = [
+            { inputId: "leadSearchInput", tableBodyId: "leadTableBody" },
+            { inputId: "callSearchInput", tableBodyId: "callTableBody" },
+            { inputId: "staffSearchInput", tableBodyId: "staffTableBody" },
+            { inputId: "hoursSearchInput", tableBodyId: "hoursSummaryBody" },
+        ];
+
+        setups.forEach(({ inputId, tableBodyId }) => {
+            const tableBody = document.getElementById(tableBodyId);
+            if (!tableBody) {
+                return;
+            }
+
+            const rows = Array.from(tableBody.querySelectorAll("tr"));
+            const searchInput = document.getElementById(inputId);
+            const chips = Array.from(document.querySelectorAll(".hc-filter-chip"));
+
+            function render() {
+                const query = (searchInput?.value || "").trim().toLowerCase();
+                const activeChip = document.querySelector(".hc-filter-chip.is-active");
+                const activeStatus = activeChip?.dataset.filterStatus || "all";
+
+                rows.forEach((row) => {
+                    const rowText = row.textContent.toLowerCase();
+                    const matchesQuery = !query || rowText.includes(query);
+                    const rowStatus = row.dataset.status || "all";
+                    const matchesStatus = activeStatus === "all" || rowStatus === activeStatus;
+                    row.hidden = !(matchesQuery && matchesStatus);
+                });
+            }
+
+            searchInput?.addEventListener("input", render);
+            chips.forEach((chip) => {
+                chip.addEventListener("click", () => {
+                    chips.forEach((item) => item.classList.remove("is-active"));
+                    chip.classList.add("is-active");
+                    render();
+                });
+            });
+            render();
+        });
     }
 
     function readPayload() {
@@ -122,6 +168,7 @@
         if (typeof Chart === "undefined" || !payload) {
             return;
         }
+
         const gridColor = "rgba(77, 92, 144, 0.16)";
         const textColor = "#334155";
         const surface = "#ffffff";
@@ -211,18 +258,28 @@
         });
     }
 
-    function bindAddStaffForm() {
+    function bindStaffCrud() {
         const config = window.heavenectionAdmin;
-        const form = document.getElementById("addStaffForm");
-        const feedback = document.getElementById("addStaffFeedback");
-        const submitButton = document.getElementById("addStaffSubmitButton");
-        const modalNode = document.getElementById("addStaffModal");
-
-        if (!config?.createStaffUrl || !form || !feedback || !submitButton || !modalNode) {
+        const modalNode = document.getElementById("staffModal");
+        const form = document.getElementById("staffForm");
+        if (!config?.teamMembersUrl || !modalNode || !form) {
             return;
         }
 
-        function setFeedback(message, isError) {
+        const modal = bootstrap.Modal.getOrCreateInstance(modalNode);
+        const titleNode = document.getElementById("staffModalTitle");
+        const idInput = document.getElementById("staffFormId");
+        const nameInput = document.getElementById("staffName");
+        const phoneInput = document.getElementById("staffPhone");
+        const passwordInput = document.getElementById("staffPassword");
+        const hourlyRateInput = document.getElementById("staffHourlyRate");
+        const callRateInput = document.getElementById("staffCallRate");
+        const bonusInput = document.getElementById("staffBonus");
+        const isActiveInput = document.getElementById("staffIsActive");
+        const feedback = document.getElementById("staffFormFeedback");
+        const submitButton = document.getElementById("staffSubmitButton");
+
+        function showFeedback(message, isError) {
             feedback.textContent = message;
             feedback.classList.remove("d-none", "is-success", "is-error");
             feedback.classList.add(isError ? "is-error" : "is-success");
@@ -234,76 +291,187 @@
             feedback.classList.remove("is-success", "is-error");
         }
 
-        function extractErrorMessage(payload) {
-            if (!payload || typeof payload !== "object") {
-                return "Unable to create staff right now.";
-            }
-            if (payload.detail) {
-                return String(payload.detail);
-            }
-
-            const firstKey = Object.keys(payload)[0];
-            if (!firstKey) {
-                return "Unable to create staff right now.";
-            }
-
-            const value = payload[firstKey];
-            if (Array.isArray(value) && value.length) {
-                return String(value[0]);
-            }
-            return String(value);
+        function resetForm() {
+            form.reset();
+            idInput.value = "";
+            hourlyRateInput.value = "150";
+            callRateInput.value = "3";
+            bonusInput.value = "500";
+            isActiveInput.checked = true;
+            titleNode.textContent = "Add Staff Member";
+            passwordInput.required = true;
+            clearFeedback();
         }
 
+        document.getElementById("openCreateStaffModal")?.addEventListener("click", resetForm);
         modalNode.addEventListener("hidden.bs.modal", clearFeedback);
+
+        document.querySelectorAll(".js-edit-staff").forEach((button) => {
+            button.addEventListener("click", () => {
+                clearFeedback();
+                idInput.value = button.dataset.staffId || "";
+                nameInput.value = button.dataset.name || "";
+                phoneInput.value = button.dataset.phone || "";
+                passwordInput.value = "";
+                passwordInput.required = false;
+                hourlyRateInput.value = button.dataset.hourlyRate || "150";
+                callRateInput.value = button.dataset.callRate || "3";
+                bonusInput.value = button.dataset.bonus || "500";
+                isActiveInput.checked = button.dataset.isActive === "true";
+                titleNode.textContent = "Edit Staff Member";
+                modal.show();
+            });
+        });
+
+        document.querySelectorAll(".js-delete-staff").forEach((button) => {
+            button.addEventListener("click", async () => {
+                const staffId = button.dataset.staffId;
+                const staffName = button.dataset.name || "this staff member";
+                if (!staffId || !window.confirm(`Delete ${staffName}?`)) {
+                    return;
+                }
+                try {
+                    await requestJson(`${config.teamMembersUrl}${staffId}/`, { method: "DELETE" });
+                    window.location.reload();
+                } catch (error) {
+                    window.alert(error.message);
+                }
+            });
+        });
 
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
             clearFeedback();
             submitButton.disabled = true;
 
-            const formData = new FormData(form);
+            const staffId = idInput.value.trim();
             const payload = {
-                name: String(formData.get("name") || "").trim(),
-                phone: String(formData.get("phone") || "").trim(),
-                password: String(formData.get("password") || ""),
-                hourly_rate: String(formData.get("hourly_rate") || "150"),
-                call_rate: String(formData.get("call_rate") || "3"),
-                bonus_per_conversion: String(formData.get("bonus_per_conversion") || "500"),
-                is_active: formData.get("is_active") === "true",
+                name: nameInput.value.trim(),
+                phone: phoneInput.value.trim(),
+                hourly_rate: hourlyRateInput.value || "150",
+                call_rate: callRateInput.value || "3",
+                bonus_per_conversion: bonusInput.value || "500",
+                is_active: isActiveInput.checked,
+            };
+            if (passwordInput.value.trim()) {
+                payload.password = passwordInput.value.trim();
+            }
+
+            try {
+                const url = staffId ? `${config.teamMembersUrl}${staffId}/` : config.teamMembersUrl;
+                const method = staffId ? "PATCH" : "POST";
+                await requestJson(url, {
+                    method,
+                    body: JSON.stringify(payload),
+                });
+                showFeedback("Staff saved successfully.", false);
+                window.setTimeout(() => window.location.reload(), 500);
+            } catch (error) {
+                showFeedback(error.message, true);
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+    }
+
+    function bindLeadCrud() {
+        const config = window.heavenectionAdmin;
+        const modalNode = document.getElementById("leadModal");
+        const form = document.getElementById("leadForm");
+        if (!config?.leadsUrl || !modalNode || !form) {
+            return;
+        }
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalNode);
+        const titleNode = document.getElementById("leadModalTitle");
+        const idInput = document.getElementById("leadFormId");
+        const nameInput = document.getElementById("leadName");
+        const phoneInput = document.getElementById("leadPhone");
+        const statusInput = document.getElementById("leadStatus");
+        const assignedToInput = document.getElementById("leadAssignedTo");
+        const notesInput = document.getElementById("leadNotes");
+        const feedback = document.getElementById("leadFormFeedback");
+        const submitButton = document.getElementById("leadSubmitButton");
+
+        function showFeedback(message, isError) {
+            feedback.textContent = message;
+            feedback.classList.remove("d-none", "is-success", "is-error");
+            feedback.classList.add(isError ? "is-error" : "is-success");
+        }
+
+        function clearFeedback() {
+            feedback.textContent = "";
+            feedback.classList.add("d-none");
+            feedback.classList.remove("is-success", "is-error");
+        }
+
+        function resetForm() {
+            form.reset();
+            idInput.value = "";
+            statusInput.value = "new";
+            assignedToInput.value = "";
+            titleNode.textContent = "Add Lead";
+            clearFeedback();
+        }
+
+        document.getElementById("openCreateLeadModal")?.addEventListener("click", resetForm);
+        modalNode.addEventListener("hidden.bs.modal", clearFeedback);
+
+        document.querySelectorAll(".js-edit-lead").forEach((button) => {
+            button.addEventListener("click", () => {
+                clearFeedback();
+                idInput.value = button.dataset.leadId || "";
+                nameInput.value = button.dataset.name || "";
+                phoneInput.value = button.dataset.phone || "";
+                statusInput.value = button.dataset.status || "new";
+                assignedToInput.value = button.dataset.assignedToId || "";
+                notesInput.value = button.dataset.notes || "";
+                titleNode.textContent = "Edit Lead";
+                modal.show();
+            });
+        });
+
+        document.querySelectorAll(".js-delete-lead").forEach((button) => {
+            button.addEventListener("click", async () => {
+                const leadId = button.dataset.leadId;
+                const leadName = button.dataset.name || "this lead";
+                if (!leadId || !window.confirm(`Delete ${leadName}?`)) {
+                    return;
+                }
+                try {
+                    await requestJson(`${config.leadsUrl}${leadId}/`, { method: "DELETE" });
+                    window.location.reload();
+                } catch (error) {
+                    window.alert(error.message);
+                }
+            });
+        });
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            clearFeedback();
+            submitButton.disabled = true;
+
+            const leadId = idInput.value.trim();
+            const payload = {
+                name: nameInput.value.trim(),
+                phone: phoneInput.value.trim(),
+                status: statusInput.value,
+                assigned_to: assignedToInput.value || null,
+                notes: notesInput.value.trim(),
             };
 
             try {
-                const response = await fetch(config.createStaffUrl, {
-                    method: "POST",
-                    credentials: "same-origin",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "Accept": "application/json",
-                    },
+                const url = leadId ? `${config.leadsUrl}${leadId}/` : config.leadsUrl;
+                const method = leadId ? "PATCH" : "POST";
+                await requestJson(url, {
+                    method,
                     body: JSON.stringify(payload),
                 });
-
-                let responsePayload = null;
-                try {
-                    responsePayload = await response.json();
-                } catch (error) {
-                    responsePayload = null;
-                }
-
-                if (!response.ok) {
-                    setFeedback(extractErrorMessage(responsePayload), true);
-                    return;
-                }
-
-                setFeedback("Staff member created successfully.", false);
-                form.reset();
-                const modal = bootstrap.Modal.getOrCreateInstance(modalNode);
-                window.setTimeout(() => {
-                    modal.hide();
-                    window.location.reload();
-                }, 700);
+                showFeedback("Lead saved successfully.", false);
+                window.setTimeout(() => window.location.reload(), 500);
             } catch (error) {
-                setFeedback("Network issue while creating staff.", true);
+                showFeedback(error.message, true);
             } finally {
                 submitButton.disabled = false;
             }
@@ -320,8 +488,8 @@
     updateClock();
     window.setInterval(updateClock, 1000);
     animateCounters();
-    bindLeadFilters();
-    bindSectionSpy();
+    bindSearchAndFilters();
     renderCharts();
-    bindAddStaffForm();
+    bindStaffCrud();
+    bindLeadCrud();
 })();

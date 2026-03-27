@@ -1,0 +1,93 @@
+{% extends "admin_base.html" %}
+
+{% block admin_content %}
+<section class="row g-4 animate-on-scroll">
+    <div class="col-12">
+        <div class="hc-surface-card">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Daily Work Monitor</span>
+                    <h5>Staff working hours and current session state</h5>
+                </div>
+                <span class="hc-sync-pill"><i class="bi bi-calendar2-week"></i> {{ today_label }}</span>
+            </div>
+
+            <div class="hc-search-box">
+                <i class="bi bi-search"></i>
+                <input type="search" id="hoursSearchInput" placeholder="Search by staff name or phone number">
+            </div>
+
+            <div class="table-responsive">
+                <table class="table hc-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Staff</th>
+                            <th>Hours Today</th>
+                            <th>Sessions Today</th>
+                            <th>First Login</th>
+                            <th>Last Logout</th>
+                            <th>Current State</th>
+                        </tr>
+                    </thead>
+                    <tbody id="hoursSummaryBody">
+                        {% for row in summary_rows %}
+                        <tr>
+                            <td>
+                                <strong>{{ row.name }}</strong>
+                                <div class="text-muted small">{{ row.phone }}</div>
+                            </td>
+                            <td>{{ row.active_hours_today }}</td>
+                            <td>{{ row.session_count_today }}</td>
+                            <td>{{ row.first_login }}</td>
+                            <td>{{ row.last_logout }}</td>
+                            <td><span class="hc-status {% if row.online_label == 'Online' %}hc-status-success{% elif row.online_label == 'Away' or row.online_label == 'Warning' %}hc-status-warning{% else %}hc-status-muted{% endif %}">{{ row.state_label }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" class="text-center py-4">No work-hour summary available.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="hc-surface-card">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Session Log</span>
+                    <h5>Recent work sessions</h5>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table hc-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Staff</th>
+                            <th>Login</th>
+                            <th>Logout</th>
+                            <th>Active Time</th>
+                            <th>Last State</th>
+                            <th>Close Reason</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sessionLogBody">
+                        {% for session in session_rows %}
+                        <tr>
+                            <td><strong>{{ session.staff_name }}</strong></td>
+                            <td>{{ session.login_time }}</td>
+                            <td>{{ session.logout_time }}</td>
+                            <td>{{ session.active_label }}</td>
+                            <td>{{ session.last_known_state|title }}</td>
+                            <td>{{ session.close_reason }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" class="text-center py-4">No session history available.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

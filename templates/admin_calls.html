@@ -1,0 +1,57 @@
+{% extends "admin_base.html" %}
+
+{% block admin_content %}
+<section class="hc-surface-card animate-on-scroll">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Call History</span>
+            <h5>Call details after staff activity</h5>
+        </div>
+    </div>
+
+    <div class="hc-filter-row">
+        <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="interested">Interested</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="no_answer">No Answer</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="call_back">Call Back</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="converted">Converted</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="invalid_short">Invalid Short</button>
+    </div>
+
+    <div class="hc-search-box">
+        <i class="bi bi-search"></i>
+        <input type="search" id="callSearchInput" placeholder="Search by staff, lead, or phone number">
+    </div>
+
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Staff</th>
+                    <th>Lead</th>
+                    <th>Phone</th>
+                    <th>Started</th>
+                    <th>Ended</th>
+                    <th>Duration</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="callTableBody">
+                {% for call in call_rows %}
+                <tr data-status="{{ call.status }}">
+                    <td><strong>{{ call.staff_name }}</strong></td>
+                    <td>{{ call.lead_name }}</td>
+                    <td>{{ call.lead_phone }}</td>
+                    <td>{{ call.start_time }}</td>
+                    <td>{{ call.end_time }}</td>
+                    <td>{{ call.duration_label }}</td>
+                    <td><span class="hc-status {% if call.is_qualifying %}hc-status-success{% else %}hc-status-muted{% endif %}">{{ call.status_label }}</span></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center py-4">No call records available.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

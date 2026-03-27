@@ -93,6 +93,39 @@ class CreateStaffSerializer(serializers.Serializer):
         )
 
 
+class UpdateStaffSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=150, required=False)
+    phone = serializers.CharField(max_length=20, required=False)
+    password = serializers.CharField(min_length=6, write_only=True, required=False, allow_blank=False)
+    hourly_rate = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    call_rate = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    bonus_per_conversion = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        required=False,
+    )
+    is_active = serializers.BooleanField(required=False)
+
+    def validate_phone(self, value):
+        phone = value.strip()
+        instance = getattr(self, "instance", None)
+        queryset = Staff.objects.filter(phone=phone)
+        if instance:
+            queryset = queryset.exclude(pk=instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Phone number already exists.")
+        return phone
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
+
+
 class LeadSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.CharField(source="assigned_to.name", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
@@ -110,6 +143,31 @@ class LeadSerializer(serializers.ModelSerializer):
             "notes",
             "last_contacted_at",
             "updated_at",
+        )
+
+
+class CreateLeadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Lead
+        fields = (
+            "id",
+            "name",
+            "phone",
+            "status",
+            "assigned_to",
+            "notes",
+        )
+
+
+class UpdateLeadSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Lead
+        fields = (
+            "name",
+            "phone",
+            "status",
+            "assigned_to",
+            "notes",
         )
 
 

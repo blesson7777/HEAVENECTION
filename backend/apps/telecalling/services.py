@@ -34,6 +34,21 @@ def _format_hours(total_seconds):
     return f"{round((total_seconds or 0) / 3600, 1)}h"
 
 
+def _format_duration(total_seconds):
+    total_seconds = int(total_seconds or 0)
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+def _format_datetime(value, fallback="--"):
+    if not value:
+        return fallback
+    return timezone.localtime(value).strftime("%d %b %Y, %I:%M %p")
+
+
 def _bounded_elapsed_seconds(previous, current, max_seconds=ONLINE_WINDOW_SECONDS):
     if not previous or not current:
         return 0
@@ -266,16 +281,25 @@ def _staff_online_label(session, active_cutoff):
     return "Offline"
 
 
-def build_dashboard_payload():
-    today, start, end = _today_range()
-    staff_queryset = Staff.objects.filter(is_active=True, role=Staff.Role.STAFF)
-    active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
+def _staff_queryset():
+    return Staff.objects.filter(role=Staff.Role.STAFF).order_by("name")
 
+
+def _open_sessions_by_staff():
     open_sessions = {}
     for session in Session.objects.select_related("staff").filter(is_open=True).order_by("-login_time"):
         session = reconcile_session(session)
         if session and session.is_open and session.staff_id not in open_sessions:
             open_sessions[session.staff_id] = session
+    return open_sessions
+
+
+def build_dashboard_payload():
+    today, start, end = _today_range()
+    staff_queryset = Staff.objects.filter(is_active=True, role=Staff.Role.STAFF)
+    active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
+
+    open_sessions = _open_sessions_by_staff()
 
     active_staff = sum(
         1
@@ -483,6 +507,187 @@ def build_dashboard_payload():
         "lead_rows": lead_rows,
         "salary_records": salary_records,
         "team_directory": team_directory,
+    }
+
+
+def build_team_management_payload():
+    today, start, end = _today_range()
+    active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
+    staff_queryset = _staff_queryset()
+    open_sessions = _open_sessions_by_staff()
+
+    call_totals = {
+        row["staff_id"]: row["count"]
+        for row in Call.objects.filter(start_time__range=(start, end))
+        .values("staff_id")
+        .annotate(count=Count("id"))
+    }
+    converted_totals = {
+        row["staff_id"]: row["count"]
+        for row in Call.objects.filter(start_time__range=(start, end), status=Call.Status.CONVERTED)
+        .values("staff_id")
+        .annotate(count=Count("id"))
+    }
+    active_totals = {
+        row["staff_id"]: row["total"] or 0
+        for row in Session.objects.filter(login_time__range=(start, end))
+        .values("staff_id")
+        .annotate(total=Sum("active_seconds"))
+    }
+    assigned_totals = {
+        row["assigned_to"]: row["count"]
+        for row in Lead.objects.exclude(assigned_to=None)
+        .values("assigned_to")
+        .annotate(count=Count("id"))
+    }
+
+    team_rows = []
+    for staff in staff_queryset:
+        session = open_sessions.get(staff.id)
+        team_rows.append(
+            {
+                "id": str(staff.id),
+                "name": staff.name,
+                "phone": staff.phone,
+                "is_active": staff.is_active,
+                "hourly_rate": _format_currency(staff.hourly_rate),
+                "call_rate": _format_currency(staff.call_rate),
+                "bonus_per_conversion": _format_currency(staff.bonus_per_conversion),
+                "online_label": _staff_online_label(session, active_cutoff),
+                "session_state": session.last_known_state if session else "stopped",
+                "active_hours_today": _format_hours(active_totals.get(staff.id, 0)),
+                "active_seconds_today": active_totals.get(staff.id, 0),
+                "calls_today": call_totals.get(staff.id, 0),
+                "converted_today": converted_totals.get(staff.id, 0),
+                "assigned_leads": assigned_totals.get(staff.id, 0),
+                "last_seen": _format_datetime(staff.last_seen_at),
+            }
+        )
+
+    return {
+        "today_label": today.strftime("%A, %d %b %Y"),
+        "team_rows": team_rows,
+    }
+
+
+def build_lead_management_payload():
+    leads = Lead.objects.select_related("assigned_to").order_by("-updated_at")
+    staff_options = [
+        {"id": str(staff.id), "name": staff.name}
+        for staff in _staff_queryset().filter(is_active=True)
+    ]
+
+    lead_rows = []
+    for lead in leads:
+        lead_rows.append(
+            {
+                "id": str(lead.id),
+                "name": lead.name,
+                "phone": lead.phone,
+                "status": lead.status,
+                "status_label": lead.get_status_display(),
+                "assigned_to_id": str(lead.assigned_to_id) if lead.assigned_to_id else "",
+                "assigned_to": lead.assigned_to.name if lead.assigned_to else "Unassigned",
+                "notes": lead.notes,
+                "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
+                "updated_at": _format_datetime(lead.updated_at),
+            }
+        )
+
+    return {
+        "lead_rows": lead_rows,
+        "staff_options": staff_options,
+    }
+
+
+def build_call_detail_payload(limit=200):
+    calls = Call.objects.select_related("staff", "lead").order_by("-start_time")[:limit]
+    call_rows = []
+    for call in calls:
+        call_rows.append(
+            {
+                "id": str(call.id),
+                "staff_name": call.staff.name,
+                "lead_name": call.lead.name,
+                "lead_phone": call.lead.phone,
+                "start_time": _format_datetime(call.start_time),
+                "end_time": _format_datetime(call.end_time),
+                "duration_seconds": call.duration_seconds,
+                "duration_label": _format_duration(call.duration_seconds),
+                "status": call.status,
+                "status_label": call.get_status_display(),
+                "is_qualifying": call.is_qualifying,
+            }
+        )
+
+    return {"call_rows": call_rows}
+
+
+def build_work_hours_payload():
+    today, start, end = _today_range()
+    active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
+    open_sessions = _open_sessions_by_staff()
+
+    sessions_today = Session.objects.filter(login_time__range=(start, end)).select_related("staff").order_by("-login_time")
+    totals = {
+        row["staff_id"]: row["total"] or 0
+        for row in sessions_today.values("staff_id").annotate(total=Sum("active_seconds"))
+    }
+    session_counts = {
+        row["staff_id"]: row["count"]
+        for row in sessions_today.values("staff_id").annotate(count=Count("id"))
+    }
+    first_login_map = {}
+    last_logout_map = {}
+    for session in sessions_today:
+        first_login_map[session.staff_id] = min(
+            session.login_time,
+            first_login_map.get(session.staff_id, session.login_time),
+        )
+        if session.logout_time:
+            last_logout_map[session.staff_id] = max(
+                session.logout_time,
+                last_logout_map.get(session.staff_id, session.logout_time),
+            )
+
+    summary_rows = []
+    for staff in _staff_queryset():
+        session = open_sessions.get(staff.id)
+        summary_rows.append(
+            {
+                "id": str(staff.id),
+                "name": staff.name,
+                "phone": staff.phone,
+                "active_hours_today": _format_hours(totals.get(staff.id, 0)),
+                "active_seconds_today": totals.get(staff.id, 0),
+                "session_count_today": session_counts.get(staff.id, 0),
+                "first_login": _format_datetime(first_login_map.get(staff.id)),
+                "last_logout": _format_datetime(last_logout_map.get(staff.id)),
+                "state_label": _session_status_label(session),
+                "online_label": _staff_online_label(session, active_cutoff),
+            }
+        )
+
+    session_rows = []
+    for session in sessions_today[:200]:
+        session_rows.append(
+            {
+                "id": str(session.id),
+                "staff_name": session.staff.name,
+                "login_time": _format_datetime(session.login_time),
+                "logout_time": _format_datetime(session.logout_time),
+                "active_seconds": session.active_seconds,
+                "active_label": _format_duration(session.active_seconds),
+                "last_known_state": session.last_known_state,
+                "close_reason": session.close_reason or "Manual",
+                "is_open": session.is_open,
+            }
+        )
+
+    return {
+        "today_label": today.strftime("%A, %d %b %Y"),
+        "summary_rows": summary_rows,
+        "session_rows": session_rows,
     }
 
 
