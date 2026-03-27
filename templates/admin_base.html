@@ -132,32 +132,6 @@
                 </div>
             </div>
 
-            <div class="hc-sidebar-section{% if active_page == 'settings' %} is-expanded{% endif %}">
-                <button
-                    type="button"
-                    class="hc-sidebar-toggle"
-                    data-bs-toggle="collapse"
-                    data-bs-target="#hcSidebarAdministration"
-                    aria-expanded="{% if active_page == 'settings' %}true{% else %}false{% endif %}"
-                    aria-controls="hcSidebarAdministration"
-                >
-                    <span class="hc-sidebar-toggle-icon"><i class="bi bi-sliders2"></i></span>
-                    <span class="hc-sidebar-toggle-copy">
-                        <strong>Administration</strong>
-                        <small>Profile, brand, and company settings</small>
-                    </span>
-                    <span class="hc-sidebar-toggle-badge">1</span>
-                    <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
-                </button>
-                <div class="collapse{% if active_page == 'settings' %} show{% endif %}" id="hcSidebarAdministration" data-bs-parent="#hcSidebarNav">
-                    <div class="hc-sidebar-links">
-                        <a href="{% url 'settings-page' %}" class="hc-sidebar-link{% if active_page == 'settings' %} active{% endif %}">
-                            <i class="bi bi-person-gear"></i>
-                            <span>Admin Profile</span>
-                        </a>
-                    </div>
-                </div>
-            </div>
         </nav>
         <div class="mf-sidebar-card mt-4">
             <h6 class="mb-2">Installable Web</h6>
@@ -177,15 +151,41 @@
             </div>
             <div class="d-flex align-items-center gap-2 flex-wrap justify-content-end">
                 {% block page_actions %}{% endblock %}
-                <span class="hc-sync-pill"><i class="bi bi-person-badge-fill"></i> {{ admin_user.name }}</span>
                 <div class="mf-header-clock" id="mfHeaderClock">
                     <span class="mf-header-clock-label">System Time</span>
                     <strong class="mf-header-clock-value">--:--:--</strong>
                 </div>
-                <form method="post" action="{% url 'web-logout' %}" class="m-0">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-outline-primary btn-sm">Logout</button>
-                </form>
+                <div class="dropdown">
+                    <button
+                        type="button"
+                        class="btn hc-profile-trigger dropdown-toggle"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                    >
+                        <span class="hc-profile-trigger-avatar">{{ admin_user.name|slice:":1"|upper }}</span>
+                        <span class="hc-profile-trigger-copy">
+                            <strong>{{ admin_user.name }}</strong>
+                            <small>{{ company_profile.company_name|default:"Heavenection" }}</small>
+                        </span>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end hc-profile-menu">
+                        <div class="hc-profile-menu-head">
+                            <strong>{{ admin_user.name }}</strong>
+                            <small>{{ admin_user.phone }} | {{ admin_user.get_role_display }}</small>
+                        </div>
+                        <a href="{% url 'settings-page' %}" class="dropdown-item hc-profile-menu-item">
+                            <i class="bi bi-person-gear"></i>
+                            <span>Profile Settings</span>
+                        </a>
+                        <form method="post" action="{% url 'web-logout' %}" class="m-0">
+                            {% csrf_token %}
+                            <button type="submit" class="dropdown-item hc-profile-menu-item hc-profile-menu-item-danger">
+                                <i class="bi bi-box-arrow-right"></i>
+                                <span>Logout</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
             </div>
         </header>
 
