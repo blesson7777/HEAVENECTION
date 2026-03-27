@@ -34,6 +34,7 @@ BACKGROUND_TIMEOUT_SECONDS = 5 * 60
 IDLE_WARNING_AFTER_SECONDS = 5 * 60
 IDLE_WARNING_GRACE_SECONDS = 5 * 60
 IDLE_OFFLINE_AFTER_SECONDS = IDLE_WARNING_AFTER_SECONDS + IDLE_WARNING_GRACE_SECONDS
+LIVE_CALL_STALE_SECONDS = 3 * 60 * 60
 TWOPLACES = Decimal("0.01")
 DEFAULT_LEAD_QUEUE_LIMIT = 1
 CALLBACK_NOON_HOURS = range(12, 16)
@@ -541,6 +542,74 @@ def _staff_online_label(session, active_cutoff, *, is_in_customer_call=False):
     if session.last_known_state == Session.AppState.BACKGROUND:
         return "Away"
     return "Offline"
+
+
+def _close_unresolved_call(call, *, reason):
+    if not call or call.end_time is not None:
+        return call
+
+    session = get_open_session(call.staff, reconcile=True)
+    call.end_time = call.start_time
+    call.duration_seconds = 0
+    call.is_qualifying = False
+    call.status = Call.Status.INVALID_SHORT
+    call.callback_window = ""
+    call.save(
+        update_fields=[
+            "end_time",
+            "duration_seconds",
+            "is_qualifying",
+            "status",
+            "callback_window",
+            "updated_at",
+        ]
+    )
+
+    call.lead.last_contacted_at = call.start_time
+    call.lead.save(update_fields=["last_contacted_at", "updated_at"])
+
+    _log_staff_action(
+        call.staff,
+        StaffAction.ActionType.CALL_ENDED,
+        session=session,
+        call=call,
+        lead=call.lead,
+        app_state=session.last_known_state if session else None,
+        metadata={
+            "duration_seconds": 0,
+            "is_qualifying": False,
+            "status": call.status,
+            "source": reason,
+            "ended_at": call.end_time.isoformat(),
+        },
+    )
+    return call
+
+
+def _reconcile_open_calls(*, staff=None, now=None):
+    now = now or timezone.now()
+    queryset = Call.objects.filter(end_time__isnull=True).select_related("staff", "lead")
+    if staff is not None:
+        queryset = queryset.filter(staff=staff)
+
+    open_calls = queryset.order_by("staff_id", "-start_time", "-created_at")
+    live_staff_ids = set()
+    seen_staff_ids = set()
+
+    for call in open_calls:
+        if call.staff_id in seen_staff_ids:
+            _close_unresolved_call(call, reason="superseded_open_call")
+            continue
+
+        seen_staff_ids.add(call.staff_id)
+        call_age_seconds = max(0, int((now - call.start_time).total_seconds()))
+        if call_age_seconds >= LIVE_CALL_STALE_SECONDS:
+            _close_unresolved_call(call, reason="stale_open_call")
+            continue
+
+        live_staff_ids.add(call.staff_id)
+
+    return live_staff_ids
 
 
 def _staff_queryset():
@@ -1251,9 +1320,7 @@ def _currently_active_staff_ids(now=None):
 
 
 def _live_call_staff_ids():
-    return set(
-        Call.objects.filter(end_time__isnull=True).values_list("staff_id", flat=True)
-    )
+    return _reconcile_open_calls()
 
 
 def _release_due_callback_leads_from_inactive_staff(*, now=None, active_staff_ids=None):
@@ -2381,6 +2448,14 @@ def get_assigned_leads(staff):
 
 def start_staff_call(staff, lead):
     now = timezone.now()
+    _reconcile_open_calls(staff=staff, now=now)
+    for lingering_call in (
+        Call.objects.filter(staff=staff, end_time__isnull=True)
+        .select_related("staff", "lead")
+        .order_by("-start_time", "-created_at")
+    ):
+        _close_unresolved_call(lingering_call, reason="replaced_by_new_call")
+
     session = get_open_session(staff, reconcile=True)
     if session:
         _touch_session_interaction(session, now, metadata={"source": "call_start"})
