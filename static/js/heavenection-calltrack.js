@@ -478,27 +478,31 @@
         });
     }
 
-    function bindSidebarAccordion() {
-        const sections = Array.from(document.querySelectorAll(".hc-sidebar-nav .mf-nav-section"));
+    function bindSidebarSections() {
+        const sections = Array.from(document.querySelectorAll(".hc-sidebar-section"));
         if (!sections.length) {
             return;
         }
 
-        const activeSection = sections.find((section) => section.querySelector(".mf-nav-link.active"));
-        if (activeSection) {
-            activeSection.open = true;
-        }
-
         sections.forEach((section) => {
-            section.addEventListener("toggle", () => {
-                if (!section.open) {
-                    return;
-                }
+            const collapseNode = section.querySelector(".collapse");
+            if (!collapseNode) {
+                return;
+            }
+
+            if (collapseNode.classList.contains("show")) {
+                section.classList.add("is-expanded");
+            }
+
+            collapseNode.addEventListener("show.bs.collapse", () => {
                 sections.forEach((otherSection) => {
-                    if (otherSection !== section) {
-                        otherSection.open = false;
-                    }
+                    otherSection.classList.remove("is-expanded");
                 });
+                section.classList.add("is-expanded");
+            });
+
+            collapseNode.addEventListener("hide.bs.collapse", () => {
+                section.classList.remove("is-expanded");
             });
         });
     }
@@ -517,5 +521,5 @@
     renderCharts();
     bindStaffCrud();
     bindLeadCrud();
-    bindSidebarAccordion();
+    bindSidebarSections();
 })();

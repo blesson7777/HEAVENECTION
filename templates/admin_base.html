@@ -32,57 +32,95 @@
             </a>
         </div>
         <div class="mf-nav-group">Workspace Navigation</div>
-        <nav class="mf-nav mf-nav-accordion hc-sidebar-nav">
-            <details class="mf-nav-section"{% if active_page == 'dashboard' %} open{% endif %}>
-                <summary class="mf-nav-toggle">
-                    <span class="mf-nav-toggle-meta">
-                        <i class="bi bi-grid-1x2-fill"></i>
-                        Overview
+        <nav class="hc-sidebar-nav" id="hcSidebarNav" aria-label="Sidebar Navigation">
+            <div class="hc-sidebar-section{% if active_page == 'dashboard' %} is-expanded{% endif %}">
+                <button
+                    type="button"
+                    class="hc-sidebar-toggle"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#hcSidebarOverview"
+                    aria-expanded="{% if active_page == 'dashboard' %}true{% else %}false{% endif %}"
+                    aria-controls="hcSidebarOverview"
+                >
+                    <span class="hc-sidebar-toggle-icon"><i class="bi bi-grid-1x2-fill"></i></span>
+                    <span class="hc-sidebar-toggle-copy">
+                        <strong>Overview</strong>
+                        <small>Main dashboard and summary</small>
                     </span>
-                    <i class="bi bi-chevron-down mf-nav-caret"></i>
-                </summary>
-                <div class="mf-nav-children">
-                    <a href="{% url 'dashboard' %}" class="mf-nav-link hc-nav-link{% if active_page == 'dashboard' %} active{% endif %}">
-                        <i class="bi bi-speedometer2"></i>Dashboard
-                    </a>
+                    <span class="hc-sidebar-toggle-badge">1</span>
+                    <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
+                </button>
+                <div class="collapse{% if active_page == 'dashboard' %} show{% endif %}" id="hcSidebarOverview" data-bs-parent="#hcSidebarNav">
+                    <div class="hc-sidebar-links">
+                        <a href="{% url 'dashboard' %}" class="hc-sidebar-link{% if active_page == 'dashboard' %} active{% endif %}">
+                            <i class="bi bi-speedometer2"></i>
+                            <span>Dashboard</span>
+                        </a>
+                    </div>
                 </div>
-            </details>
+            </div>
 
-            <details class="mf-nav-section"{% if active_page == 'staff' or active_page == 'leads' %} open{% endif %}>
-                <summary class="mf-nav-toggle">
-                    <span class="mf-nav-toggle-meta">
-                        <i class="bi bi-diagram-3-fill"></i>
-                        Operations
+            <div class="hc-sidebar-section{% if active_page == 'staff' or active_page == 'leads' %} is-expanded{% endif %}">
+                <button
+                    type="button"
+                    class="hc-sidebar-toggle"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#hcSidebarOperations"
+                    aria-expanded="{% if active_page == 'staff' or active_page == 'leads' %}true{% else %}false{% endif %}"
+                    aria-controls="hcSidebarOperations"
+                >
+                    <span class="hc-sidebar-toggle-icon"><i class="bi bi-diagram-3-fill"></i></span>
+                    <span class="hc-sidebar-toggle-copy">
+                        <strong>Operations</strong>
+                        <small>Staff setup and lead handling</small>
                     </span>
-                    <i class="bi bi-chevron-down mf-nav-caret"></i>
-                </summary>
-                <div class="mf-nav-children">
-                    <a href="{% url 'staff-page' %}" class="mf-nav-link hc-nav-link{% if active_page == 'staff' %} active{% endif %}">
-                        <i class="bi bi-people-fill"></i>Staff Management
-                    </a>
-                    <a href="{% url 'leads-page' %}" class="mf-nav-link hc-nav-link{% if active_page == 'leads' %} active{% endif %}">
-                        <i class="bi bi-person-lines-fill"></i>Lead Management
-                    </a>
+                    <span class="hc-sidebar-toggle-badge">2</span>
+                    <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
+                </button>
+                <div class="collapse{% if active_page == 'staff' or active_page == 'leads' %} show{% endif %}" id="hcSidebarOperations" data-bs-parent="#hcSidebarNav">
+                    <div class="hc-sidebar-links">
+                        <a href="{% url 'staff-page' %}" class="hc-sidebar-link{% if active_page == 'staff' %} active{% endif %}">
+                            <i class="bi bi-people-fill"></i>
+                            <span>Staff Management</span>
+                        </a>
+                        <a href="{% url 'leads-page' %}" class="hc-sidebar-link{% if active_page == 'leads' %} active{% endif %}">
+                            <i class="bi bi-person-lines-fill"></i>
+                            <span>Lead Management</span>
+                        </a>
+                    </div>
                 </div>
-            </details>
+            </div>
 
-            <details class="mf-nav-section"{% if active_page == 'calls' or active_page == 'hours' %} open{% endif %}>
-                <summary class="mf-nav-toggle">
-                    <span class="mf-nav-toggle-meta">
-                        <i class="bi bi-broadcast-pin"></i>
-                        Monitoring
+            <div class="hc-sidebar-section{% if active_page == 'calls' or active_page == 'hours' %} is-expanded{% endif %}">
+                <button
+                    type="button"
+                    class="hc-sidebar-toggle"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#hcSidebarMonitoring"
+                    aria-expanded="{% if active_page == 'calls' or active_page == 'hours' %}true{% else %}false{% endif %}"
+                    aria-controls="hcSidebarMonitoring"
+                >
+                    <span class="hc-sidebar-toggle-icon"><i class="bi bi-broadcast-pin"></i></span>
+                    <span class="hc-sidebar-toggle-copy">
+                        <strong>Monitoring</strong>
+                        <small>Calls, activity, and work hours</small>
                     </span>
-                    <i class="bi bi-chevron-down mf-nav-caret"></i>
-                </summary>
-                <div class="mf-nav-children">
-                    <a href="{% url 'calls-page' %}" class="mf-nav-link hc-nav-link{% if active_page == 'calls' %} active{% endif %}">
-                        <i class="bi bi-telephone-forward-fill"></i>Call Details
-                    </a>
-                    <a href="{% url 'working-hours-page' %}" class="mf-nav-link hc-nav-link{% if active_page == 'hours' %} active{% endif %}">
-                        <i class="bi bi-clock-history"></i>Working Hours
-                    </a>
+                    <span class="hc-sidebar-toggle-badge">2</span>
+                    <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
+                </button>
+                <div class="collapse{% if active_page == 'calls' or active_page == 'hours' %} show{% endif %}" id="hcSidebarMonitoring" data-bs-parent="#hcSidebarNav">
+                    <div class="hc-sidebar-links">
+                        <a href="{% url 'calls-page' %}" class="hc-sidebar-link{% if active_page == 'calls' %} active{% endif %}">
+                            <i class="bi bi-telephone-forward-fill"></i>
+                            <span>Call Details</span>
+                        </a>
+                        <a href="{% url 'working-hours-page' %}" class="hc-sidebar-link{% if active_page == 'hours' %} active{% endif %}">
+                            <i class="bi bi-clock-history"></i>
+                            <span>Working Hours</span>
+                        </a>
+                    </div>
                 </div>
-            </details>
+            </div>
         </nav>
         <div class="mf-sidebar-card mt-4">
             <h6 class="mb-2">Installable Web</h6>
