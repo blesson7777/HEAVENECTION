@@ -152,6 +152,7 @@ class ApiClient {
   Future<CallRecord> endCall({
     required String callId,
     String? status,
+    String? callbackWindow,
     int? durationSeconds,
     DateTime? endedAt,
     String source = 'app',
@@ -159,6 +160,9 @@ class ApiClient {
     final body = <String, dynamic>{'source': source};
     if (status != null && status.isNotEmpty) {
       body['status'] = status;
+    }
+    if (callbackWindow != null && callbackWindow.isNotEmpty) {
+      body['callback_window'] = callbackWindow;
     }
     if (durationSeconds != null) {
       body['duration_seconds'] = durationSeconds;
@@ -178,11 +182,16 @@ class ApiClient {
   Future<CallRecord> updateCallStatus({
     required String callId,
     required String status,
+    String? callbackWindow,
   }) async {
+    final body = <String, dynamic>{'status': status};
+    if (callbackWindow != null && callbackWindow.isNotEmpty) {
+      body['callback_window'] = callbackWindow;
+    }
     final response = await _send(
       'POST',
       '/api/staff/calls/$callId/status/',
-      body: {'status': status},
+      body: body,
     );
     return CallRecord.fromJson(_decodeMap(response.body));
   }

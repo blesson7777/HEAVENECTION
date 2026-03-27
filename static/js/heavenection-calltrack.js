@@ -473,6 +473,7 @@
         const nameInput = document.getElementById("leadName");
         const phoneInput = document.getElementById("leadPhone");
         const statusInput = document.getElementById("leadStatus");
+        const callbackWindowInput = document.getElementById("leadCallbackWindow");
         const assignedToInput = document.getElementById("leadAssignedTo");
         const notesInput = document.getElementById("leadNotes");
         const feedback = document.getElementById("leadFormFeedback");
@@ -494,10 +495,17 @@
             form.reset();
             idInput.value = "";
             statusInput.value = "new";
+            callbackWindowInput.value = "";
             assignedToInput.value = "";
             titleNode.textContent = "Add Lead";
             clearFeedback();
         }
+
+        statusInput.addEventListener("change", () => {
+            if (statusInput.value !== "call_back") {
+                callbackWindowInput.value = "";
+            }
+        });
 
         document.getElementById("openCreateLeadModal")?.addEventListener("click", resetForm);
         modalNode.addEventListener("hidden.bs.modal", clearFeedback);
@@ -509,6 +517,7 @@
                 nameInput.value = button.dataset.name || "";
                 phoneInput.value = button.dataset.phone || "";
                 statusInput.value = button.dataset.status || "new";
+                callbackWindowInput.value = button.dataset.callbackWindow || "";
                 assignedToInput.value = button.dataset.assignedToId || "";
                 notesInput.value = button.dataset.notes || "";
                 titleNode.textContent = "Edit Lead";
@@ -542,6 +551,7 @@
                 name: nameInput.value.trim(),
                 phone: phoneInput.value.trim(),
                 status: statusInput.value,
+                callback_window: callbackWindowInput.value || "",
                 assigned_to: assignedToInput.value || null,
                 notes: notesInput.value.trim(),
             };

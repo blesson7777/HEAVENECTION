@@ -119,7 +119,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   int _tab = 0;
   int _lastLoadedTab = 0;
   int _leadIndex = 0;
-  String _callStatus = 'Call Back';
+  String _callStatus = 'Follow Up';
   String _learningQuery = '';
   String? _loginErrorText;
   String _networkErrorMessage = 'Network connection lost.';
@@ -776,8 +776,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
     if (!_summary.workingNow) {
-      _showMessage('Start work before placing calls.', isError: true);
-      return;
+      await _startWork();
+      if (!_summary.workingNow) {
+        return;
+      }
     }
     if (_activeCallId != null) {
       _showMessage(
@@ -900,16 +902,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
-          title: const Text('No Answer?'),
+          title: const Text('No Response?'),
           content: const Text(
-            'The customer did not attend the call. Mark it as No Answer or call again.',
+            'The customer did not attend the call. Mark it as No Response or call again.',
           ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(dialogContext).pop(NoAnswerDecision.markNoAnswer);
               },
-              child: const Text('Mark No Answer'),
+              child: const Text('Mark No Response'),
             ),
             ElevatedButton(
               onPressed: () {
@@ -941,14 +943,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    setState(() => _callStatus = 'No Answer');
+    setState(() => _callStatus = 'No Response');
     await _loadDashboardData(showLoader: false);
     if (!mounted) {
       return;
     }
 
     if (callAgain) {
-      _showMessage('Marked as No Answer. Calling again.');
+      _showMessage('Marked as No Response. Calling again.');
       final lead = _leadById(pendingCall.leadId);
       if (lead != null) {
         await _placeCallForLead(lead);
@@ -962,7 +964,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     if (call.status == 'no_answer') {
-      _showMessage('Call marked as No Answer.');
+      _showMessage('Call marked as No Response.');
     } else {
       _showMessage(
         'Call duration was less than 5 seconds, so it was not counted.',
@@ -1013,7 +1015,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _pendingStatusCallId = call.id;
         _pendingStatusLeadName = lead?.name ?? '';
         _pendingStatusLeadPhone = lead?.phone ?? pendingCall.phone;
-        _callStatus = 'Call Back';
+        _callStatus = 'Follow Up';
       }
     });
 
@@ -1056,7 +1058,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _pendingStatusCallId = call.id;
         _pendingStatusLeadName = lead?.name ?? '';
         _pendingStatusLeadPhone = lead?.phone ?? '';
-        _callStatus = 'Call Back';
+        _callStatus = 'Follow Up';
       }
     });
 
@@ -1454,7 +1456,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     });
   }
 
-  Future<bool> _submitPendingCallStatus(String label) async {
+  Future<bool> _submitPendingCallStatus(
+    String label, {
+    String callbackWindow = '',
+    String callbackWindowLabel = '',
+  }) async {
     final callId = _pendingStatusCallId;
     if (callId == null || callId.isEmpty) {
       return true;
@@ -1464,6 +1470,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       await _apiClient.updateCallStatus(
         callId: callId,
         status: _statusValue(label),
+        callbackWindow: callbackWindow,
       );
       if (!mounted) {
         return true;
@@ -1475,7 +1482,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       });
       await _loadDashboardData(showLoader: false, promptTrainingGate: true);
       if (mounted) {
-        _showMessage('Call result saved as $label.');
+        if (label == 'Call Back' && callbackWindowLabel.isNotEmpty) {
+          _showMessage('Call Back scheduled for $callbackWindowLabel.');
+        } else {
+          _showMessage('Call result saved as $label.');
+        }
       }
       return true;
     } on ApiException catch (error) {
@@ -1500,15 +1511,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     const choices = [
-      'Interested',
-      'Not Interested',
-      'No Answer',
+      'Rejected',
+      'Follow Up',
       'Call Back',
-      'Converted',
+      'No Response',
     ];
+    const callbackChoices = ['Noon', 'Evening', 'Night'];
 
     _isCallStatusPromptVisible = true;
-    var selectedStatus = choices.contains(_callStatus) ? _callStatus : 'Call Back';
+    var selectedStatus = choices.contains(_callStatus) ? _callStatus : 'Follow Up';
+    var selectedCallbackWindow = '';
 
     await showDialog<void>(
       context: context,
@@ -1573,7 +1585,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                               onSelected: isSaving
                                   ? null
                                   : (_) {
-                                      setDialogState(() => selectedStatus = item);
+                                      setDialogState(() {
+                                        selectedStatus = item;
+                                        if (item != 'Call Back') {
+                                          selectedCallbackWindow = '';
+                                        }
+                                      });
                                     },
                               selectedColor: kPrimary,
                               backgroundColor: Colors.white,
@@ -1590,16 +1607,59 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                           )
                           .toList(),
                     ),
+                    if (selectedStatus == 'Call Back') ...[
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Choose the callback time window',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: callbackChoices
+                            .map(
+                              (item) => ChoiceChip(
+                                selected: selectedCallbackWindow == item,
+                                onSelected: isSaving
+                                    ? null
+                                    : (_) {
+                                        setDialogState(
+                                          () => selectedCallbackWindow = item,
+                                        );
+                                      },
+                                selectedColor: kPrimary,
+                                backgroundColor: Colors.white,
+                                label: Text(
+                                  item,
+                                  style: TextStyle(
+                                    color: selectedCallbackWindow == item
+                                        ? Colors.white
+                                        : kPrimaryDark,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
                   ],
                 ),
                 actions: [
                   ElevatedButton(
-                    onPressed: isSaving
+                    onPressed: isSaving ||
+                            (selectedStatus == 'Call Back' &&
+                                selectedCallbackWindow.isEmpty)
                         ? null
                         : () async {
                             setDialogState(() => isSaving = true);
                             final saved = await _submitPendingCallStatus(
                               selectedStatus,
+                              callbackWindow: _callbackWindowValue(
+                                selectedCallbackWindow,
+                              ),
+                              callbackWindowLabel: selectedCallbackWindow,
                             );
                             if (!mounted) {
                               return;
@@ -1641,12 +1701,21 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   String _statusValue(String label) {
     return switch (label) {
-      'Interested' => 'interested',
-      'Not Interested' => 'not_interested',
-      'No Answer' => 'no_answer',
+      'Follow Up' => 'interested',
+      'Rejected' => 'not_interested',
+      'No Response' => 'no_answer',
       'Call Back' => 'call_back',
       'Converted' => 'converted',
-      _ => 'call_back',
+      _ => 'interested',
+    };
+  }
+
+  String _callbackWindowValue(String label) {
+    return switch (label) {
+      'Noon' => 'noon',
+      'Evening' => 'evening',
+      'Night' => 'night',
+      _ => '',
     };
   }
 
@@ -2140,6 +2209,18 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                   color: Colors.black54,
                                 ),
                               ),
+                              if (_leads[i].callbackWindowLabel.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(
+                                    'Call Back: ${_leads[i].callbackWindowLabel}',
+                                    style: const TextStyle(
+                                      fontSize: 14.5,
+                                      color: kPrimaryDark,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -2181,7 +2262,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _registerInteraction(syncServer: false);
     setState(() {
       _leadIndex = index;
-      _callStatus = 'Call Back';
+      _callStatus = 'Follow Up';
     });
 
     await Navigator.of(context).push(
@@ -2244,6 +2325,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   lead.phone,
                   style: const TextStyle(fontSize: 17, color: Colors.black54),
                 ),
+                if (lead.callbackWindowLabel.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Call Back slot: ${lead.callbackWindowLabel}',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      color: kPrimaryDark,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
                 if (lead.notes.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(lead.notes, style: const TextStyle(fontSize: 16)),
@@ -2333,7 +2425,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               ),
               const SizedBox(height: 10),
               const Text(
-                'After the call ends, the app will ask you to mark the result. The next lead stays blocked until that result is saved.',
+                'After the call ends, the app will ask you to mark the result and schedule any callback slot. The next lead stays blocked until that result is saved.',
                 style: TextStyle(fontSize: 15.5, color: Colors.black54),
               ),
               if (_hasPendingCallStatus) ...[
@@ -3180,11 +3272,11 @@ class StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (label) {
-      'Interested' => kGreen,
+      'Follow Up' => kGreen,
       'Call Back' => kOrange,
-      'No Answer' => kRed,
+      'No Response' => kRed,
       'Converted' => kGreen,
-      'Not Interested' => kRed,
+      'Rejected' => kRed,
       'Completed' => kGreen,
       'Mandatory' => kOrange,
       'Optional' => kPrimary,

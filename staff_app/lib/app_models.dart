@@ -28,6 +28,8 @@ class LeadItem {
     required this.phone,
     required this.status,
     required this.statusLabel,
+    required this.callbackWindow,
+    required this.callbackWindowLabel,
     required this.notes,
   });
 
@@ -36,6 +38,8 @@ class LeadItem {
   final String phone;
   final String status;
   final String statusLabel;
+  final String callbackWindow;
+  final String callbackWindowLabel;
   final String notes;
 
   factory LeadItem.fromJson(Map<String, dynamic> json) {
@@ -45,6 +49,8 @@ class LeadItem {
       phone: json['phone']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
       statusLabel: json['status_label']?.toString() ?? 'New',
+      callbackWindow: json['callback_window']?.toString() ?? '',
+      callbackWindowLabel: json['callback_window_label']?.toString() ?? '',
       notes: json['notes']?.toString() ?? '',
     );
   }
@@ -151,17 +157,20 @@ class CallRecord {
   const CallRecord({
     required this.id,
     required this.status,
+    required this.callbackWindow,
     required this.durationSeconds,
   });
 
   final String id;
   final String status;
+  final String callbackWindow;
   final int durationSeconds;
 
   factory CallRecord.fromJson(Map<String, dynamic> json) {
     return CallRecord(
       id: json['id']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
+      callbackWindow: json['callback_window']?.toString() ?? '',
       durationSeconds: (json['duration_seconds'] as num?)?.toInt() ?? 0,
     );
   }

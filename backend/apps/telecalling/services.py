@@ -6,7 +6,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import Count, Q, Sum
+from django.db.models import Case, Count, IntegerField, Q, Sum, Value, When
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 
@@ -36,6 +36,9 @@ IDLE_WARNING_GRACE_SECONDS = 5 * 60
 IDLE_OFFLINE_AFTER_SECONDS = IDLE_WARNING_AFTER_SECONDS + IDLE_WARNING_GRACE_SECONDS
 TWOPLACES = Decimal("0.01")
 DEFAULT_LEAD_QUEUE_LIMIT = 1
+CALLBACK_NOON_HOURS = range(12, 16)
+CALLBACK_EVENING_HOURS = range(16, 20)
+CALLBACK_NIGHT_HOURS = range(20, 24)
 ACTIVE_QUEUE_STATUSES = (
     Lead.Status.NEW,
     Lead.Status.CALL_BACK,
@@ -486,6 +489,49 @@ def _is_active_queue_status(status):
     return status in ACTIVE_QUEUE_STATUSES
 
 
+def _current_callback_window(now=None):
+    local_now = timezone.localtime(now or timezone.now())
+    hour = local_now.hour
+    if hour in CALLBACK_NOON_HOURS:
+        return Lead.CallbackWindow.NOON
+    if hour in CALLBACK_EVENING_HOURS:
+        return Lead.CallbackWindow.EVENING
+    if hour in CALLBACK_NIGHT_HOURS:
+        return Lead.CallbackWindow.NIGHT
+    return ""
+
+
+def _with_lead_priority(queryset, *, now=None):
+    current_slot = _current_callback_window(now)
+    if current_slot:
+        queue_priority = Case(
+            When(status=Lead.Status.CALL_BACK, callback_window=current_slot, then=Value(0)),
+            When(status=Lead.Status.INTERESTED, then=Value(1)),
+            When(status=Lead.Status.CALL_BACK, then=Value(2)),
+            When(status=Lead.Status.NEW, then=Value(3)),
+            default=Value(4),
+            output_field=IntegerField(),
+        )
+    else:
+        queue_priority = Case(
+            When(status=Lead.Status.INTERESTED, then=Value(0)),
+            When(status=Lead.Status.CALL_BACK, then=Value(1)),
+            When(status=Lead.Status.NEW, then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+    return queryset.annotate(queue_priority=queue_priority)
+
+
+def _ordered_lead_queryset(queryset, *, now=None, include_assignee=False):
+    ordered_queryset = _with_lead_priority(queryset, now=now)
+    order_fields = []
+    if include_assignee:
+        order_fields.append("assigned_to_id")
+    order_fields.extend(["queue_priority", "last_contacted_at", "created_at", "id"])
+    return ordered_queryset.order_by(*order_fields)
+
+
 def _daily_completed_call_counts():
     _, start, end = _today_range()
     qualifying_statuses = [
@@ -514,6 +560,7 @@ def release_staff_queue(staff):
 
 
 def _normalize_active_queue_assignments(*, target_staff=None):
+    now = timezone.now()
     queue_limit = get_lead_queue_limit()
     queue_queryset = _lead_queue_queryset().select_related("assigned_to").exclude(assigned_to=None)
     if target_staff is not None:
@@ -521,13 +568,7 @@ def _normalize_active_queue_assignments(*, target_staff=None):
 
     release_ids = []
     kept_counts = defaultdict(int)
-    for lead in queue_queryset.order_by(
-        "assigned_to_id",
-        "-last_contacted_at",
-        "-updated_at",
-        "created_at",
-        "id",
-    ):
+    for lead in _ordered_lead_queryset(queue_queryset, now=now, include_assignee=True):
         assigned_staff = lead.assigned_to
         if not assigned_staff or assigned_staff.role != Staff.Role.STAFF or not assigned_staff.is_active:
             release_ids.append(lead.id)
@@ -547,7 +588,10 @@ def _normalize_active_queue_assignments(*, target_staff=None):
 
 
 def auto_allocate_leads(*, target_staff=None):
+    now = timezone.now()
     queue_limit = get_lead_queue_limit()
+    active_staff_ids = _currently_active_staff_ids(now=now)
+    _release_due_callback_leads_from_inactive_staff(now=now, active_staff_ids=active_staff_ids)
     _normalize_active_queue_assignments(target_staff=target_staff)
     staff_queryset = _staff_queryset().filter(is_active=True)
     if target_staff is not None:
@@ -565,13 +609,13 @@ def auto_allocate_leads(*, target_staff=None):
         .annotate(count=Count("id"))
     }
     completed_today_counts = _daily_completed_call_counts()
-    open_lead_ids = list(
-        _lead_queue_queryset()
-        .filter(assigned_to=None)
-        .order_by("created_at", "id")
-        .values_list("id", flat=True)
+    open_leads = list(
+        _ordered_lead_queryset(
+            _lead_queue_queryset().filter(assigned_to=None),
+            now=now,
+        ).values("id", "status", "callback_window")
     )
-    if not open_lead_ids:
+    if not open_leads:
         return {"assigned_count": 0, "remaining_unassigned_count": 0}
 
     staff_slots = [
@@ -580,31 +624,41 @@ def auto_allocate_leads(*, target_staff=None):
             "name": staff.name.lower(),
             "active_count": active_counts.get(staff.id, 0),
             "completed_today": completed_today_counts.get(staff.id, 0),
+            "is_online": staff.id in active_staff_ids,
         }
         for staff in staff_members
     ]
 
     assigned_by_staff = defaultdict(list)
-    while open_lead_ids:
-        staff_slots.sort(
+    unassigned_lead_ids = []
+    current_slot = _current_callback_window(now)
+    for lead in open_leads:
+        eligible_slots = staff_slots
+        if (
+            current_slot
+            and lead["status"] == Lead.Status.CALL_BACK
+            and lead["callback_window"] == current_slot
+        ):
+            online_slots = [slot for slot in staff_slots if slot["is_online"]]
+            if online_slots:
+                eligible_slots = online_slots
+
+        eligible_slots.sort(
             key=lambda item: (
                 item["active_count"],
                 -item["completed_today"],
                 item["name"],
             )
         )
-        assigned_in_pass = False
-        for slot in staff_slots:
-            if slot["active_count"] >= queue_limit:
-                continue
-            lead_id = open_lead_ids.pop(0)
-            assigned_by_staff[slot["staff_id"]].append(lead_id)
-            slot["active_count"] += 1
-            assigned_in_pass = True
-            if not open_lead_ids:
-                break
-        if not assigned_in_pass:
-            break
+        chosen_slot = next(
+            (slot for slot in eligible_slots if slot["active_count"] < queue_limit),
+            None,
+        )
+        if not chosen_slot:
+            unassigned_lead_ids.append(lead["id"])
+            continue
+        assigned_by_staff[chosen_slot["staff_id"]].append(lead["id"])
+        chosen_slot["active_count"] += 1
 
     assigned_count = 0
     assigned_at = timezone.now()
@@ -617,7 +671,7 @@ def auto_allocate_leads(*, target_staff=None):
 
     return {
         "assigned_count": assigned_count,
-        "remaining_unassigned_count": len(open_lead_ids),
+        "remaining_unassigned_count": len(unassigned_lead_ids),
     }
 
 
@@ -889,6 +943,37 @@ def _open_sessions_by_staff():
     return open_sessions
 
 
+def _currently_active_staff_ids(now=None):
+    now = now or timezone.now()
+    active_cutoff = now - timedelta(seconds=ONLINE_WINDOW_SECONDS)
+    return {
+        staff_id
+        for staff_id, session in _open_sessions_by_staff().items()
+        if session.last_known_state == Session.AppState.FOREGROUND
+        and session.last_heartbeat_at
+        and session.last_heartbeat_at >= active_cutoff
+    }
+
+
+def _release_due_callback_leads_from_inactive_staff(*, now=None, active_staff_ids=None):
+    current_slot = _current_callback_window(now)
+    if not current_slot:
+        return 0
+
+    active_staff_ids = active_staff_ids if active_staff_ids is not None else _currently_active_staff_ids(now=now)
+    if not active_staff_ids:
+        return 0
+
+    return Lead.objects.filter(
+        status=Lead.Status.CALL_BACK,
+        callback_window=current_slot,
+        assigned_to__isnull=False,
+    ).exclude(assigned_to_id__in=active_staff_ids).update(
+        assigned_to=None,
+        updated_at=timezone.now(),
+    )
+
+
 def build_dashboard_payload():
     today, start, end = _today_range()
     staff_queryset = Staff.objects.filter(is_active=True, role=Staff.Role.STAFF)
@@ -913,9 +998,9 @@ def build_dashboard_payload():
     sessions_today = Session.objects.filter(login_time__range=(start, end))
 
     total_leads = leads.count()
-    interested_count = leads.filter(status=Lead.Status.INTERESTED).count()
+    follow_up_count = leads.filter(status=Lead.Status.INTERESTED).count()
     converted_count = leads.filter(status=Lead.Status.CONVERTED).count()
-    no_answer_count = leads.filter(status=Lead.Status.NO_ANSWER).count()
+    no_response_count = leads.filter(status=Lead.Status.NO_ANSWER).count()
     callbacks_count = leads.filter(status=Lead.Status.CALL_BACK).count()
 
     calls_today_count = qualifying_calls_today.count()
@@ -978,12 +1063,12 @@ def build_dashboard_payload():
         trend_conversions.append(trend_map.get(day, {}).get("conversion_count", 0))
 
     lead_pipeline = {
-        "labels": ["New", "Interested", "Call Back", "No Answer", "Converted"],
+        "labels": ["New", "Follow Up", "Call Back", "No Response", "Converted"],
         "values": [
             leads.filter(status=Lead.Status.NEW).count(),
-            interested_count,
+            follow_up_count,
             callbacks_count,
-            no_answer_count,
+            no_response_count,
             converted_count,
         ],
     }
@@ -1029,9 +1114,9 @@ def build_dashboard_payload():
                 "next_action": {
                     Lead.Status.NEW: "Assign and dial",
                     Lead.Status.CALL_BACK: "Follow up on schedule",
-                    Lead.Status.INTERESTED: "Send offer details",
+                    Lead.Status.INTERESTED: "Complete the follow-up",
                     Lead.Status.CONVERTED: "Move to onboarding",
-                    Lead.Status.NO_ANSWER: "Retry later",
+                    Lead.Status.NO_ANSWER: "Retry if needed",
                     Lead.Status.NOT_INTERESTED: "Keep for reporting",
                 }.get(lead.status, "Review"),
             }
@@ -1097,8 +1182,8 @@ def build_dashboard_payload():
         "short_calls_blocked": short_calls_blocked,
         "salary_ready": salary_ready,
         "total_leads": total_leads,
-        "no_answer": no_answer_count,
-        "interested": interested_count,
+        "no_answer": no_response_count,
+        "interested": follow_up_count,
         "converted": converted_count,
         "salary_estimate": _format_currency(salary_estimate),
         "active_hours": _format_hours(active_seconds_today),
@@ -1204,10 +1289,9 @@ def build_staff_profile_payload(staff):
     calls_today = Call.objects.filter(staff=staff, start_time__range=(start, end))
     qualifying_calls_today = calls_today.filter(is_qualifying=True)
     recent_calls = Call.objects.filter(staff=staff).select_related("lead").order_by("-start_time")[:20]
-    assigned_leads = (
-        Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES)
-        .select_related("assigned_to")
-        .order_by("-updated_at")
+    assigned_leads = _ordered_lead_queryset(
+        Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES).select_related("assigned_to"),
+        now=timezone.now(),
     )
 
     active_seconds_today = sessions_today.aggregate(total=Sum("active_seconds")).get("total") or 0
@@ -1221,6 +1305,7 @@ def build_staff_profile_payload(staff):
             "phone": lead.phone,
             "status": lead.status,
             "status_label": lead.get_status_display(),
+            "callback_window_label": lead.get_callback_window_display() if lead.callback_window else "",
             "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
             "updated_at": _format_datetime(lead.updated_at),
         }
@@ -1236,6 +1321,7 @@ def build_staff_profile_payload(staff):
             "duration_label": _format_duration(call.duration_seconds),
             "status": call.status,
             "status_label": call.get_status_display(),
+            "callback_window_label": call.get_callback_window_display() if call.callback_window else "",
             "is_qualifying": call.is_qualifying,
         }
         for call in recent_calls
@@ -1469,6 +1555,8 @@ def build_lead_management_payload():
                 "phone": lead.phone,
                 "status": lead.status,
                 "status_label": lead.get_status_display(),
+                "callback_window": lead.callback_window,
+                "callback_window_label": lead.get_callback_window_display() if lead.callback_window else "",
                 "assigned_to_id": str(lead.assigned_to_id) if lead.assigned_to_id else "",
                 "assigned_to": lead.assigned_to.name if lead.assigned_to else "Unassigned",
                 "notes": lead.notes,
@@ -1505,6 +1593,8 @@ def build_call_detail_payload(limit=200):
                 "duration_label": _format_duration(call.duration_seconds),
                 "status": call.status,
                 "status_label": call.get_status_display(),
+                "callback_window": call.callback_window,
+                "callback_window_label": call.get_callback_window_display() if call.callback_window else "",
                 "is_qualifying": call.is_qualifying,
             }
         )
@@ -1580,11 +1670,11 @@ def build_work_hours_payload():
     }
 
 
-def start_staff_session(staff):
+def start_staff_session(staff, *, source="manual_start"):
     now = timezone.now()
     session = get_open_session(staff, reconcile=True)
     if session:
-        _touch_session_interaction(session, now, metadata={"source": "start_work_reuse"})
+        _touch_session_interaction(session, now, metadata={"source": source, "reused": True})
         return session, False
 
     pending_lessons = list(get_pending_mandatory_lessons(staff)[:20])
@@ -1616,7 +1706,7 @@ def start_staff_session(staff):
         StaffAction.ActionType.SESSION_STARTED,
         session=session,
         app_state=Session.AppState.FOREGROUND,
-        metadata={"source": "manual_start"},
+        metadata={"source": source},
     )
     return session, True
 
@@ -1731,7 +1821,8 @@ def build_staff_today_payload(staff):
 
     active_seconds = sessions_today.aggregate(total=Sum("active_seconds")).get("total") or 0
     calls_count = qualifying_calls.count()
-    interested_count = assigned_leads.filter(status=Lead.Status.INTERESTED).count()
+    follow_up_count = assigned_leads.filter(status=Lead.Status.INTERESTED).count()
+    callback_count = assigned_leads.filter(status=Lead.Status.CALL_BACK).count()
     converted_count = assigned_leads.filter(status=Lead.Status.CONVERTED).count()
 
     return {
@@ -1740,9 +1831,9 @@ def build_staff_today_payload(staff):
             "active_seconds": active_seconds,
             "active_label": _format_hours(active_seconds),
             "calls_count": calls_count,
-            "interested_count": interested_count,
+            "interested_count": follow_up_count,
             "converted_count": converted_count,
-            "result_label": f"{interested_count} interested / {converted_count} converted",
+            "result_label": f"{follow_up_count} follow up / {callback_count} call back",
             "working_now": bool(open_session),
             "current_state": open_session.last_known_state if open_session else "stopped",
             "status_label": _session_status_label(open_session, latest_session=latest_session),
@@ -1772,10 +1863,9 @@ def build_staff_today_payload(staff):
 
 def get_assigned_leads(staff):
     auto_allocate_leads(target_staff=staff)
-    return (
-        Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES)
-        .select_related("assigned_to")
-        .order_by("-updated_at")
+    return _ordered_lead_queryset(
+        Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES).select_related("assigned_to"),
+        now=timezone.now(),
     )
 
 
@@ -1784,6 +1874,8 @@ def start_staff_call(staff, lead):
     session = get_open_session(staff, reconcile=True)
     if session:
         _touch_session_interaction(session, now, metadata={"source": "call_start"})
+    else:
+        session, _ = start_staff_session(staff, source="auto_call_start")
 
     call = Call.objects.create(
         staff=staff,
@@ -1806,7 +1898,7 @@ def start_staff_call(staff, lead):
     return call
 
 
-def end_staff_call(call, status=None, *, duration_seconds=None, ended_at=None, source="app"):
+def end_staff_call(call, status=None, *, duration_seconds=None, ended_at=None, source="app", callback_window=""):
     if call.end_time:
         return call
 
@@ -1869,11 +1961,11 @@ def end_staff_call(call, status=None, *, duration_seconds=None, ended_at=None, s
     )
 
     if requested_status and (call.is_qualifying or requested_status == Call.Status.NO_ANSWER):
-        update_staff_call_status(call, requested_status)
+        update_staff_call_status(call, requested_status, callback_window)
     return call
 
 
-def update_staff_call_status(call, status):
+def update_staff_call_status(call, status, callback_window=""):
     if call.status == Call.Status.INVALID_SHORT:
         return call
 
@@ -1882,11 +1974,14 @@ def update_staff_call_status(call, status):
     if session:
         _touch_session_interaction(session, now, metadata={"source": "call_status"})
 
+    resolved_callback_window = callback_window if status == Call.Status.CALL_BACK else ""
     call.status = status
-    call.save(update_fields=["status", "updated_at"])
+    call.callback_window = resolved_callback_window
+    call.save(update_fields=["status", "callback_window", "updated_at"])
     call.lead.status = status
+    call.lead.callback_window = resolved_callback_window
     call.lead.last_contacted_at = call.end_time or now
-    call.lead.save(update_fields=["status", "last_contacted_at", "updated_at"])
+    call.lead.save(update_fields=["status", "callback_window", "last_contacted_at", "updated_at"])
 
     _log_staff_action(
         call.staff,
@@ -1895,9 +1990,11 @@ def update_staff_call_status(call, status):
         call=call,
         lead=call.lead,
         app_state=session.last_known_state if session else None,
-        metadata={"status": status},
+        metadata={"status": status, "callback_window": resolved_callback_window},
     )
-    if status in TERMINAL_QUEUE_STATUSES:
+    if status == Call.Status.CALL_BACK:
+        auto_allocate_leads()
+    elif status in TERMINAL_QUEUE_STATUSES:
         auto_allocate_leads(target_staff=call.staff)
     return call
 

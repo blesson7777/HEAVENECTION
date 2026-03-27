@@ -106,11 +106,16 @@ class CompanyProfile(models.Model):
 class Lead(models.Model):
     class Status(models.TextChoices):
         NEW = "new", "New"
-        INTERESTED = "interested", "Interested"
-        NOT_INTERESTED = "not_interested", "Not Interested"
-        NO_ANSWER = "no_answer", "No Answer"
+        INTERESTED = "interested", "Follow Up"
+        NOT_INTERESTED = "not_interested", "Rejected"
+        NO_ANSWER = "no_answer", "No Response"
         CALL_BACK = "call_back", "Call Back"
         CONVERTED = "converted", "Converted"
+
+    class CallbackWindow(models.TextChoices):
+        NOON = "noon", "Noon"
+        EVENING = "evening", "Evening"
+        NIGHT = "night", "Night"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150)
@@ -124,6 +129,13 @@ class Lead(models.Model):
         related_name="assigned_leads",
     )
     notes = models.TextField(blank=True)
+    callback_window = models.CharField(
+        max_length=20,
+        choices=CallbackWindow.choices,
+        blank=True,
+        default="",
+        db_index=True,
+    )
     last_contacted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -135,9 +147,9 @@ class Lead(models.Model):
 class Call(models.Model):
     class Status(models.TextChoices):
         STARTED = "started", "Started"
-        INTERESTED = "interested", "Interested"
-        NOT_INTERESTED = "not_interested", "Not Interested"
-        NO_ANSWER = "no_answer", "No Answer"
+        INTERESTED = "interested", "Follow Up"
+        NOT_INTERESTED = "not_interested", "Rejected"
+        NO_ANSWER = "no_answer", "No Response"
         CALL_BACK = "call_back", "Call Back"
         CONVERTED = "converted", "Converted"
         INVALID_SHORT = "invalid_short", "Invalid Short"
@@ -149,6 +161,13 @@ class Call(models.Model):
     end_time = models.DateTimeField(null=True, blank=True)
     duration_seconds = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=30, choices=Status.choices, default=Status.STARTED, db_index=True)
+    callback_window = models.CharField(
+        max_length=20,
+        choices=Lead.CallbackWindow.choices,
+        blank=True,
+        default="",
+        db_index=True,
+    )
     is_qualifying = models.BooleanField(default=False, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

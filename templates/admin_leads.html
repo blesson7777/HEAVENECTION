@@ -79,7 +79,7 @@
         <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
         <button type="button" class="hc-filter-chip" data-filter-status="new">New</button>
         <button type="button" class="hc-filter-chip" data-filter-status="call_back">Call Back</button>
-        <button type="button" class="hc-filter-chip" data-filter-status="no_answer">No Answer</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="no_answer">No Response</button>
         <button type="button" class="hc-filter-chip" data-filter-status="converted">Converted</button>
     </div>
 
@@ -109,7 +109,12 @@
                         <div class="text-muted small">{{ lead.notes|default:"No notes" }}</div>
                     </td>
                     <td>{{ lead.phone }}</td>
-                    <td><span class="hc-status hc-status-{% if lead.status == 'new' %}new{% elif lead.status == 'call_back' %}warning{% elif lead.status == 'interested' %}success{% elif lead.status == 'converted' %}primary{% else %}muted{% endif %}">{{ lead.status_label }}</span></td>
+                    <td>
+                        <span class="hc-status hc-status-{% if lead.status == 'new' %}new{% elif lead.status == 'call_back' %}warning{% elif lead.status == 'interested' %}success{% elif lead.status == 'converted' %}primary{% else %}muted{% endif %}">{{ lead.status_label }}</span>
+                        {% if lead.callback_window_label %}
+                        <div class="small text-muted mt-1">{{ lead.callback_window_label }}</div>
+                        {% endif %}
+                    </td>
                     <td>{{ lead.assigned_to }}</td>
                     <td>{{ lead.last_contacted }}</td>
                     <td>{{ lead.updated_at }}</td>
@@ -122,6 +127,7 @@
                                 data-name="{{ lead.name }}"
                                 data-phone="{{ lead.phone }}"
                                 data-status="{{ lead.status }}"
+                                data-callback-window="{{ lead.callback_window }}"
                                 data-assigned-to-id="{{ lead.assigned_to_id }}"
                                 data-notes="{{ lead.notes }}"
                             >Edit</button>
@@ -163,11 +169,20 @@
                             <label class="form-label fw-semibold" for="leadStatus">Status</label>
                             <select class="form-select" id="leadStatus">
                                 <option value="new">New</option>
-                                <option value="interested">Interested</option>
-                                <option value="not_interested">Not Interested</option>
-                                <option value="no_answer">No Answer</option>
+                                <option value="interested">Follow Up</option>
+                                <option value="not_interested">Rejected</option>
+                                <option value="no_answer">No Response</option>
                                 <option value="call_back">Call Back</option>
                                 <option value="converted">Converted</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="leadCallbackWindow">Call Back Slot</label>
+                            <select class="form-select" id="leadCallbackWindow">
+                                <option value="">Choose slot</option>
+                                <option value="noon">Noon</option>
+                                <option value="evening">Evening</option>
+                                <option value="night">Night</option>
                             </select>
                         </div>
                         <div class="col-md-6">

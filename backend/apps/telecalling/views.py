@@ -1004,7 +1004,18 @@ def start_call_api(request):
     except Lead.DoesNotExist:
         return Response({"detail": "Lead not found."}, status=404)
 
-    call = start_staff_call(request.user, lead)
+    try:
+        call = start_staff_call(request.user, lead)
+    except TrainingRequiredError as error:
+        return Response(
+            {
+                "detail": str(error),
+                "code": "training_required",
+                "learning": error.payload,
+                "summary": build_staff_today_payload(request.user)["summary"],
+            },
+            status=409,
+        )
     return Response(CallSerializer(call).data, status=201)
 
 
@@ -1024,6 +1035,7 @@ def end_call_api(request, call_id):
         duration_seconds=serializer.validated_data.get("duration_seconds"),
         ended_at=serializer.validated_data.get("ended_at"),
         source=serializer.validated_data.get("source", "app"),
+        callback_window=serializer.validated_data.get("callback_window", ""),
     )
     return Response(CallSerializer(call).data)
 
@@ -1038,5 +1050,9 @@ def update_call_status_api(request, call_id):
     except request.user.calls.model.DoesNotExist:
         return Response({"detail": "Call not found."}, status=404)
 
-    call = update_staff_call_status(call, serializer.validated_data["status"])
+    call = update_staff_call_status(
+        call,
+        serializer.validated_data["status"],
+        serializer.validated_data.get("callback_window", ""),
+    )
     return Response(CallSerializer(call).data)

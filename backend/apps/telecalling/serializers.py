@@ -41,9 +41,21 @@ class EndCallSerializer(serializers.Serializer):
         ],
         required=False,
     )
+    callback_window = serializers.ChoiceField(
+        choices=Lead.CallbackWindow.choices,
+        required=False,
+        allow_blank=False,
+    )
     duration_seconds = serializers.IntegerField(min_value=0, required=False)
     ended_at = serializers.DateTimeField(required=False)
     source = serializers.CharField(max_length=50, required=False, default="app")
+
+    def validate(self, attrs):
+        if attrs.get("status") == Call.Status.CALL_BACK and not attrs.get("callback_window"):
+            raise serializers.ValidationError(
+                {"callback_window": "Select Noon, Evening, or Night for a callback."}
+            )
+        return attrs
 
 
 class CallStatusSerializer(serializers.Serializer):
@@ -56,6 +68,18 @@ class CallStatusSerializer(serializers.Serializer):
             Call.Status.CONVERTED,
         ]
     )
+    callback_window = serializers.ChoiceField(
+        choices=Lead.CallbackWindow.choices,
+        required=False,
+        allow_blank=False,
+    )
+
+    def validate(self, attrs):
+        if attrs.get("status") == Call.Status.CALL_BACK and not attrs.get("callback_window"):
+            raise serializers.ValidationError(
+                {"callback_window": "Select Noon, Evening, or Night for a callback."}
+            )
+        return attrs
 
 
 class StaffSerializer(serializers.ModelSerializer):
@@ -336,6 +360,10 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
 class LeadSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.CharField(source="assigned_to.name", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
+    callback_window_label = serializers.CharField(
+        source="get_callback_window_display",
+        read_only=True,
+    )
 
     class Meta:
         model = Lead
@@ -345,6 +373,8 @@ class LeadSerializer(serializers.ModelSerializer):
             "phone",
             "status",
             "status_label",
+            "callback_window",
+            "callback_window_label",
             "assigned_to",
             "assigned_to_name",
             "notes",
@@ -367,9 +397,19 @@ class CreateLeadSerializer(serializers.ModelSerializer):
             "name",
             "phone",
             "status",
+            "callback_window",
             "assigned_to",
             "notes",
         )
+
+    def validate(self, attrs):
+        if attrs.get("status") == Lead.Status.CALL_BACK and not attrs.get("callback_window"):
+            raise serializers.ValidationError(
+                {"callback_window": "Select Noon, Evening, or Night for callback leads."}
+            )
+        if attrs.get("status") != Lead.Status.CALL_BACK:
+            attrs["callback_window"] = ""
+        return attrs
 
 
 class UpdateLeadSerializer(serializers.ModelSerializer):
@@ -385,9 +425,25 @@ class UpdateLeadSerializer(serializers.ModelSerializer):
             "name",
             "phone",
             "status",
+            "callback_window",
             "assigned_to",
             "notes",
         )
+
+    def validate(self, attrs):
+        instance = getattr(self, "instance", None)
+        status = attrs.get("status", getattr(instance, "status", Lead.Status.NEW))
+        callback_window = attrs.get(
+            "callback_window",
+            getattr(instance, "callback_window", ""),
+        )
+        if status == Lead.Status.CALL_BACK and not callback_window:
+            raise serializers.ValidationError(
+                {"callback_window": "Select Noon, Evening, or Night for callback leads."}
+            )
+        if status != Lead.Status.CALL_BACK:
+            attrs["callback_window"] = ""
+        return attrs
 
 
 class LeadImportUploadSerializer(serializers.Serializer):
@@ -449,6 +505,10 @@ class CallSerializer(serializers.ModelSerializer):
     lead_name = serializers.CharField(source="lead.name", read_only=True)
     lead_phone = serializers.CharField(source="lead.phone", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
+    callback_window_label = serializers.CharField(
+        source="get_callback_window_display",
+        read_only=True,
+    )
 
     class Meta:
         model = Call
@@ -464,6 +524,8 @@ class CallSerializer(serializers.ModelSerializer):
             "duration_seconds",
             "status",
             "status_label",
+            "callback_window",
+            "callback_window_label",
             "is_qualifying",
         )
 
