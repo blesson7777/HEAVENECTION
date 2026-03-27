@@ -6,6 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_phone_direct_caller/flutter_phone_direct_caller.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
@@ -2902,6 +2903,7 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
   YoutubePlayerController? _youtubeController;
   bool _canComplete = false;
   bool _isCompleting = false;
+  bool _hasOpenedFallbackVideo = false;
   String? _videoError;
 
   @override
@@ -2973,7 +2975,17 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
     );
 
     controller.listen((value) {
-      if (!mounted || _canComplete) {
+      if (!mounted) {
+        return;
+      }
+      if (value.hasError) {
+        setState(() {
+          _videoError = _youtubeErrorMessage(value.error);
+          _canComplete = _hasOpenedFallbackVideo;
+        });
+        return;
+      }
+      if (_canComplete) {
         return;
       }
       if (value.playerState == PlayerState.ended) {
@@ -2982,6 +2994,91 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
     });
 
     _youtubeController = controller;
+  }
+
+  String _youtubeErrorMessage(YoutubeError error) {
+    switch (error) {
+      case YoutubeError.notEmbeddable:
+      case YoutubeError.sameAsNotEmbeddable:
+        return 'This shared YouTube video cannot play inside the app player. Open it in YouTube to continue the lesson.';
+      case YoutubeError.videoNotFound:
+      case YoutubeError.cannotFindVideo:
+        return 'This YouTube video is no longer available. Check the lesson link in the admin panel.';
+      case YoutubeError.html5Error:
+        return 'This YouTube video could not start in the in-app player. Open it in YouTube and return after watching.';
+      case YoutubeError.invalidParam:
+        return 'This YouTube link is not in a valid format. Update the lesson link in the admin panel.';
+      case YoutubeError.none:
+        return '';
+      case YoutubeError.unknown:
+        return 'This YouTube video could not be played inside the app. Open it in YouTube to continue the lesson.';
+    }
+  }
+
+  Uri? get _externalLessonUri {
+    final raw = widget.lesson.videoUrl.trim();
+    if (raw.isEmpty) {
+      return null;
+    }
+
+    final parsed = Uri.tryParse(raw);
+    if (parsed != null && parsed.hasScheme) {
+      return parsed;
+    }
+
+    final videoId = widget.lesson.youtubeVideoId;
+    if (videoId.isEmpty) {
+      return null;
+    }
+    return Uri.parse('https://www.youtube.com/watch?v=$videoId');
+  }
+
+  Future<void> _openLessonExternally() async {
+    final uri = _externalLessonUri;
+    if (uri == null) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This lesson link is not valid yet.'),
+        ),
+      );
+      return;
+    }
+
+    final didLaunch = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    if (!didLaunch) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not open the lesson video right now.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _hasOpenedFallbackVideo = true;
+      if (_videoError != null) {
+        _canComplete = true;
+      }
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'The lesson opened in YouTube. Return here after watching to complete the training.',
+        ),
+      ),
+    );
   }
 
   void _handleVideoProgress() {
@@ -3237,25 +3334,49 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
   Widget _buildYoutubeVideoWidget() {
     final controller = _youtubeController;
     if (_videoError != null) {
-      return _TrainingVideoError(message: _videoError!);
+      return _TrainingVideoError(
+        message: _videoError!,
+        primaryActionLabel: 'Open in YouTube',
+        onPrimaryAction: _openLessonExternally,
+      );
     }
     if (controller == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: YoutubePlayer(
-        controller: controller,
-        aspectRatio: 16 / 9,
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: YoutubePlayer(
+            controller: controller,
+            aspectRatio: 16 / 9,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _openLessonExternally,
+            icon: const Icon(Icons.open_in_new),
+            label: const Text('Open in YouTube'),
+          ),
+        ),
+      ],
     );
   }
 }
 
 class _TrainingVideoError extends StatelessWidget {
-  const _TrainingVideoError({required this.message});
+  const _TrainingVideoError({
+    required this.message,
+    this.primaryActionLabel,
+    this.onPrimaryAction,
+  });
 
   final String message;
+  final String? primaryActionLabel;
+  final Future<void> Function()? onPrimaryAction;
 
   @override
   Widget build(BuildContext context) {
@@ -3266,9 +3387,22 @@ class _TrainingVideoError extends StatelessWidget {
         color: kSoft,
         borderRadius: BorderRadius.circular(22),
       ),
-      child: Text(
-        message,
-        style: const TextStyle(fontSize: 15.5, color: Colors.black54),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message,
+            style: const TextStyle(fontSize: 15.5, color: Colors.black54),
+          ),
+          if (primaryActionLabel != null && onPrimaryAction != null) ...[
+            const SizedBox(height: 14),
+            OutlinedButton.icon(
+              onPressed: onPrimaryAction,
+              icon: const Icon(Icons.open_in_new),
+              label: Text(primaryActionLabel!),
+            ),
+          ],
+        ],
       ),
     );
   }
