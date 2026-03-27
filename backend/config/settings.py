@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+from datetime import timedelta
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -19,7 +20,10 @@ def load_env_file():
 
 load_env_file()
 
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "heavenection-dev-secret-key")
+SECRET_KEY = os.getenv(
+    "DJANGO_SECRET_KEY",
+    "heavenection-dev-secret-key-please-change-this-for-production-2026",
+)
 DEBUG = os.getenv("DJANGO_DEBUG", "true").lower() == "true"
 ALLOWED_HOSTS = [host for host in os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",") if host]
 if DEBUG and "testserver" not in ALLOWED_HOSTS:
@@ -91,11 +95,17 @@ AUTH_USER_MODEL = "telecalling.Staff"
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        "backend.apps.telecalling.auth.CookieJWTAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
     "DEFAULT_PERMISSION_CLASSES": (
-        "rest_framework.permissions.AllowAny",
+        "rest_framework.permissions.IsAuthenticated",
     ),
+}
+
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=int(os.getenv("JWT_ACCESS_HOURS", "12"))),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", "7"))),
 }
 
 AUTH_PASSWORD_VALIDATORS = []

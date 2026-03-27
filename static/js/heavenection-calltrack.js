@@ -211,6 +211,105 @@
         });
     }
 
+    function bindAddStaffForm() {
+        const config = window.heavenectionAdmin;
+        const form = document.getElementById("addStaffForm");
+        const feedback = document.getElementById("addStaffFeedback");
+        const submitButton = document.getElementById("addStaffSubmitButton");
+        const modalNode = document.getElementById("addStaffModal");
+
+        if (!config?.createStaffUrl || !form || !feedback || !submitButton || !modalNode) {
+            return;
+        }
+
+        function setFeedback(message, isError) {
+            feedback.textContent = message;
+            feedback.classList.remove("d-none", "is-success", "is-error");
+            feedback.classList.add(isError ? "is-error" : "is-success");
+        }
+
+        function clearFeedback() {
+            feedback.textContent = "";
+            feedback.classList.add("d-none");
+            feedback.classList.remove("is-success", "is-error");
+        }
+
+        function extractErrorMessage(payload) {
+            if (!payload || typeof payload !== "object") {
+                return "Unable to create staff right now.";
+            }
+            if (payload.detail) {
+                return String(payload.detail);
+            }
+
+            const firstKey = Object.keys(payload)[0];
+            if (!firstKey) {
+                return "Unable to create staff right now.";
+            }
+
+            const value = payload[firstKey];
+            if (Array.isArray(value) && value.length) {
+                return String(value[0]);
+            }
+            return String(value);
+        }
+
+        modalNode.addEventListener("hidden.bs.modal", clearFeedback);
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            clearFeedback();
+            submitButton.disabled = true;
+
+            const formData = new FormData(form);
+            const payload = {
+                name: String(formData.get("name") || "").trim(),
+                phone: String(formData.get("phone") || "").trim(),
+                password: String(formData.get("password") || ""),
+                hourly_rate: String(formData.get("hourly_rate") || "150"),
+                call_rate: String(formData.get("call_rate") || "3"),
+                bonus_per_conversion: String(formData.get("bonus_per_conversion") || "500"),
+                is_active: formData.get("is_active") === "true",
+            };
+
+            try {
+                const response = await fetch(config.createStaffUrl, {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    },
+                    body: JSON.stringify(payload),
+                });
+
+                let responsePayload = null;
+                try {
+                    responsePayload = await response.json();
+                } catch (error) {
+                    responsePayload = null;
+                }
+
+                if (!response.ok) {
+                    setFeedback(extractErrorMessage(responsePayload), true);
+                    return;
+                }
+
+                setFeedback("Staff member created successfully.", false);
+                form.reset();
+                const modal = bootstrap.Modal.getOrCreateInstance(modalNode);
+                window.setTimeout(() => {
+                    modal.hide();
+                    window.location.reload();
+                }, 700);
+            } catch (error) {
+                setFeedback("Network issue while creating staff.", true);
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+    }
+
     if (typeof initMateriallyLayout === "function") {
         initMateriallyLayout();
     }
@@ -224,4 +323,5 @@
     bindLeadFilters();
     bindSectionSpy();
     renderCharts();
+    bindAddStaffForm();
 })();

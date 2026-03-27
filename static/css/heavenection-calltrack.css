@@ -264,6 +264,37 @@
     color: #364765;
 }
 
+.hc-modal-card {
+    border: 1px solid #dce3f4;
+    border-radius: 28px;
+    background:
+        radial-gradient(circle at 92% 10%, rgba(141, 157, 207, 0.18) 0, rgba(141, 157, 207, 0) 28%),
+        linear-gradient(150deg, #ffffff 0%, #f8faff 100%);
+    box-shadow: 0 24px 48px rgba(28, 41, 70, 0.14);
+}
+
+.hc-modal-card .form-control {
+    min-height: 48px;
+    border-radius: 16px;
+    border-color: #d7deef;
+}
+
+.hc-form-feedback {
+    padding: 0.8rem 0.95rem;
+    border-radius: 16px;
+    font-weight: 600;
+}
+
+.hc-form-feedback.is-success {
+    background: rgba(42, 184, 110, 0.12);
+    color: #0d9154;
+}
+
+.hc-form-feedback.is-error {
+    background: rgba(215, 102, 102, 0.12);
+    color: #b13f3f;
+}
+
 .hc-status {
     display: inline-flex;
     align-items: center;

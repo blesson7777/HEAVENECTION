@@ -118,6 +118,8 @@ class Session(models.Model):
     class AppState(models.TextChoices):
         FOREGROUND = "foreground", "Foreground"
         BACKGROUND = "background", "Background"
+        WARNING = "warning", "Warning"
+        OFFLINE = "offline", "Offline"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     staff = models.ForeignKey(Staff, on_delete=models.CASCADE, related_name="sessions")
@@ -125,14 +127,75 @@ class Session(models.Model):
     logout_time = models.DateTimeField(null=True, blank=True)
     active_seconds = models.PositiveIntegerField(default=0)
     last_heartbeat_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    last_interaction_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    state_changed_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    warning_started_at = models.DateTimeField(null=True, blank=True, db_index=True)
     heartbeat_count = models.PositiveIntegerField(default=0)
     last_known_state = models.CharField(max_length=20, choices=AppState.choices, default=AppState.FOREGROUND)
+    close_reason = models.CharField(max_length=40, blank=True, default="")
     is_open = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ("-login_time",)
+
+
+class StaffAction(models.Model):
+    class ActionType(models.TextChoices):
+        SESSION_STARTED = "session_started", "Session Started"
+        SESSION_ENDED = "session_ended", "Session Ended"
+        SESSION_AUTO_ENDED = "session_auto_ended", "Session Auto Ended"
+        APP_FOREGROUNDED = "app_foregrounded", "App Foregrounded"
+        APP_BACKGROUNDED = "app_backgrounded", "App Backgrounded"
+        IDLE_WARNING = "idle_warning", "Idle Warning"
+        IDLE_WARNING_ACKNOWLEDGED = "idle_warning_acknowledged", "Idle Warning Acknowledged"
+        MARKED_OFFLINE = "marked_offline", "Marked Offline"
+        RETURNED_ONLINE = "returned_online", "Returned Online"
+        HEARTBEAT = "heartbeat", "Heartbeat"
+        CALL_STARTED = "call_started", "Call Started"
+        CALL_ENDED = "call_ended", "Call Ended"
+        CALL_STATUS_UPDATED = "call_status_updated", "Call Status Updated"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    staff = models.ForeignKey(Staff, on_delete=models.CASCADE, related_name="action_logs")
+    session = models.ForeignKey(
+        Session,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="action_logs",
+    )
+    call = models.ForeignKey(
+        Call,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="action_logs",
+    )
+    lead = models.ForeignKey(
+        Lead,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="action_logs",
+    )
+    action_type = models.CharField(max_length=40, choices=ActionType.choices, db_index=True)
+    app_state = models.CharField(
+        max_length=20,
+        choices=Session.AppState.choices,
+        null=True,
+        blank=True,
+    )
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [
+            models.Index(fields=["staff", "created_at"], name="tc_act_staff_created"),
+            models.Index(fields=["action_type", "created_at"], name="tc_act_type_created"),
+        ]
 
 
 class Salary(models.Model):
