@@ -864,6 +864,128 @@
         });
     }
 
+    function bindEmiCalculator() {
+        const form = document.getElementById("emiCalculatorForm");
+        if (!form) {
+            return;
+        }
+
+        const principalInput = document.getElementById("emiPrincipal");
+        const interestInput = document.getElementById("emiInterestRate");
+        const tenureValueInput = document.getElementById("emiTenureValue");
+        const tenureUnitInput = document.getElementById("emiTenureUnit");
+        const monthlyValueNode = document.getElementById("emiMonthlyValue");
+        const interestValueNode = document.getElementById("emiInterestValue");
+        const totalValueNode = document.getElementById("emiTotalValue");
+        const feedbackNode = document.getElementById("emiCalculatorFeedback");
+        const resetButton = document.getElementById("emiResetButton");
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat("en-IN", {
+                style: "currency",
+                currency: "INR",
+                maximumFractionDigits: 2,
+            }).format(value || 0);
+        }
+
+        function showFeedback(message, isError) {
+            if (!feedbackNode) {
+                return;
+            }
+            feedbackNode.textContent = message;
+            feedbackNode.classList.remove("d-none", "is-success", "is-error");
+            feedbackNode.classList.add(isError ? "is-error" : "is-success");
+        }
+
+        function clearFeedback() {
+            if (!feedbackNode) {
+                return;
+            }
+            feedbackNode.textContent = "";
+            feedbackNode.classList.add("d-none");
+            feedbackNode.classList.remove("is-success", "is-error");
+        }
+
+        function setResults(monthlyEmi, totalInterest, totalPayable) {
+            if (monthlyValueNode) {
+                monthlyValueNode.textContent = formatCurrency(monthlyEmi);
+            }
+            if (interestValueNode) {
+                interestValueNode.textContent = formatCurrency(totalInterest);
+            }
+            if (totalValueNode) {
+                totalValueNode.textContent = formatCurrency(totalPayable);
+            }
+        }
+
+        function calculateEmi() {
+            const principal = Number(principalInput?.value || 0);
+            const annualRate = Number(interestInput?.value || 0);
+            const tenureValue = Number(tenureValueInput?.value || 0);
+            const tenureUnit = tenureUnitInput?.value || "months";
+            const months = tenureUnit === "years" ? tenureValue * 12 : tenureValue;
+
+            if (!Number.isFinite(principal) || principal <= 0) {
+                setResults(0, 0, 0);
+                showFeedback("Enter a valid loan amount.", true);
+                return;
+            }
+            if (!Number.isFinite(months) || months <= 0) {
+                setResults(0, 0, 0);
+                showFeedback("Enter a valid tenure.", true);
+                return;
+            }
+            if (!Number.isFinite(annualRate) || annualRate < 0) {
+                setResults(0, 0, 0);
+                showFeedback("Interest rate cannot be negative.", true);
+                return;
+            }
+
+            const monthlyRate = annualRate / 12 / 100;
+            let monthlyEmi = 0;
+            if (monthlyRate === 0) {
+                monthlyEmi = principal / months;
+            } else {
+                const factor = Math.pow(1 + monthlyRate, months);
+                monthlyEmi = principal * monthlyRate * factor / (factor - 1);
+            }
+
+            const totalPayable = monthlyEmi * months;
+            const totalInterest = totalPayable - principal;
+            setResults(monthlyEmi, totalInterest, totalPayable);
+            clearFeedback();
+        }
+
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            calculateEmi();
+        });
+
+        [principalInput, interestInput, tenureValueInput, tenureUnitInput].forEach((input) => {
+            input?.addEventListener("input", calculateEmi);
+            input?.addEventListener("change", calculateEmi);
+        });
+
+        resetButton?.addEventListener("click", () => {
+            if (principalInput) {
+                principalInput.value = "100000";
+            }
+            if (interestInput) {
+                interestInput.value = "12";
+            }
+            if (tenureValueInput) {
+                tenureValueInput.value = "12";
+            }
+            if (tenureUnitInput) {
+                tenureUnitInput.value = "months";
+            }
+            clearFeedback();
+            calculateEmi();
+        });
+
+        calculateEmi();
+    }
+
     if (typeof initMateriallyLayout === "function") {
         initMateriallyLayout();
     }
@@ -883,4 +1005,5 @@
     bindTrainingCrud();
     bindSalaryControlCrud();
     bindSidebarSections();
+    bindEmiCalculator();
 })();

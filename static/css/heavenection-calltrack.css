@@ -716,6 +716,36 @@
     min-height: 120px;
 }
 
+.hc-emi-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.9rem;
+}
+
+.hc-emi-card {
+    padding: 1rem 1.1rem;
+    border-radius: 20px;
+    background: linear-gradient(150deg, #ffffff 0%, #eef2fb 100%);
+    border: 1px solid #dce3f4;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.hc-emi-card strong {
+    display: block;
+    margin-top: 0.45rem;
+    color: #24335a;
+    font-size: 1.35rem;
+    font-weight: 800;
+}
+
+.hc-emi-note {
+    padding: 0.95rem 1rem;
+    border-radius: 16px;
+    background: rgba(77, 92, 144, 0.08);
+    color: #566783;
+    font-size: 0.94rem;
+}
+
 .hc-form-feedback {
     padding: 0.8rem 0.95rem;
     border-radius: 16px;
@@ -895,6 +925,10 @@
 }
 
 @media (max-width: 767.98px) {
+    .hc-emi-grid {
+        grid-template-columns: 1fr;
+    }
+
     .hc-header-copy {
         display: none;
     }
