@@ -417,17 +417,6 @@ body.mf-dark .mf-selected-card-info {
     transform: translateY(0);
 }
 
-.hc-ux-ready .animate-on-scroll {
-    opacity: 0;
-    transform: translateY(14px);
-    transition: opacity 0.56s ease, transform 0.56s ease;
-}
-
-.hc-ux-ready .animate-on-scroll.is-visible {
-    opacity: 1;
-    transform: translateY(0);
-}
-
 @media (max-width: 767.98px) {
     .mf-report-value {
         font-size: 1.44rem;
