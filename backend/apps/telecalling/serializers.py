@@ -50,6 +50,8 @@ class CallStatusSerializer(serializers.Serializer):
 
 
 class StaffSerializer(serializers.ModelSerializer):
+    compensation_type_label = serializers.CharField(source="get_compensation_type_display", read_only=True)
+
     class Meta:
         model = Staff
         fields = (
@@ -58,7 +60,13 @@ class StaffSerializer(serializers.ModelSerializer):
             "phone",
             "role",
             "is_active",
+            "compensation_type",
+            "compensation_type_label",
             "hourly_rate",
+            "weekly_salary",
+            "monthly_salary",
+            "target_hours_per_week",
+            "target_hours_per_month",
             "call_rate",
             "bonus_per_conversion",
             "last_seen_at",
@@ -69,7 +77,16 @@ class CreateStaffSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150)
     phone = serializers.CharField(max_length=20)
     password = serializers.CharField(min_length=6, write_only=True)
+    compensation_type = serializers.ChoiceField(
+        choices=Staff.CompensationType.choices,
+        required=False,
+        default=Staff.CompensationType.HOURLY,
+    )
     hourly_rate = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    weekly_salary = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    monthly_salary = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    target_hours_per_week = serializers.DecimalField(max_digits=6, decimal_places=2, required=False)
+    target_hours_per_month = serializers.DecimalField(max_digits=6, decimal_places=2, required=False)
     call_rate = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
     bonus_per_conversion = serializers.DecimalField(
         max_digits=10,
@@ -84,6 +101,14 @@ class CreateStaffSerializer(serializers.Serializer):
             raise serializers.ValidationError("Phone number already exists.")
         return phone
 
+    def validate(self, attrs):
+        compensation_type = attrs.get("compensation_type", Staff.CompensationType.HOURLY)
+        if compensation_type == Staff.CompensationType.WEEKLY and not attrs.get("weekly_salary"):
+            raise serializers.ValidationError({"weekly_salary": "Weekly salary is required for weekly pay mode."})
+        if compensation_type == Staff.CompensationType.MONTHLY and not attrs.get("monthly_salary"):
+            raise serializers.ValidationError({"monthly_salary": "Monthly salary is required for monthly pay mode."})
+        return attrs
+
     def create(self, validated_data):
         password = validated_data.pop("password")
         return Staff.objects.create_user(
@@ -97,7 +122,12 @@ class UpdateStaffSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150, required=False)
     phone = serializers.CharField(max_length=20, required=False)
     password = serializers.CharField(min_length=6, write_only=True, required=False, allow_blank=False)
+    compensation_type = serializers.ChoiceField(choices=Staff.CompensationType.choices, required=False)
     hourly_rate = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    weekly_salary = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    monthly_salary = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    target_hours_per_week = serializers.DecimalField(max_digits=6, decimal_places=2, required=False)
+    target_hours_per_month = serializers.DecimalField(max_digits=6, decimal_places=2, required=False)
     call_rate = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
     bonus_per_conversion = serializers.DecimalField(
         max_digits=10,
@@ -116,6 +146,20 @@ class UpdateStaffSerializer(serializers.Serializer):
             raise serializers.ValidationError("Phone number already exists.")
         return phone
 
+    def validate(self, attrs):
+        instance = getattr(self, "instance", None)
+        compensation_type = attrs.get(
+            "compensation_type",
+            getattr(instance, "compensation_type", Staff.CompensationType.HOURLY),
+        )
+        weekly_salary = attrs.get("weekly_salary", getattr(instance, "weekly_salary", None))
+        monthly_salary = attrs.get("monthly_salary", getattr(instance, "monthly_salary", None))
+        if compensation_type == Staff.CompensationType.WEEKLY and not weekly_salary:
+            raise serializers.ValidationError({"weekly_salary": "Weekly salary is required for weekly pay mode."})
+        if compensation_type == Staff.CompensationType.MONTHLY and not monthly_salary:
+            raise serializers.ValidationError({"monthly_salary": "Monthly salary is required for monthly pay mode."})
+        return attrs
+
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
         for field, value in validated_data.items():
@@ -124,6 +168,28 @@ class UpdateStaffSerializer(serializers.Serializer):
             instance.set_password(password)
         instance.save()
         return instance
+
+
+class SalarySettingsSerializer(serializers.ModelSerializer):
+    compensation_type_label = serializers.CharField(source="get_compensation_type_display", read_only=True)
+
+    class Meta:
+        model = Staff
+        fields = (
+            "id",
+            "name",
+            "phone",
+            "compensation_type",
+            "compensation_type_label",
+            "hourly_rate",
+            "weekly_salary",
+            "monthly_salary",
+            "target_hours_per_week",
+            "target_hours_per_month",
+            "call_rate",
+            "bonus_per_conversion",
+            "is_active",
+        )
 
 
 class AdminProfileSerializer(serializers.ModelSerializer):

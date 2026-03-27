@@ -113,6 +113,8 @@
             { inputId: "callSearchInput", tableBodyId: "callTableBody" },
             { inputId: "staffSearchInput", tableBodyId: "staffTableBody" },
             { inputId: "hoursSearchInput", tableBodyId: "hoursSummaryBody" },
+            { inputId: "salarySearchInput", tableBodyId: "salaryTableBody" },
+            { inputId: "salaryControlSearchInput", tableBodyId: "salaryControlBody" },
         ];
 
         setups.forEach(({ inputId, tableBodyId }) => {
@@ -478,6 +480,101 @@
         });
     }
 
+    function bindSalaryControlCrud() {
+        const config = window.heavenectionAdmin;
+        const modalNode = document.getElementById("salaryControlModal");
+        const form = document.getElementById("salaryControlForm");
+        if (!config?.salaryControlUrl || !modalNode || !form) {
+            return;
+        }
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalNode);
+        const titleNode = document.getElementById("salaryControlModalTitle");
+        const idInput = document.getElementById("salaryControlStaffId");
+        const nameInput = document.getElementById("salaryControlStaffName");
+        const phoneInput = document.getElementById("salaryControlPhone");
+        const compensationTypeInput = document.getElementById("salaryCompensationType");
+        const hourlyRateInput = document.getElementById("salaryHourlyRate");
+        const weeklyAmountInput = document.getElementById("salaryWeeklyAmount");
+        const monthlyAmountInput = document.getElementById("salaryMonthlyAmount");
+        const targetWeekInput = document.getElementById("salaryTargetHoursWeek");
+        const targetMonthInput = document.getElementById("salaryTargetHoursMonth");
+        const callRateInput = document.getElementById("salaryCallRate");
+        const bonusRateInput = document.getElementById("salaryBonusRate");
+        const feedback = document.getElementById("salaryControlFeedback");
+        const submitButton = document.getElementById("salaryControlSubmit");
+
+        function showFeedback(message, isError) {
+            feedback.textContent = message;
+            feedback.classList.remove("d-none", "is-success", "is-error");
+            feedback.classList.add(isError ? "is-error" : "is-success");
+        }
+
+        function clearFeedback() {
+            feedback.textContent = "";
+            feedback.classList.add("d-none");
+            feedback.classList.remove("is-success", "is-error");
+        }
+
+        modalNode.addEventListener("hidden.bs.modal", clearFeedback);
+
+        document.querySelectorAll(".js-edit-salary").forEach((button) => {
+            button.addEventListener("click", () => {
+                clearFeedback();
+                idInput.value = button.dataset.staffId || "";
+                nameInput.value = button.dataset.name || "";
+                phoneInput.value = button.dataset.phone || "";
+                compensationTypeInput.value = button.dataset.compensationType || "hourly";
+                hourlyRateInput.value = button.dataset.hourlyRate || "150";
+                weeklyAmountInput.value = button.dataset.weeklySalary || "0";
+                monthlyAmountInput.value = button.dataset.monthlySalary || "0";
+                targetWeekInput.value = button.dataset.targetHoursWeek || "48";
+                targetMonthInput.value = button.dataset.targetHoursMonth || "208";
+                callRateInput.value = button.dataset.callRate || "3";
+                bonusRateInput.value = button.dataset.bonus || "500";
+                titleNode.textContent = `Salary Settings - ${button.dataset.name || "Staff"}`;
+                modal.show();
+            });
+        });
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            clearFeedback();
+            submitButton.disabled = true;
+
+            const staffId = idInput.value.trim();
+            if (!staffId) {
+                showFeedback("Staff member could not be identified.", true);
+                submitButton.disabled = false;
+                return;
+            }
+
+            const payload = {
+                compensation_type: compensationTypeInput.value,
+                hourly_rate: hourlyRateInput.value || "0",
+                weekly_salary: weeklyAmountInput.value || "0",
+                monthly_salary: monthlyAmountInput.value || "0",
+                target_hours_per_week: targetWeekInput.value || "48",
+                target_hours_per_month: targetMonthInput.value || "208",
+                call_rate: callRateInput.value || "0",
+                bonus_per_conversion: bonusRateInput.value || "0",
+            };
+
+            try {
+                await requestJson(`${config.salaryControlUrl}${staffId}/`, {
+                    method: "PATCH",
+                    body: JSON.stringify(payload),
+                });
+                showFeedback("Salary settings saved successfully.", false);
+                window.setTimeout(() => window.location.reload(), 500);
+            } catch (error) {
+                showFeedback(error.message, true);
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+    }
+
     function bindSidebarSections() {
         const sections = Array.from(document.querySelectorAll(".hc-sidebar-section"));
         if (!sections.length) {
@@ -521,5 +618,6 @@
     renderCharts();
     bindStaffCrud();
     bindLeadCrud();
+    bindSalaryControlCrud();
     bindSidebarSections();
 })();

@@ -1,0 +1,105 @@
+{% extends "admin_base.html" %}
+
+{% block page_actions %}
+<a href="{% url 'salary-control-page' %}" class="btn btn-primary btn-sm">Open Salary Control</a>
+{% endblock %}
+
+{% block admin_content %}
+<section class="row g-4 animate-on-scroll">
+    <div class="col-sm-6 col-xl-3">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Weekly Payroll</span>
+            <h4 class="mt-2 mb-1">{{ summary.weekly_total }}</h4>
+            <p class="text-muted mb-0">{{ week_label }}</p>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Monthly Payroll</span>
+            <h4 class="mt-2 mb-1">{{ summary.monthly_total }}</h4>
+            <p class="text-muted mb-0">{{ month_label }}</p>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Current Payable</span>
+            <h4 class="mt-2 mb-1">{{ summary.current_cycle_total }}</h4>
+            <p class="text-muted mb-0">Based on each staff member's active salary mode</p>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Top Payout</span>
+            <h4 class="mt-2 mb-1">{{ summary.top_payout_value }}</h4>
+            <p class="text-muted mb-0">{{ summary.top_payout_name }}</p>
+        </div>
+    </div>
+</section>
+
+<section class="hc-surface-card animate-on-scroll mt-4">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Salary Overview</span>
+            <h5>Payout calculated from tracked working hours</h5>
+        </div>
+        <span class="hc-sync-pill"><i class="bi bi-calendar2-week"></i> {{ today_label }}</span>
+    </div>
+
+    <div class="hc-filter-row">
+        <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="hourly">Hourly</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="weekly">Weekly</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="monthly">Monthly</button>
+    </div>
+
+    <div class="hc-search-box">
+        <i class="bi bi-search"></i>
+        <input type="search" id="salarySearchInput" placeholder="Search staff, phone number, or salary mode">
+    </div>
+
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Staff</th>
+                    <th>Pay Mode</th>
+                    <th>Target</th>
+                    <th>This Week</th>
+                    <th>This Month</th>
+                    <th>Current Payable</th>
+                </tr>
+            </thead>
+            <tbody id="salaryTableBody">
+                {% for row in salary_rows %}
+                <tr data-status="{{ row.compensation_type }}">
+                    <td>
+                        <strong>{{ row.name }}</strong>
+                        <div class="text-muted small">{{ row.phone }}</div>
+                    </td>
+                    <td>
+                        <span class="hc-status {% if row.compensation_type == 'hourly' %}hc-status-new{% elif row.compensation_type == 'weekly' %}hc-status-warning{% else %}hc-status-primary{% endif %}">{{ row.compensation_type_label }}</span>
+                    </td>
+                    <td>{{ row.target_label }}</td>
+                    <td>
+                        <strong>{{ row.weekly_total }}</strong>
+                        <div class="text-muted small">{{ row.weekly_hours_label }} | Base {{ row.weekly_base }}</div>
+                        <div class="text-muted small">Calls {{ row.weekly_call }} | Bonus {{ row.weekly_bonus }}</div>
+                    </td>
+                    <td>
+                        <strong>{{ row.monthly_total }}</strong>
+                        <div class="text-muted small">{{ row.monthly_hours_label }} | Base {{ row.monthly_base }}</div>
+                        <div class="text-muted small">Calls {{ row.monthly_call }} | Bonus {{ row.monthly_bonus }}</div>
+                    </td>
+                    <td>
+                        <strong>{{ row.current_payable }}</strong>
+                        <div class="text-muted small">{{ row.current_cycle_label }}</div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center py-4">No salary records available.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

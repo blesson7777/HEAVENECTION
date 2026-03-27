@@ -7,7 +7,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from backend.apps.telecalling.auth import clear_auth_cookies, get_staff_from_request, issue_tokens_for_user, set_auth_cookies
-from backend.apps.telecalling.models import Call, Lead, Salary, Staff, StaffAction
+from backend.apps.telecalling.models import Call, Lead, Staff, StaffAction
 from backend.apps.telecalling.permissions import IsAdminStaff, IsCallingStaff
 from backend.apps.telecalling.serializers import (
     AdminProfileSerializer,
@@ -22,7 +22,7 @@ from backend.apps.telecalling.serializers import (
     HeartbeatSerializer,
     LeadSerializer,
     LoginSerializer,
-    SalarySerializer,
+    SalarySettingsSerializer,
     SessionSerializer,
     StaffActionSerializer,
     StaffSerializer,
@@ -35,6 +35,8 @@ from backend.apps.telecalling.services import (
     build_call_detail_payload,
     build_dashboard_payload,
     build_lead_management_payload,
+    build_salary_control_payload,
+    build_salary_page_payload,
     build_settings_payload,
     build_staff_today_payload,
     build_team_management_payload,
@@ -308,6 +310,42 @@ def leads_page(request):
 
 
 @require_GET
+def salary_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="salary",
+        page_title="Salary Overview",
+        page_heading="Salary Overview",
+        page_subtitle="Review weekly and monthly payouts based on tracked working hours, calls, and bonuses.",
+        extra_context=build_salary_page_payload(),
+    )
+    return render(request, "admin_salary.html", context)
+
+
+@require_GET
+def salary_control_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="salary-control",
+        page_title="Salary Control Panel",
+        page_heading="Salary Control Panel",
+        page_subtitle="Configure weekly, monthly, and hourly salary settings for each staff member.",
+        extra_context=build_salary_control_payload(),
+    )
+    return render(request, "admin_salary_control.html", context)
+
+
+@require_GET
 def calls_page(request):
     current_user = _get_admin_user_or_redirect(request)
     if not current_user:
@@ -520,10 +558,31 @@ def team_member_detail_api(request, staff_id):
 @api_view(["GET"])
 @permission_classes([IsAdminStaff])
 def salary_summary_api(request):
-    queryset = Salary.objects.select_related("staff").order_by("-period_end", "staff__name")
-    if queryset.exists():
-        return Response(SalarySerializer(queryset[:50], many=True).data)
-    return Response(build_dashboard_payload()["salary_records"])
+    return Response(build_salary_page_payload()["salary_rows"])
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminStaff])
+def salary_control_api(request):
+    queryset = Staff.objects.filter(role=Staff.Role.STAFF).order_by("name")
+    return Response(SalarySettingsSerializer(queryset, many=True).data)
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAdminStaff])
+def salary_control_detail_api(request, staff_id):
+    try:
+        staff = Staff.objects.get(id=staff_id, role=Staff.Role.STAFF)
+    except Staff.DoesNotExist:
+        return Response({"detail": "Staff not found."}, status=404)
+
+    if request.method == "GET":
+        return Response(SalarySettingsSerializer(staff).data)
+
+    serializer = UpdateStaffSerializer(staff, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    staff = serializer.save()
+    return Response(SalarySettingsSerializer(staff).data)
 
 
 @api_view(["GET"])

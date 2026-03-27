@@ -1,0 +1,178 @@
+{% extends "admin_base.html" %}
+
+{% block page_actions %}
+<a href="{% url 'staff-page' %}" class="btn btn-outline-primary btn-sm">Open Staff Management</a>
+{% endblock %}
+
+{% block admin_content %}
+<section class="row g-4 animate-on-scroll">
+    <div class="col-sm-4">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Hourly Staff</span>
+            <h4 class="mt-2 mb-1">{{ summary.hourly_count }}</h4>
+            <p class="text-muted mb-0">Paid directly by tracked working hours.</p>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Weekly Staff</span>
+            <h4 class="mt-2 mb-1">{{ summary.weekly_count }}</h4>
+            <p class="text-muted mb-0">Weekly salary prorated against target hours.</p>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Monthly Staff</span>
+            <h4 class="mt-2 mb-1">{{ summary.monthly_count }}</h4>
+            <p class="text-muted mb-0">Monthly salary prorated against target hours.</p>
+        </div>
+    </div>
+</section>
+
+<section class="hc-surface-card animate-on-scroll mt-4">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Salary Control Panel</span>
+            <h5>Configure pay mode and salary settings for each staff member</h5>
+        </div>
+        <span class="hc-sync-pill"><i class="bi bi-sliders2-vertical"></i> Payroll Rules</span>
+    </div>
+
+    <div class="hc-filter-row">
+        <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="hourly">Hourly</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="weekly">Weekly</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="monthly">Monthly</button>
+    </div>
+
+    <div class="hc-search-box">
+        <i class="bi bi-search"></i>
+        <input type="search" id="salaryControlSearchInput" placeholder="Search staff, phone number, or payroll mode">
+    </div>
+
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Staff</th>
+                    <th>Pay Mode</th>
+                    <th>Target</th>
+                    <th>Hourly Rate</th>
+                    <th>Weekly Salary</th>
+                    <th>Monthly Salary</th>
+                    <th>Incentives</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="salaryControlBody">
+                {% for row in salary_rows %}
+                <tr data-status="{{ row.compensation_type }}">
+                    <td>
+                        <strong>{{ row.name }}</strong>
+                        <div class="text-muted small">{{ row.phone }}</div>
+                    </td>
+                    <td><span class="hc-status {% if row.compensation_type == 'hourly' %}hc-status-new{% elif row.compensation_type == 'weekly' %}hc-status-warning{% else %}hc-status-primary{% endif %}">{{ row.compensation_type_label }}</span></td>
+                    <td>{{ row.target_label }}</td>
+                    <td>{{ row.hourly_rate }}</td>
+                    <td>{{ row.weekly_salary }}</td>
+                    <td>{{ row.monthly_salary }}</td>
+                    <td>
+                        <strong>{{ row.call_rate }}</strong>
+                        <div class="text-muted small">Bonus {{ row.bonus_per_conversion }}</div>
+                    </td>
+                    <td>
+                        <button
+                            type="button"
+                            class="btn btn-outline-primary btn-sm js-edit-salary"
+                            data-staff-id="{{ row.id }}"
+                            data-name="{{ row.name }}"
+                            data-phone="{{ row.phone }}"
+                            data-compensation-type="{{ row.compensation_type }}"
+                            data-hourly-rate="{{ row.hourly_rate_raw }}"
+                            data-weekly-salary="{{ row.weekly_salary_raw }}"
+                            data-monthly-salary="{{ row.monthly_salary_raw }}"
+                            data-target-hours-week="{{ row.target_hours_per_week }}"
+                            data-target-hours-month="{{ row.target_hours_per_month }}"
+                            data-call-rate="{{ row.call_rate_raw }}"
+                            data-bonus="{{ row.bonus_per_conversion_raw }}"
+                        >Edit Settings</button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="8" class="text-center py-4">No staff salary settings available.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<div class="modal fade" id="salaryControlModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content hc-modal-card">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <span class="mf-db2-kicker">Payroll Setup</span>
+                    <h5 class="modal-title mt-1" id="salaryControlModalTitle">Salary Settings</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <form id="salaryControlForm">
+                    <input type="hidden" id="salaryControlStaffId">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="salaryControlStaffName">Staff Name</label>
+                            <input type="text" class="form-control" id="salaryControlStaffName" readonly>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="salaryControlPhone">Phone Number</label>
+                            <input type="text" class="form-control" id="salaryControlPhone" readonly>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="salaryCompensationType">Pay Mode</label>
+                            <select class="form-select" id="salaryCompensationType">
+                                <option value="hourly">Hourly</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="salaryHourlyRate">Hourly Rate</label>
+                            <input type="number" class="form-control" id="salaryHourlyRate" step="0.01">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="salaryCallRate">Call Rate</label>
+                            <input type="number" class="form-control" id="salaryCallRate" step="0.01">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="salaryWeeklyAmount">Weekly Salary</label>
+                            <input type="number" class="form-control" id="salaryWeeklyAmount" step="0.01">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="salaryMonthlyAmount">Monthly Salary</label>
+                            <input type="number" class="form-control" id="salaryMonthlyAmount" step="0.01">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="salaryBonusRate">Bonus per Conversion</label>
+                            <input type="number" class="form-control" id="salaryBonusRate" step="0.01">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="salaryTargetHoursWeek">Target Hours per Week</label>
+                            <input type="number" class="form-control" id="salaryTargetHoursWeek" step="0.01">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="salaryTargetHoursMonth">Target Hours per Month</label>
+                            <input type="number" class="form-control" id="salaryTargetHoursMonth" step="0.01">
+                        </div>
+                    </div>
+                    <div id="salaryControlFeedback" class="hc-form-feedback d-none mt-3"></div>
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="salaryControlSubmit">Save Salary Settings</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

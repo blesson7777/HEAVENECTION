@@ -31,13 +31,27 @@ class Staff(AbstractBaseUser, PermissionsMixin):
         ADMIN = "admin", "Admin"
         STAFF = "staff", "Staff"
 
+    class CompensationType(models.TextChoices):
+        HOURLY = "hourly", "Hourly"
+        WEEKLY = "weekly", "Weekly"
+        MONTHLY = "monthly", "Monthly"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150)
     phone = models.CharField(max_length=20, unique=True, db_index=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.STAFF)
     is_active = models.BooleanField(default=True, db_index=True)
     is_staff = models.BooleanField(default=False)
+    compensation_type = models.CharField(
+        max_length=20,
+        choices=CompensationType.choices,
+        default=CompensationType.HOURLY,
+    )
     hourly_rate = models.DecimalField(max_digits=10, decimal_places=2, default=150)
+    weekly_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    monthly_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    target_hours_per_week = models.DecimalField(max_digits=6, decimal_places=2, default=48)
+    target_hours_per_month = models.DecimalField(max_digits=6, decimal_places=2, default=208)
     call_rate = models.DecimalField(max_digits=10, decimal_places=2, default=3)
     bonus_per_conversion = models.DecimalField(max_digits=10, decimal_places=2, default=500)
     last_seen_at = models.DateTimeField(null=True, blank=True, db_index=True)

@@ -34,14 +34,55 @@ class Command(BaseCommand):
         admin.save()
 
         staff_members = []
-        names = ["Asha Patel", "Deepak Roy", "Neha Sharma", "Rahul Das", "Pooja Singh"]
-        for index, name in enumerate(names, start=1):
+        staff_seed = [
+            {
+                "name": "Asha Patel",
+                "compensation_type": Staff.CompensationType.HOURLY,
+                "hourly_rate": 160,
+                "weekly_salary": 0,
+                "monthly_salary": 0,
+            },
+            {
+                "name": "Deepak Roy",
+                "compensation_type": Staff.CompensationType.WEEKLY,
+                "hourly_rate": 170,
+                "weekly_salary": 7500,
+                "monthly_salary": 0,
+            },
+            {
+                "name": "Neha Sharma",
+                "compensation_type": Staff.CompensationType.MONTHLY,
+                "hourly_rate": 180,
+                "weekly_salary": 0,
+                "monthly_salary": 32000,
+            },
+            {
+                "name": "Rahul Das",
+                "compensation_type": Staff.CompensationType.WEEKLY,
+                "hourly_rate": 190,
+                "weekly_salary": 8200,
+                "monthly_salary": 0,
+            },
+            {
+                "name": "Pooja Singh",
+                "compensation_type": Staff.CompensationType.MONTHLY,
+                "hourly_rate": 200,
+                "weekly_salary": 0,
+                "monthly_salary": 36500,
+            },
+        ]
+        for index, staff_seed_row in enumerate(staff_seed, start=1):
             staff = Staff.objects.create_user(
                 phone=f"900000000{index}",
                 password="staff123",
-                name=name,
+                name=staff_seed_row["name"],
                 role=Staff.Role.STAFF,
-                hourly_rate=150 + (index * 10),
+                compensation_type=staff_seed_row["compensation_type"],
+                hourly_rate=staff_seed_row["hourly_rate"],
+                weekly_salary=staff_seed_row["weekly_salary"],
+                monthly_salary=staff_seed_row["monthly_salary"],
+                target_hours_per_week=48,
+                target_hours_per_month=208,
                 call_rate=3 + index,
                 bonus_per_conversion=400 + (index * 25),
                 last_seen_at=timezone.now() - timedelta(seconds=randint(5, 60)),

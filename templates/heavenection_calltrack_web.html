@@ -43,7 +43,8 @@
                 <a href="{% url 'leads-page' %}" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-person-lines-fill"></i></span><span><strong>Manage Leads</strong><small>Add, assign, and review</small></span></a>
                 <a href="{% url 'calls-page' %}" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-telephone-forward-fill"></i></span><span><strong>Call Details</strong><small>Review completed call history</small></span></a>
                 <a href="{% url 'working-hours-page' %}" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-clock-history"></i></span><span><strong>Working Hours</strong><small>Track sessions and time</small></span></a>
-                <a href="{% url 'settings-page' %}" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-person-gear"></i></span><span><strong>Admin Profile</strong><small>Update company and branding settings</small></span></a>
+                <a href="{% url 'salary-page' %}" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-wallet2"></i></span><span><strong>Salary Overview</strong><small>Review pay from tracked working hours</small></span></a>
+                <a href="{% url 'salary-control-page' %}" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-sliders2-vertical"></i></span><span><strong>Salary Control</strong><small>Configure weekly, monthly, and hourly pay</small></span></a>
             </div>
         </div>
 
@@ -117,7 +118,7 @@
                             <tr>
                                 <td><strong>{{ salary.name }}</strong></td>
                                 <td>{{ salary.hours }}</td>
-                                <td>{{ salary.final_salary }}</td>
+                                <td><strong>{{ salary.final_salary }}</strong><div class="text-muted small">{{ salary.cycle_label }}</div></td>
                             </tr>
                             {% empty %}
                             <tr><td colspan="3" class="text-center py-4">No salary data yet.</td></tr>
