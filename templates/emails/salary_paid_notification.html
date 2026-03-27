@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Salary Credited</title>
+</head>
+<body style="margin:0;padding:0;background:#edf1fb;font-family:Arial,sans-serif;color:#24324f;">
+    <div style="max-width:680px;margin:0 auto;padding:32px 18px;">
+        <div style="background:linear-gradient(135deg,#4d5c90 0%,#6575ad 100%);border-radius:28px 28px 0 0;padding:28px 30px;color:#ffffff;">
+            <div style="font-size:13px;letter-spacing:0.12em;text-transform:uppercase;opacity:0.86;">{{ company_name }}</div>
+            <h1 style="margin:10px 0 0;font-size:28px;line-height:1.2;">Salary Credited Successfully</h1>
+        </div>
+        <div style="background:#ffffff;border-radius:0 0 28px 28px;padding:30px;border:1px solid #dfe5f5;border-top:0;">
+            <p style="margin:0 0 16px;font-size:16px;line-height:1.7;">Dear {{ staff_name }},</p>
+            <p style="margin:0 0 20px;font-size:15px;line-height:1.8;color:#4b5c7a;">
+                This email confirms that your salary payment has been credited successfully for the period <strong>{{ period_label }}</strong>.
+            </p>
+
+            <table role="presentation" style="width:100%;border-collapse:separate;border-spacing:0 10px;margin:0 0 22px;">
+                <tr>
+                    <td style="width:50%;background:#f5f7fd;padding:14px 16px;border-radius:18px;">
+                        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#6d7d97;">Credited Amount</div>
+                        <div style="margin-top:6px;font-size:24px;font-weight:700;color:#22314f;">{{ paid_amount }}</div>
+                    </td>
+                    <td style="width:50%;background:#f5f7fd;padding:14px 16px;border-radius:18px;">
+                        <div style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:#6d7d97;">Credited On</div>
+                        <div style="margin-top:6px;font-size:17px;font-weight:700;color:#22314f;">{{ paid_at }}</div>
+                    </td>
+                </tr>
+            </table>
+
+            <table role="presentation" style="width:100%;border-collapse:collapse;">
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;color:#6d7d97;">Payout Cycle</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;text-align:right;font-weight:700;">{{ payout_cycle }}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;color:#6d7d97;">Calculated Salary</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;text-align:right;font-weight:700;">{{ final_salary }}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;color:#6d7d97;">Base Pay</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;text-align:right;font-weight:700;">{{ base_pay }}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;color:#6d7d97;">Call Earnings</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;text-align:right;font-weight:700;">{{ call_earnings }}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;color:#6d7d97;">Bonus Earnings</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;text-align:right;font-weight:700;">{{ bonus_earnings }}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;color:#6d7d97;">Tracked Hours</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;text-align:right;font-weight:700;">{{ total_hours }}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;color:#6d7d97;">Payment Method</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;text-align:right;font-weight:700;">{{ payment_method }}</td>
+                </tr>
+                <tr>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;color:#6d7d97;">Reference</td>
+                    <td style="padding:10px 0;border-bottom:1px solid #e7ecf8;text-align:right;font-weight:700;">{{ payment_reference }}</td>
+                </tr>
+                {% if payment_note %}
+                <tr>
+                    <td style="padding:10px 0;color:#6d7d97;vertical-align:top;">Note</td>
+                    <td style="padding:10px 0;text-align:right;font-weight:700;">{{ payment_note }}</td>
+                </tr>
+                {% endif %}
+            </table>
+
+            <p style="margin:22px 0 0;font-size:14px;line-height:1.8;color:#586985;">
+                If you have any questions about this payment, please contact {{ company_support_email }}{% if company_phone %} or call {{ company_phone }}{% endif %}.
+            </p>
+            <p style="margin:16px 0 0;font-size:14px;line-height:1.7;color:#586985;">
+                Regards,<br>
+                <strong>{{ company_name }}</strong>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

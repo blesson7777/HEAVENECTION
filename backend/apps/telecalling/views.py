@@ -72,6 +72,7 @@ from backend.apps.telecalling.services import (
     release_staff_queue,
     reactivate_oldest_recovery_leads,
     retry_pending_staff_call,
+    send_salary_payment_acknowledgement,
     start_staff_call,
     start_staff_session,
     TrainingRequiredError,
@@ -711,11 +712,16 @@ def salary_detail_page(request, staff_id):
         serializer = SalaryPaymentSerializer(data=form_data)
         if serializer.is_valid():
             record, created = record_staff_salary_payment(staff, **serializer.validated_data)
+            email_result = send_salary_payment_acknowledgement(record)
             messages.success(
                 request,
                 f"Salary marked as paid for {staff.name}. "
-                f"Credited {record.paid_amount} for {record.period_start} to {record.period_end}.",
+                f"Credited Rs. {float(record.paid_amount):,.2f} for {record.period_start} to {record.period_end}.",
             )
+            if email_result["sent"]:
+                messages.success(request, email_result["message"])
+            else:
+                messages.warning(request, email_result["message"])
             return redirect("salary-detail-page", staff_id=staff.id)
 
         payment_errors = _normalize_errors(serializer.errors)

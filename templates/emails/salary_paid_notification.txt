@@ -1,0 +1,24 @@
+Dear {{ staff_name }},
+
+This is to confirm that your salary payment has been credited successfully.
+
+Company: {{ company_name }}
+Salary Period: {{ period_label }}
+Payout Cycle: {{ payout_cycle }}
+Credited Amount: {{ paid_amount }}
+Calculated Salary: {{ final_salary }}
+Base Pay: {{ base_pay }}
+Call Earnings: {{ call_earnings }}
+Bonus Earnings: {{ bonus_earnings }}
+Tracked Hours: {{ total_hours }}
+Payment Method: {{ payment_method }}
+Reference: {{ payment_reference }}
+Credited On: {{ paid_at }}
+{% if payment_note %}
+Note: {{ payment_note }}
+{% endif %}
+
+If you have any questions regarding this credit, please reply to {{ company_support_email }}{% if company_phone %} or contact {{ company_phone }}{% endif %}.
+
+Regards,
+{{ company_name }}

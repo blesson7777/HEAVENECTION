@@ -1,12 +1,15 @@
 import csv
 import io
+import logging
 import re
 from collections import Counter, defaultdict
 from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
 from django.db.models import Case, Count, IntegerField, Max, Q, Sum, Value, When
+from django.template.loader import render_to_string
 from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 
@@ -38,6 +41,7 @@ LIVE_CALL_STALE_SECONDS = 3 * 60 * 60
 TWOPLACES = Decimal("0.01")
 DEFAULT_LEAD_QUEUE_LIMIT = 1
 CALLBACK_NOON_HOURS = range(12, 16)
+logger = logging.getLogger(__name__)
 CALLBACK_EVENING_HOURS = range(16, 20)
 CALLBACK_NIGHT_HOURS = range(20, 24)
 ACTIVE_QUEUE_STATUSES = (
@@ -328,6 +332,78 @@ def _salary_history_row(record):
 def build_staff_salary_history_rows(staff, limit=20):
     records = Salary.objects.filter(staff=staff, is_paid=True).order_by("-paid_at", "-period_end")[:limit]
     return [_salary_history_row(record) for record in records]
+
+
+def _payroll_email_is_ready():
+    if not settings.PAYROLL_NOTIFY_EMAILS:
+        return False, "Payroll email notifications are disabled."
+    if not settings.EMAIL_HOST:
+        return False, "SMTP is not configured yet."
+    if settings.EMAIL_BACKEND == "django.core.mail.backends.console.EmailBackend":
+        return False, "SMTP email backend is not configured yet."
+    return True, ""
+
+
+def send_salary_payment_acknowledgement(salary_record):
+    staff = salary_record.staff
+    if not staff.email:
+        return {"sent": False, "message": f"{staff.name} does not have an email address saved."}
+
+    email_ready, reason = _payroll_email_is_ready()
+    if not email_ready:
+        return {"sent": False, "message": reason}
+
+    company_profile = get_company_profile()
+    period_label = f"{salary_record.period_start.strftime('%d %b %Y')} to {salary_record.period_end.strftime('%d %b %Y')}"
+    paid_at = timezone.localtime(salary_record.paid_at) if salary_record.paid_at else timezone.localtime(timezone.now())
+    context = {
+        "company_name": company_profile.company_name or "Heavenection",
+        "company_support_email": company_profile.company_email or settings.DEFAULT_FROM_EMAIL,
+        "company_phone": company_profile.company_phone or company_profile.support_phone or "",
+        "staff_name": staff.name,
+        "paid_amount": _format_currency(salary_record.paid_amount),
+        "final_salary": _format_currency(salary_record.final_salary),
+        "base_pay": _format_currency(salary_record.base_pay),
+        "call_earnings": _format_currency(salary_record.call_earnings),
+        "bonus_earnings": _format_currency(salary_record.bonus_earnings),
+        "payment_method": salary_record.get_payment_method_display() if salary_record.payment_method else "Recorded Payment",
+        "payment_reference": salary_record.payment_reference or "--",
+        "payment_note": salary_record.payment_note or "",
+        "payout_cycle": salary_record.get_payout_cycle_display(),
+        "period_label": period_label,
+        "paid_at": paid_at.strftime("%d %b %Y, %I:%M %p"),
+        "total_hours": f"{round(float(salary_record.total_hours or 0), 2)}",
+    }
+    subject = f"{context['company_name']} Salary Credited - {context['period_label']}"
+    from_email = settings.DEFAULT_FROM_EMAIL
+    if company_profile.company_name and settings.DEFAULT_FROM_EMAIL:
+        from_email = f"{company_profile.company_name} <{settings.DEFAULT_FROM_EMAIL}>"
+
+    text_body = render_to_string("emails/salary_paid_notification.txt", context).strip()
+    html_body = render_to_string("emails/salary_paid_notification.html", context)
+    reply_to = [company_profile.company_email] if company_profile.company_email else None
+
+    try:
+        message = EmailMultiAlternatives(
+            subject=subject,
+            body=text_body,
+            from_email=from_email,
+            to=[staff.email],
+            reply_to=reply_to,
+        )
+        message.attach_alternative(html_body, "text/html")
+        message.send(fail_silently=False)
+    except Exception as error:  # pragma: no cover - depends on SMTP runtime
+        logger.exception("Salary payment acknowledgement email failed for staff %s", staff.id)
+        return {
+            "sent": False,
+            "message": f"Salary was marked paid, but the email could not be sent: {error}",
+        }
+
+    return {
+        "sent": True,
+        "message": f"Salary acknowledgement email sent to {staff.email}.",
+    }
 
 
 def record_staff_salary_payment(
