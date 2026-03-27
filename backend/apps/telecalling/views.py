@@ -54,6 +54,7 @@ from backend.apps.telecalling.services import (
     end_staff_call,
     end_staff_session,
     get_assigned_leads,
+    get_pending_status_call,
     get_company_profile,
     import_leads_from_upload,
     mark_staff_seen,
@@ -987,6 +988,17 @@ def heartbeat_api(request):
 def start_call_api(request):
     serializer = StartCallSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
+    pending_status_call = get_pending_status_call(request.user)
+    if pending_status_call:
+        return Response(
+            {
+                "detail": "Mark the previous call status before starting another call.",
+                "code": "call_status_required",
+                "call": CallSerializer(pending_status_call).data,
+                "summary": build_staff_today_payload(request.user)["summary"],
+            },
+            status=409,
+        )
     try:
         lead = Lead.objects.get(id=serializer.validated_data["lead_id"], assigned_to=request.user)
     except Lead.DoesNotExist:

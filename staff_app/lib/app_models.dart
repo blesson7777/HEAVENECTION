@@ -63,6 +63,11 @@ class DailySummary {
     required this.pendingTrainingCount,
     required this.trainingRequired,
     required this.nextTrainingTitle,
+    required this.pendingCallStatusRequired,
+    required this.pendingCallId,
+    required this.pendingCallLeadId,
+    required this.pendingCallLeadName,
+    required this.pendingCallLeadPhone,
   });
 
   final String activeLabel;
@@ -76,6 +81,11 @@ class DailySummary {
   final int pendingTrainingCount;
   final bool trainingRequired;
   final String nextTrainingTitle;
+  final bool pendingCallStatusRequired;
+  final String pendingCallId;
+  final String pendingCallLeadId;
+  final String pendingCallLeadName;
+  final String pendingCallLeadPhone;
 
   factory DailySummary.empty() {
     return const DailySummary(
@@ -90,6 +100,11 @@ class DailySummary {
       pendingTrainingCount: 0,
       trainingRequired: false,
       nextTrainingTitle: '',
+      pendingCallStatusRequired: false,
+      pendingCallId: '',
+      pendingCallLeadId: '',
+      pendingCallLeadName: '',
+      pendingCallLeadPhone: '',
     );
   }
 
@@ -108,6 +123,11 @@ class DailySummary {
           (json['pending_training_count'] as num?)?.toInt() ?? 0,
       trainingRequired: json['training_required'] == true,
       nextTrainingTitle: json['next_training_title']?.toString() ?? '',
+      pendingCallStatusRequired: json['pending_call_status_required'] == true,
+      pendingCallId: json['pending_call_id']?.toString() ?? '',
+      pendingCallLeadId: json['pending_call_lead_id']?.toString() ?? '',
+      pendingCallLeadName: json['pending_call_lead_name']?.toString() ?? '',
+      pendingCallLeadPhone: json['pending_call_lead_phone']?.toString() ?? '',
     );
   }
 }

@@ -126,6 +126,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   String? _activeCallId;
   String? _activeCallLeadId;
   PendingDialerCall? _pendingDialerCall;
+  String? _pendingStatusCallId;
+  String _pendingStatusLeadName = '';
+  String _pendingStatusLeadPhone = '';
   Duration _elapsed = Duration.zero;
   Timer? _callTimer;
   Timer? _heartbeatTimer;
@@ -136,9 +139,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   DateTime? _backgroundedAt;
   DateTime? _warningShownAt;
   BuildContext? _idleWarningDialogContext;
+  BuildContext? _callStatusDialogContext;
   bool _isIdleWarningVisible = false;
   bool _isHeartbeatRequestInFlight = false;
   bool _isSyncingCallLog = false;
+  bool _isCallStatusPromptVisible = false;
 
   @override
   void initState() {
@@ -204,6 +209,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _learningSummary.hasPendingMandatory ||
       _summary.trainingRequired;
 
+  bool get _hasPendingCallStatus =>
+      _pendingStatusCallId != null && _pendingStatusCallId!.isNotEmpty;
+
   List<TrainingLesson> get _filteredLessons {
     final query = _learningQuery.trim().toLowerCase();
     if (query.isEmpty) {
@@ -217,6 +225,63 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   void _applyLearningPayload(LearningCenterPayload payload) {
     _learningSummary = payload.summary;
     _lessons = payload.lessons;
+  }
+
+  void _syncPendingCallStatusFromSummary() {
+    if (_summary.pendingCallStatusRequired && _summary.pendingCallId.isNotEmpty) {
+      _pendingStatusCallId = _summary.pendingCallId;
+      _pendingStatusLeadName = _summary.pendingCallLeadName;
+      _pendingStatusLeadPhone = _summary.pendingCallLeadPhone;
+      return;
+    }
+    _clearPendingCallStatus();
+  }
+
+  void _clearPendingCallStatus() {
+    _pendingStatusCallId = null;
+    _pendingStatusLeadName = '';
+    _pendingStatusLeadPhone = '';
+  }
+
+  void _dismissPendingCallStatusPrompt() {
+    final dialogContext = _callStatusDialogContext;
+    _callStatusDialogContext = null;
+    _isCallStatusPromptVisible = false;
+    if (dialogContext == null) {
+      return;
+    }
+    try {
+      final navigator = Navigator.of(dialogContext, rootNavigator: true);
+      if (navigator.canPop()) {
+        navigator.pop();
+      }
+    } catch (_) {
+      // Ignore stale dialog context during navigation changes.
+    }
+  }
+
+  void _schedulePendingCallStatusPrompt() {
+    if (!mounted || !_hasPendingCallStatus || _isCallStatusPromptVisible) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_hasPendingCallStatus || _isCallStatusPromptVisible) {
+        return;
+      }
+      unawaited(_showPendingCallStatusPrompt());
+    });
+  }
+
+  Future<bool> _ensurePendingCallStatusResolved() async {
+    if (!_hasPendingCallStatus) {
+      return true;
+    }
+    _showMessage(
+      'Mark the previous call result before moving to the next lead.',
+      isError: true,
+    );
+    _schedulePendingCallStatusPrompt();
+    return false;
   }
 
   void _updatePreferredOrientations() {
@@ -353,12 +418,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _summary = results[0] as DailySummary;
         _leads = results[1] as List<LeadItem>;
         _applyLearningPayload(results[2] as LearningCenterPayload);
+        _syncPendingCallStatusFromSummary();
         _isNetworkErrorVisible = false;
         if (_leadIndex >= _leads.length) {
           _leadIndex = _leads.isEmpty ? 0 : _leads.length - 1;
         }
       });
       _syncPresenceMonitoring();
+      if (_summary.pendingCallStatusRequired) {
+        _schedulePendingCallStatusPrompt();
+        return;
+      }
       if (_summary.currentState == 'warning' && !_isIdleWarningVisible) {
         unawaited(_showIdleWarning());
       }
@@ -429,6 +499,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _heartbeatTimer?.cancel();
     _idleMonitorTimer?.cancel();
     _dismissIdleWarning();
+    _dismissPendingCallStatusPrompt();
     await _apiClient.clearSession();
     if (!mounted) {
       return;
@@ -447,6 +518,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _lastInteractionAt = null;
       _backgroundedAt = null;
       _warningShownAt = null;
+      _clearPendingCallStatus();
     });
     _updatePreferredOrientations();
     _showMessage('Session expired. Please sign in again.', isError: true);
@@ -457,6 +529,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _heartbeatTimer?.cancel();
     _idleMonitorTimer?.cancel();
     _dismissIdleWarning();
+    _dismissPendingCallStatusPrompt();
     try {
       await _apiClient.logout();
     } catch (_) {
@@ -480,6 +553,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _lastInteractionAt = null;
       _backgroundedAt = null;
       _warningShownAt = null;
+      _clearPendingCallStatus();
     });
     _updatePreferredOrientations();
   }
@@ -694,6 +768,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   Future<void> _startCall() async {
     _registerInteraction(syncServer: false);
+    if (!await _ensurePendingCallStatusResolved()) {
+      return;
+    }
     if (_leads.isEmpty) {
       _showMessage('No assigned leads available.', isError: true);
       return;
@@ -720,6 +797,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       if (error.code == 'network_error') {
         _showNetworkError('Connection lost while preparing the call.');
+        return;
+      }
+      if (error.statusCode == 409 && error.code == 'call_status_required') {
+        await _loadDashboardData(showLoader: false, promptTrainingGate: false);
         return;
       }
       _showMessage(error.message, isError: true);
@@ -915,22 +996,25 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     final call = await _apiClient.endCall(
       callId: pendingCall.callId,
-      status: _statusValue(_callStatus),
       durationSeconds: durationSeconds,
       endedAt: endedAt,
       source: 'call_log',
     );
 
-    _callTimer?.cancel();
+    final lead = _leadById(pendingCall.leadId);
+    _resetActiveCallTracking();
     if (!mounted) {
       return;
     }
 
     setState(() {
       _elapsed = Duration(seconds: durationSeconds);
-      _activeCallId = null;
-      _activeCallLeadId = null;
-      _pendingDialerCall = null;
+      if (call.status == 'started') {
+        _pendingStatusCallId = call.id;
+        _pendingStatusLeadName = lead?.name ?? '';
+        _pendingStatusLeadPhone = lead?.phone ?? pendingCall.phone;
+        _callStatus = 'Call Back';
+      }
     });
 
     await _loadDashboardData(showLoader: false);
@@ -943,6 +1027,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         'Call duration was less than 5 seconds, so it was not counted.',
         isError: true,
       );
+    } else if (call.status == 'started') {
+      _schedulePendingCallStatusPrompt();
     } else {
       _showMessage('Call synced from phone log.');
     }
@@ -955,14 +1041,24 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     final call = await _apiClient.endCall(
       callId: _activeCallId!,
-      status: _statusValue(_callStatus),
       source: source,
     );
 
+    final leadId = _activeCallLeadId;
+    final lead = _leadById(leadId);
     _resetActiveCallTracking();
     if (!mounted) {
       return;
     }
+
+    setState(() {
+      if (call.status == 'started') {
+        _pendingStatusCallId = call.id;
+        _pendingStatusLeadName = lead?.name ?? '';
+        _pendingStatusLeadPhone = lead?.phone ?? '';
+        _callStatus = 'Call Back';
+      }
+    });
 
     await _loadDashboardData(showLoader: false);
     if (!mounted) {
@@ -974,6 +1070,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         'Call duration was less than 5 seconds, so it was not counted.',
         isError: true,
       );
+    } else if (call.status == 'started') {
+      _schedulePendingCallStatusPrompt();
     } else {
       _showMessage('Call ended without phone log sync.', isError: true);
     }
@@ -1353,6 +1451,178 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       ).then((_) {
         _isTrainingPromptVisible = false;
       });
+    });
+  }
+
+  Future<bool> _submitPendingCallStatus(String label) async {
+    final callId = _pendingStatusCallId;
+    if (callId == null || callId.isEmpty) {
+      return true;
+    }
+
+    try {
+      await _apiClient.updateCallStatus(
+        callId: callId,
+        status: _statusValue(label),
+      );
+      if (!mounted) {
+        return true;
+      }
+
+      setState(() {
+        _callStatus = label;
+        _clearPendingCallStatus();
+      });
+      await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+      if (mounted) {
+        _showMessage('Call result saved as $label.');
+      }
+      return true;
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+        return false;
+      }
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Connection lost while saving the call result. Reconnect to continue.',
+        );
+        return false;
+      }
+      _showMessage(error.message, isError: true);
+      return false;
+    }
+  }
+
+  Future<void> _showPendingCallStatusPrompt() async {
+    if (!mounted || !_hasPendingCallStatus || _isCallStatusPromptVisible) {
+      return;
+    }
+
+    const choices = [
+      'Interested',
+      'Not Interested',
+      'No Answer',
+      'Call Back',
+      'Converted',
+    ];
+
+    _isCallStatusPromptVisible = true;
+    var selectedStatus = choices.contains(_callStatus) ? _callStatus : 'Call Back';
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        _callStatusDialogContext = dialogContext;
+        var isSaving = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return PopScope(
+              canPop: false,
+              child: AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                title: const Text('Mark Call Result'),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Complete the previous call result before moving to another lead.',
+                    ),
+                    if (_pendingStatusLeadName.isNotEmpty ||
+                        _pendingStatusLeadPhone.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: kSoft,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_pendingStatusLeadName.isNotEmpty)
+                              Text(
+                                _pendingStatusLeadName,
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            if (_pendingStatusLeadPhone.isNotEmpty)
+                              Text(
+                                _pendingStatusLeadPhone,
+                                style: const TextStyle(color: Colors.black54),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: choices
+                          .map(
+                            (item) => ChoiceChip(
+                              selected: selectedStatus == item,
+                              onSelected: isSaving
+                                  ? null
+                                  : (_) {
+                                      setDialogState(() => selectedStatus = item);
+                                    },
+                              selectedColor: kPrimary,
+                              backgroundColor: Colors.white,
+                              label: Text(
+                                item,
+                                style: TextStyle(
+                                  color: selectedStatus == item
+                                      ? Colors.white
+                                      : kPrimaryDark,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
+                ),
+                actions: [
+                  ElevatedButton(
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                            setDialogState(() => isSaving = true);
+                            final saved = await _submitPendingCallStatus(
+                              selectedStatus,
+                            );
+                            if (!mounted) {
+                              return;
+                            }
+                            if (saved && dialogContext.mounted) {
+                              Navigator.of(dialogContext).pop();
+                              return;
+                            }
+                            if (dialogContext.mounted) {
+                              setDialogState(() => isSaving = false);
+                            }
+                          },
+                    child: Text(isSaving ? 'Saving...' : 'Save Status'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ).then((_) {
+      _callStatusDialogContext = null;
+      _isCallStatusPromptVisible = false;
     });
   }
 
@@ -1902,12 +2172,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (index < 0 || index >= _leads.length) {
       return;
     }
+    if (!await _ensurePendingCallStatusResolved()) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
     _registerInteraction(syncServer: false);
     setState(() {
       _leadIndex = index;
-      _callStatus = _leads[index].statusLabel == 'Interested'
-          ? 'Interested'
-          : 'Call Back';
+      _callStatus = 'Call Back';
     });
 
     await Navigator.of(context).push(
@@ -1922,13 +2196,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   Widget _call(LeadItem? lead) {
     final hasActiveCallForLead = lead != null && _activeCallLeadId == lead.id;
-    const choices = [
-      'Interested',
-      'Not Interested',
-      'No Answer',
-      'Call Back',
-      'Converted',
-    ];
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -2040,42 +2307,45 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             ),
           ),
         const SizedBox(height: 18),
-        const Text(
-          'Call result',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: choices
-              .map(
-                (item) => ChoiceChip(
-                  selected: _callStatus == item,
-                  onSelected: (_) {
-                    _registerInteraction(syncServer: false);
-                    setState(() => _callStatus = item);
-                  },
-                  selectedColor: kPrimary,
-                  backgroundColor: Colors.white,
-                  label: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 2,
-                      vertical: 6,
-                    ),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.assignment_turned_in, color: kPrimary),
+                  SizedBox(width: 10),
+                  Expanded(
                     child: Text(
-                      item,
+                      'Call completion rule',
                       style: TextStyle(
-                        color: _callStatus == item
-                            ? Colors.white
-                            : kPrimaryDark,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                'After the call ends, the app will ask you to mark the result. The next lead stays blocked until that result is saved.',
+                style: TextStyle(fontSize: 15.5, color: Colors.black54),
+              ),
+              if (_hasPendingCallStatus) ...[
+                const SizedBox(height: 14),
+                ElevatedButton.icon(
+                  onPressed: _showPendingCallStatusPrompt,
+                  icon: const Icon(Icons.assignment_late),
+                  label: const Text('Mark Previous Call Result'),
                 ),
-              )
-              .toList(),
+              ],
+            ],
+          ),
         ),
       ],
     );

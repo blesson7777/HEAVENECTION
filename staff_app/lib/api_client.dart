@@ -151,12 +151,15 @@ class ApiClient {
 
   Future<CallRecord> endCall({
     required String callId,
-    required String status,
+    String? status,
     int? durationSeconds,
     DateTime? endedAt,
     String source = 'app',
   }) async {
-    final body = <String, dynamic>{'status': status, 'source': source};
+    final body = <String, dynamic>{'source': source};
+    if (status != null && status.isNotEmpty) {
+      body['status'] = status;
+    }
     if (durationSeconds != null) {
       body['duration_seconds'] = durationSeconds;
     }
@@ -168,6 +171,18 @@ class ApiClient {
       'POST',
       '/api/staff/calls/$callId/end/',
       body: body,
+    );
+    return CallRecord.fromJson(_decodeMap(response.body));
+  }
+
+  Future<CallRecord> updateCallStatus({
+    required String callId,
+    required String status,
+  }) async {
+    final response = await _send(
+      'POST',
+      '/api/staff/calls/$callId/status/',
+      body: {'status': status},
     );
     return CallRecord.fromJson(_decodeMap(response.body));
   }

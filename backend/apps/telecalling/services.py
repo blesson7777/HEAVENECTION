@@ -1705,6 +1705,19 @@ def end_staff_session(staff, *, close_reason="manual"):
     )
 
 
+def get_pending_status_call(staff):
+    return (
+        Call.objects.filter(
+            staff=staff,
+            status=Call.Status.STARTED,
+            end_time__isnull=False,
+        )
+        .select_related("lead")
+        .order_by("-end_time", "-start_time")
+        .first()
+    )
+
+
 def build_staff_today_payload(staff):
     today, start, end = _today_range()
     sessions_today = Session.objects.filter(staff=staff, login_time__range=(start, end))
@@ -1714,6 +1727,7 @@ def build_staff_today_payload(staff):
     open_session = get_open_session(staff, reconcile=True)
     latest_session = sessions_today.order_by("-login_time").first()
     learning_payload = build_staff_learning_payload(staff)
+    pending_status_call = get_pending_status_call(staff)
 
     active_seconds = sessions_today.aggregate(total=Sum("active_seconds")).get("total") or 0
     calls_count = qualifying_calls.count()
@@ -1736,6 +1750,11 @@ def build_staff_today_payload(staff):
             "pending_training_count": learning_payload["summary"]["pending_mandatory_count"],
             "training_required": learning_payload["summary"]["has_pending_mandatory"],
             "next_training_title": learning_payload["summary"]["next_required_title"],
+            "pending_call_status_required": bool(pending_status_call),
+            "pending_call_id": str(pending_status_call.id) if pending_status_call else "",
+            "pending_call_lead_id": str(pending_status_call.lead_id) if pending_status_call else "",
+            "pending_call_lead_name": pending_status_call.lead.name if pending_status_call else "",
+            "pending_call_lead_phone": pending_status_call.lead.phone if pending_status_call else "",
         },
         "session": {
             "id": str(open_session.id),
