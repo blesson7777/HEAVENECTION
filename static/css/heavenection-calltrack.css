@@ -563,6 +563,10 @@
     line-height: 1.5;
 }
 
+.hc-page-flash-stack {
+    margin-bottom: 1rem;
+}
+
 .hc-staff-stack {
     display: flex;
     flex-direction: column;

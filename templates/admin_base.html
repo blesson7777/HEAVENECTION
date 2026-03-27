@@ -243,6 +243,17 @@
 
         <main class="mf-content">
             <div class="container-fluid px-0">
+                <div id="heavenectionClientFlash"></div>
+                {% if messages %}
+                <div class="hc-page-flash-stack">
+                    {% for message in messages %}
+                    <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% else %}primary{% endif %} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
                 {% block admin_content %}{% endblock %}
             </div>
         </main>
@@ -268,7 +279,7 @@ window.heavenectionAdmin = {
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{% static 'js/heavenection-network.js' %}"></script>
 <script src="{% static 'js/dashboard-ux.js' %}"></script>
-<script src="{% static 'js/heavenection-calltrack.js' %}"></script>
+<script src="{% static 'js/heavenection-calltrack.js' %}?v=20260327b"></script>
 <script src="{% static 'js/heavenection-pwa.js' %}"></script>
 {% block extra_scripts %}{% endblock %}
 </body>

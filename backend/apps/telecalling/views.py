@@ -302,11 +302,38 @@ def staff_page(request):
     return render(request, "admin_staff.html", context)
 
 
-@require_GET
+@require_http_methods(["GET", "POST"])
 def leads_page(request):
     current_user = _get_admin_user_or_redirect(request)
     if not current_user:
         return redirect("web-login")
+
+    if request.method == "POST":
+        if request.POST.get("lead_action") == "import":
+            serializer = LeadImportUploadSerializer(data={"file": request.FILES.get("file")})
+            if serializer.is_valid():
+                try:
+                    summary = import_leads_from_upload(serializer.validated_data["file"])
+                except ValueError as error:
+                    messages.error(request, str(error))
+                else:
+                    messages.success(
+                        request,
+                        "Lead import completed. "
+                        f"Imported {summary['created_count']}, skipped {summary['skipped_count']}, "
+                        f"assigned {summary['assigned_count']}, waiting {summary['remaining_unassigned_count']}.",
+                    )
+                return redirect("leads-page")
+
+            messages.error(
+                request,
+                "Lead import failed. "
+                + " ".join(_normalize_errors(serializer.errors).values()),
+            )
+            return redirect("leads-page")
+
+        messages.error(request, "Lead request could not be processed.")
+        return redirect("leads-page")
 
     payload = build_lead_management_payload()
     context = _admin_web_context(

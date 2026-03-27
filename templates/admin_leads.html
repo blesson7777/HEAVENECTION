@@ -181,10 +181,12 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body pt-3">
-                <form id="leadImportForm" enctype="multipart/form-data">
+                <form id="leadImportForm" method="post" action="{% url 'leads-page' %}" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <input type="hidden" name="lead_action" value="import">
                     <div class="mb-3">
                         <label class="form-label fw-semibold" for="leadImportFile">Lead file</label>
-                        <input type="file" class="form-control" id="leadImportFile" accept=".csv,.xlsx,.xlsm" required>
+                        <input type="file" class="form-control" id="leadImportFile" name="file" accept=".csv,.xlsx,.xlsm" required>
                         <div class="form-text">
                             The system reads name and phone columns automatically and skips duplicate phone numbers.
                         </div>

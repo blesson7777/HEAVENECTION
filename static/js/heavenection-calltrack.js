@@ -91,7 +91,7 @@
         }
 
         if (!response.ok) {
-            throw new Error(extractErrorMessage(payload));
+            throw new Error(payload ? extractErrorMessage(payload) : `Request failed with status ${response.status}.`);
         }
 
         return payload;
@@ -125,7 +125,7 @@
         }
 
         if (!response.ok) {
-            throw new Error(extractErrorMessage(payload));
+            throw new Error(payload ? extractErrorMessage(payload) : `Request failed with status ${response.status}.`);
         }
 
         return payload;
@@ -147,6 +147,46 @@
             return String(value[0]);
         }
         return String(value);
+    }
+
+    function storeFlashMessage(message, level) {
+        if (!window.sessionStorage) {
+            return;
+        }
+        window.sessionStorage.setItem(
+            "heavenectionFlash",
+            JSON.stringify({
+                message,
+                level: level || "success",
+            }),
+        );
+    }
+
+    function renderStoredFlashMessage() {
+        if (!window.sessionStorage) {
+            return;
+        }
+        const target = document.getElementById("heavenectionClientFlash");
+        const raw = window.sessionStorage.getItem("heavenectionFlash");
+        if (!target || !raw) {
+            return;
+        }
+
+        window.sessionStorage.removeItem("heavenectionFlash");
+        try {
+            const payload = JSON.parse(raw);
+            const level = payload.level === "error" ? "danger" : payload.level;
+            target.innerHTML = `
+                <div class="hc-page-flash-stack">
+                    <div class="alert alert-${level} alert-dismissible fade show" role="alert">
+                        ${payload.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                </div>
+            `;
+        } catch (error) {
+            window.sessionStorage.removeItem("heavenectionFlash");
+        }
     }
 
     function bindSearchAndFilters() {
@@ -571,10 +611,9 @@
 
             try {
                 const result = await requestForm(config.leadImportUrl, formData, { method: "POST" });
-                showFeedback(
-                    `Imported ${result.created_count} leads, skipped ${result.skipped_count}, assigned ${result.assigned_count}, waiting ${result.remaining_unassigned_count}.`,
-                    false,
-                );
+                const successMessage = `Imported ${result.created_count} leads, skipped ${result.skipped_count}, assigned ${result.assigned_count}, waiting ${result.remaining_unassigned_count}.`;
+                showFeedback(successMessage, false);
+                storeFlashMessage(successMessage, "success");
                 window.setTimeout(() => window.location.reload(), 900);
             } catch (error) {
                 showFeedback(error.message, true);
@@ -829,6 +868,7 @@
     updateClock();
     window.setInterval(updateClock, 1000);
     animateCounters();
+    renderStoredFlashMessage();
     bindSearchAndFilters();
     renderCharts();
     bindStaffCrud();
