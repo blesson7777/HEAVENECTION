@@ -35,7 +35,7 @@ IDLE_WARNING_AFTER_SECONDS = 5 * 60
 IDLE_WARNING_GRACE_SECONDS = 5 * 60
 IDLE_OFFLINE_AFTER_SECONDS = IDLE_WARNING_AFTER_SECONDS + IDLE_WARNING_GRACE_SECONDS
 TWOPLACES = Decimal("0.01")
-LEAD_QUEUE_LIMIT = 20
+LEAD_QUEUE_LIMIT = 1
 ACTIVE_QUEUE_STATUSES = (
     Lead.Status.NEW,
     Lead.Status.CALL_BACK,
@@ -508,7 +508,40 @@ def release_staff_queue(staff):
     return released
 
 
+def _normalize_active_queue_assignments(*, target_staff=None):
+    queue_queryset = _lead_queue_queryset().select_related("assigned_to").exclude(assigned_to=None)
+    if target_staff is not None:
+        queue_queryset = queue_queryset.filter(assigned_to=target_staff)
+
+    release_ids = []
+    kept_counts = defaultdict(int)
+    for lead in queue_queryset.order_by(
+        "assigned_to_id",
+        "-last_contacted_at",
+        "-updated_at",
+        "created_at",
+        "id",
+    ):
+        assigned_staff = lead.assigned_to
+        if not assigned_staff or assigned_staff.role != Staff.Role.STAFF or not assigned_staff.is_active:
+            release_ids.append(lead.id)
+            continue
+
+        kept_counts[assigned_staff.id] += 1
+        if kept_counts[assigned_staff.id] > LEAD_QUEUE_LIMIT:
+            release_ids.append(lead.id)
+
+    if not release_ids:
+        return 0
+
+    return Lead.objects.filter(id__in=release_ids).update(
+        assigned_to=None,
+        updated_at=timezone.now(),
+    )
+
+
 def auto_allocate_leads(*, target_staff=None):
+    _normalize_active_queue_assignments(target_staff=target_staff)
     staff_queryset = _staff_queryset().filter(is_active=True)
     if target_staff is not None:
         staff_queryset = staff_queryset.filter(id=target_staff.id)
@@ -1328,6 +1361,7 @@ def build_settings_payload(current_user):
 
 
 def build_lead_management_payload():
+    auto_allocate_leads()
     leads = Lead.objects.select_related("assigned_to").order_by("-updated_at")
     active_queue = _lead_queue_queryset()
     staff_options = [

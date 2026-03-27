@@ -38,15 +38,15 @@
         </div>
         <div class="col-xl-3 col-md-6">
             <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Per Staff Cap</span>
+                <span class="mf-db2-kicker">Active Slot</span>
                 <h3 class="mb-1">{{ queue_summary.queue_limit }}</h3>
-                <p class="mb-0 text-muted">Maximum active leads held by one staff at a time.</p>
+                <p class="mb-0 text-muted">Each staff member works on one active lead at a time.</p>
             </div>
         </div>
     </div>
 
     <div class="alert alert-primary border-0 mb-4" role="alert">
-        Upload CSV or Excel files with name and phone columns. New leads are assigned automatically without duplicating them across staff, and each staff member keeps only {{ queue_summary.queue_limit }} active leads at a time.
+        Upload CSV or Excel files with name and phone columns. New leads are assigned automatically without duplicating them across staff, and each staff member receives only the next lead in line.
     </div>
 
     <div class="hc-filter-row">
@@ -192,7 +192,7 @@
                         </div>
                     </div>
                     <div class="alert alert-light border mb-0" role="alert">
-                        Each staff member keeps only {{ queue_summary.queue_limit }} active leads. As soon as a lead is completed, the next waiting lead is assigned automatically.
+                        Each staff member keeps one active lead. As soon as that lead is completed, the next waiting lead is assigned automatically.
                     </div>
                     <div id="leadImportFeedback" class="hc-form-feedback d-none mt-3"></div>
                     <div class="d-flex justify-content-end gap-2 mt-4">
