@@ -237,6 +237,36 @@ class TrainingLesson {
   final DateTime? publishedAt;
 
   bool get hasVideo => videoUrl.trim().isNotEmpty;
+  bool get isYouTubeVideo => youtubeVideoId.isNotEmpty;
+
+  String get youtubeVideoId {
+    final raw = videoUrl.trim();
+    if (raw.isEmpty) {
+      return '';
+    }
+    final uri = Uri.tryParse(raw);
+    if (uri == null) {
+      return '';
+    }
+
+    final host = uri.host.toLowerCase();
+    if (host.contains('youtu.be')) {
+      return uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+    }
+
+    if (host.contains('youtube.com') || host.contains('youtube-nocookie.com')) {
+      final queryId = uri.queryParameters['v'];
+      if (queryId != null && queryId.isNotEmpty) {
+        return queryId;
+      }
+      if (uri.pathSegments.length >= 2 &&
+          const ['embed', 'shorts', 'live'].contains(uri.pathSegments.first)) {
+        return uri.pathSegments[1];
+      }
+    }
+
+    return '';
+  }
 
   String get searchableText =>
       '$title $description $searchKeywords'.toLowerCase();

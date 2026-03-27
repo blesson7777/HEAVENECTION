@@ -312,6 +312,32 @@
     background:
         linear-gradient(180deg, rgba(246, 248, 253, 0.92) 0%, rgba(238, 242, 251, 0.88) 100%);
     backdrop-filter: blur(14px);
+    min-height: var(--mf-header-height);
+    height: auto;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.hc-header-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.hc-header-page-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+}
+
+.hc-header-page-actions > * {
+    flex: 0 0 auto;
 }
 
 .hc-brand-logo {
@@ -925,6 +951,16 @@
 }
 
 @media (max-width: 767.98px) {
+    .hc-header-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .hc-header-page-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
     .hc-emi-grid {
         grid-template-columns: 1fr;
     }

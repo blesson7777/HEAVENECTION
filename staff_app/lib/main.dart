@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_phone_direct_caller/flutter_phone_direct_caller.dart';
 import 'package:video_player/video_player.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import 'api_client.dart';
 import 'app_models.dart';
@@ -2898,6 +2899,7 @@ class TrainingLessonPage extends StatefulWidget {
 class _TrainingLessonPageState extends State<TrainingLessonPage> {
   VideoPlayerController? _controller;
   Future<void>? _videoFuture;
+  YoutubePlayerController? _youtubeController;
   bool _canComplete = false;
   bool _isCompleting = false;
   String? _videoError;
@@ -2907,13 +2909,18 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
     super.initState();
     _canComplete = widget.lesson.isCompleted || !widget.lesson.hasVideo;
     if (widget.lesson.hasVideo) {
-      _initialiseVideo();
+      if (widget.lesson.isYouTubeVideo) {
+        _initialiseYoutubeVideo();
+      } else {
+        _initialiseVideo();
+      }
     }
   }
 
   @override
   void dispose() {
     _controller?.dispose();
+    unawaited(_youtubeController?.close() ?? Future<void>.value());
     super.dispose();
   }
 
@@ -2942,6 +2949,39 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
           controller.play();
           setState(() {});
         });
+  }
+
+  void _initialiseYoutubeVideo() {
+    final videoId = widget.lesson.youtubeVideoId;
+    if (videoId.isEmpty) {
+      setState(() {
+        _videoError =
+            'This YouTube link could not be read. Check the lesson URL and try again.';
+        _canComplete = true;
+      });
+      return;
+    }
+
+    final controller = YoutubePlayerController.fromVideoId(
+      videoId: videoId,
+      autoPlay: true,
+      params: const YoutubePlayerParams(
+        showControls: true,
+        showFullscreenButton: true,
+        strictRelatedVideos: true,
+      ),
+    );
+
+    controller.listen((value) {
+      if (!mounted || _canComplete) {
+        return;
+      }
+      if (value.playerState == PlayerState.ended) {
+        setState(() => _canComplete = true);
+      }
+    });
+
+    _youtubeController = controller;
   }
 
   void _handleVideoProgress() {
@@ -2977,8 +3017,14 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
 
   @override
   Widget build(BuildContext context) {
-    final videoWidget = widget.lesson.hasVideo
-        ? FutureBuilder<void>(
+    final videoWidget = !widget.lesson.hasVideo
+        ? const _TrainingVideoError(
+            message:
+                'No video is attached to this lesson. Review the lesson notes and complete it when finished.',
+          )
+        : widget.lesson.isYouTubeVideo
+        ? _buildYoutubeVideoWidget()
+        : FutureBuilder<void>(
             future: _videoFuture,
             builder: (context, snapshot) {
               if (_videoError != null) {
@@ -3037,10 +3083,6 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
                 ],
               );
             },
-          )
-        : const _TrainingVideoError(
-            message:
-                'No video is attached to this lesson. Review the lesson notes and complete it when finished.',
           );
 
     return Scaffold(
@@ -3076,6 +3118,24 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
                     child: Text(
                       widget.lesson.searchKeywords,
                       style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: kPrimaryDark,
+                      ),
+                    ),
+                  ),
+                if (widget.lesson.isYouTubeVideo)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: kPrimary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Text(
+                      'YouTube Video',
+                      style: TextStyle(
                         fontWeight: FontWeight.w700,
                         color: kPrimaryDark,
                       ),
@@ -3131,9 +3191,11 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
                       widget.lesson.hasVideo &&
                       !_canComplete) ...[
                     const SizedBox(height: 12),
-                    const Text(
-                      'Watch the lesson until the end to unlock completion.',
-                      style: TextStyle(
+                    Text(
+                      widget.lesson.isYouTubeVideo
+                          ? 'Watch the YouTube lesson until the end to unlock completion.'
+                          : 'Watch the lesson until the end to unlock completion.',
+                      style: const TextStyle(
                         color: Colors.black54,
                         fontWeight: FontWeight.w600,
                       ),
@@ -3168,6 +3230,23 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildYoutubeVideoWidget() {
+    final controller = _youtubeController;
+    if (_videoError != null) {
+      return _TrainingVideoError(message: _videoError!);
+    }
+    if (controller == null) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(22),
+      child: YoutubePlayer(
+        controller: controller,
+        aspectRatio: 16 / 9,
       ),
     );
   }
