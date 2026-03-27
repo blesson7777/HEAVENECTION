@@ -30,7 +30,7 @@ except ImportError:  # pragma: no cover - dependency installed in runtime
 
 ONLINE_WINDOW_SECONDS = 90
 SHORT_CALL_SECONDS = 5
-BACKGROUND_TIMEOUT_SECONDS = 10 * 60
+BACKGROUND_TIMEOUT_SECONDS = 5 * 60
 IDLE_WARNING_AFTER_SECONDS = 5 * 60
 IDLE_WARNING_GRACE_SECONDS = 5 * 60
 IDLE_OFFLINE_AFTER_SECONDS = IDLE_WARNING_AFTER_SECONDS + IDLE_WARNING_GRACE_SECONDS
@@ -280,6 +280,62 @@ def _active_elapsed_until(session, now):
     return _bounded_elapsed_seconds(session.last_heartbeat_at, active_until)
 
 
+def _mark_session_foreground(session, now, *, metadata=None):
+    previous_state = session.last_known_state
+    session.last_interaction_at = now
+    session.last_heartbeat_at = now
+
+    update_fields = ["last_interaction_at", "last_heartbeat_at"]
+    if previous_state != Session.AppState.FOREGROUND:
+        session.last_known_state = Session.AppState.FOREGROUND
+        session.state_changed_at = now
+        session.warning_started_at = None
+        update_fields.extend(["last_known_state", "state_changed_at", "warning_started_at"])
+
+    session.save(update_fields=_dedupe_fields(update_fields))
+
+    if previous_state == Session.AppState.WARNING:
+        _log_staff_action(
+            session.staff,
+            StaffAction.ActionType.IDLE_WARNING_ACKNOWLEDGED,
+            session=session,
+            app_state=Session.AppState.FOREGROUND,
+            metadata=metadata or {},
+        )
+    elif previous_state == Session.AppState.OFFLINE:
+        _log_staff_action(
+            session.staff,
+            StaffAction.ActionType.RETURNED_ONLINE,
+            session=session,
+            app_state=Session.AppState.FOREGROUND,
+            metadata=metadata or {},
+        )
+    elif previous_state == Session.AppState.BACKGROUND:
+        _log_staff_action(
+            session.staff,
+            StaffAction.ActionType.APP_FOREGROUNDED,
+            session=session,
+            app_state=Session.AppState.FOREGROUND,
+            metadata=metadata or {},
+        )
+
+    mark_staff_seen(session.staff, now)
+    return session
+
+
+def _credit_call_duration_to_session(session, call_end_time, call_duration_seconds, *, metadata=None):
+    if not session or not session.is_open or not call_duration_seconds:
+        return session
+
+    already_counted = _active_elapsed_until(session, call_end_time)
+    session = _touch_session_interaction(session, call_end_time, metadata=metadata)
+    additional_seconds = max(0, int(call_duration_seconds) - int(already_counted))
+    if additional_seconds:
+        session.active_seconds += additional_seconds
+        session.save(update_fields=_dedupe_fields(["active_seconds"]))
+    return session
+
+
 def _resolve_requested_state(session, requested_state, now, interaction):
     if requested_state == Session.AppState.BACKGROUND:
         return Session.AppState.BACKGROUND
@@ -344,12 +400,22 @@ def reconcile_session(session, now=None):
         and state_anchor
         and (now - state_anchor).total_seconds() >= BACKGROUND_TIMEOUT_SECONDS
     ):
-        return _close_session(
-            session,
-            now,
-            close_reason="background_timeout",
-            auto_generated=True,
+        session.last_known_state = Session.AppState.OFFLINE
+        session.state_changed_at = now
+        session.warning_started_at = None
+        session.save(
+            update_fields=_dedupe_fields(
+                ["last_known_state", "state_changed_at", "warning_started_at"]
+            )
         )
+        _log_staff_action(
+            session.staff,
+            StaffAction.ActionType.MARKED_OFFLINE,
+            session=session,
+            app_state=Session.AppState.OFFLINE,
+            metadata={"reason": "background_timeout"},
+        )
+        return session
 
     if (
         session.last_known_state == Session.AppState.WARNING
@@ -399,47 +465,9 @@ def _touch_session_interaction(session, now, *, metadata=None):
     if not session or not session.is_open:
         return session
 
-    previous_state = session.last_known_state
     session.active_seconds += _active_elapsed_until(session, now)
-    session.last_interaction_at = now
-    session.last_heartbeat_at = now
-
-    update_fields = ["active_seconds", "last_interaction_at", "last_heartbeat_at"]
-    if previous_state != Session.AppState.FOREGROUND:
-        session.last_known_state = Session.AppState.FOREGROUND
-        session.state_changed_at = now
-        session.warning_started_at = None
-        update_fields.extend(["last_known_state", "state_changed_at", "warning_started_at"])
-
-    session.save(update_fields=_dedupe_fields(update_fields))
-
-    if previous_state == Session.AppState.WARNING:
-        _log_staff_action(
-            session.staff,
-            StaffAction.ActionType.IDLE_WARNING_ACKNOWLEDGED,
-            session=session,
-            app_state=Session.AppState.FOREGROUND,
-            metadata=metadata or {},
-        )
-    elif previous_state == Session.AppState.OFFLINE:
-        _log_staff_action(
-            session.staff,
-            StaffAction.ActionType.RETURNED_ONLINE,
-            session=session,
-            app_state=Session.AppState.FOREGROUND,
-            metadata=metadata or {},
-        )
-    elif previous_state == Session.AppState.BACKGROUND:
-        _log_staff_action(
-            session.staff,
-            StaffAction.ActionType.APP_FOREGROUNDED,
-            session=session,
-            app_state=Session.AppState.FOREGROUND,
-            metadata=metadata or {},
-        )
-
-    mark_staff_seen(session.staff, now)
-    return session
+    session.save(update_fields=_dedupe_fields(["active_seconds"]))
+    return _mark_session_foreground(session, now, metadata=metadata)
 
 
 def _session_status_label(open_session, latest_session=None):
@@ -456,9 +484,11 @@ def _session_status_label(open_session, latest_session=None):
     return "Stopped"
 
 
-def _staff_online_label(session, active_cutoff):
+def _staff_online_label(session, active_cutoff, *, is_in_customer_call=False):
     if not session:
-        return "Offline"
+        return "On Call" if is_in_customer_call else "Offline"
+    if is_in_customer_call:
+        return "On Call"
     if session.last_known_state == Session.AppState.FOREGROUND and session.last_heartbeat_at and session.last_heartbeat_at >= active_cutoff:
         return "Online"
     if session.last_known_state == Session.AppState.WARNING:
@@ -946,13 +976,21 @@ def _open_sessions_by_staff():
 def _currently_active_staff_ids(now=None):
     now = now or timezone.now()
     active_cutoff = now - timedelta(seconds=ONLINE_WINDOW_SECONDS)
-    return {
+    active_staff_ids = {
         staff_id
         for staff_id, session in _open_sessions_by_staff().items()
         if session.last_known_state == Session.AppState.FOREGROUND
         and session.last_heartbeat_at
         and session.last_heartbeat_at >= active_cutoff
     }
+    active_staff_ids.update(_live_call_staff_ids())
+    return active_staff_ids
+
+
+def _live_call_staff_ids():
+    return set(
+        Call.objects.filter(end_time__isnull=True).values_list("staff_id", flat=True)
+    )
 
 
 def _release_due_callback_leads_from_inactive_staff(*, now=None, active_staff_ids=None):
@@ -982,13 +1020,17 @@ def build_dashboard_payload():
     month_start, month_end = _month_range()
 
     open_sessions = _open_sessions_by_staff()
+    live_call_staff_ids = _live_call_staff_ids()
 
     active_staff = sum(
         1
-        for session in open_sessions.values()
-        if session.last_known_state == Session.AppState.FOREGROUND
-        and session.last_heartbeat_at
-        and session.last_heartbeat_at >= active_cutoff
+        for staff in staff_queryset
+        if _staff_online_label(
+            open_sessions.get(staff.id),
+            active_cutoff,
+            is_in_customer_call=staff.id in live_call_staff_ids,
+        )
+        in {"Online", "On Call"}
     )
     total_staff = staff_queryset.count()
 
@@ -1086,18 +1128,24 @@ def build_dashboard_payload():
     live_staff = []
     for staff in staff_queryset.order_by("name")[:8]:
         session = open_sessions.get(staff.id)
+        is_in_customer_call = staff.id in live_call_staff_ids
         if session:
-            status_label = _session_status_label(session)
+            status_label = "On customer call" if is_in_customer_call else _session_status_label(session)
             session_hours = round((session.active_seconds or 0) / 3600, 1)
             status_text = f"{status_label} - {session_hours}h active"
         else:
-            status_text = "Offline - No active session"
+            status_text = "On customer call" if is_in_customer_call else "Offline - No active session"
 
         live_staff.append(
             {
                 "name": staff.name,
                 "status_text": status_text,
-                "is_online": _staff_online_label(session, active_cutoff) == "Online",
+                "is_online": _staff_online_label(
+                    session,
+                    active_cutoff,
+                    is_in_customer_call=is_in_customer_call,
+                )
+                in {"Online", "On Call"},
             }
         )
 
@@ -1168,7 +1216,11 @@ def build_dashboard_payload():
                 "call_rate": _format_currency(staff.call_rate),
                 "bonus_per_conversion": _format_currency(staff.bonus_per_conversion),
                 "is_active": staff.is_active,
-                "online_label": _staff_online_label(session, active_cutoff),
+                "online_label": _staff_online_label(
+                    session,
+                    active_cutoff,
+                    is_in_customer_call=staff.id in live_call_staff_ids,
+                ),
             }
         )
 
@@ -1218,6 +1270,7 @@ def build_team_management_payload():
     active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
     staff_queryset = _staff_queryset()
     open_sessions = _open_sessions_by_staff()
+    live_call_staff_ids = _live_call_staff_ids()
 
     call_totals = {
         row["staff_id"]: row["count"]
@@ -1262,7 +1315,11 @@ def build_team_management_payload():
                 "target_hours_per_month": float(staff.target_hours_per_month),
                 "call_rate": _format_currency(staff.call_rate),
                 "bonus_per_conversion": _format_currency(staff.bonus_per_conversion),
-                "online_label": _staff_online_label(session, active_cutoff),
+                "online_label": _staff_online_label(
+                    session,
+                    active_cutoff,
+                    is_in_customer_call=staff.id in live_call_staff_ids,
+                ),
                 "session_state": session.last_known_state if session else "stopped",
                 "active_hours_today": _format_hours(active_totals.get(staff.id, 0)),
                 "active_seconds_today": active_totals.get(staff.id, 0),
@@ -1283,6 +1340,7 @@ def build_staff_profile_payload(staff):
     today, start, end = _today_range()
     active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
     open_session = get_open_session(staff, reconcile=True)
+    live_call_staff_ids = _live_call_staff_ids()
     latest_session = Session.objects.filter(staff=staff).order_by("-login_time").first()
     sessions_today = Session.objects.filter(staff=staff, login_time__range=(start, end))
     recent_sessions = Session.objects.filter(staff=staff).order_by("-login_time")[:12]
@@ -1342,7 +1400,11 @@ def build_staff_profile_payload(staff):
         "today_label": today.strftime("%A, %d %b %Y"),
         "staff_member": staff,
         "summary": {
-            "online_label": _staff_online_label(open_session, active_cutoff),
+            "online_label": _staff_online_label(
+                open_session,
+                active_cutoff,
+                is_in_customer_call=staff.id in live_call_staff_ids,
+            ),
             "status_label": _session_status_label(open_session, latest_session=latest_session),
             "last_seen": _format_datetime(staff.last_seen_at),
             "assigned_leads": assigned_leads.count(),
@@ -1606,6 +1668,7 @@ def build_work_hours_payload():
     today, start, end = _today_range()
     active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
     open_sessions = _open_sessions_by_staff()
+    live_call_staff_ids = _live_call_staff_ids()
 
     sessions_today = Session.objects.filter(login_time__range=(start, end)).select_related("staff").order_by("-login_time")
     totals = {
@@ -1643,7 +1706,11 @@ def build_work_hours_payload():
                 "first_login": _format_datetime(first_login_map.get(staff.id)),
                 "last_logout": _format_datetime(last_logout_map.get(staff.id)),
                 "state_label": _session_status_label(session),
-                "online_label": _staff_online_label(session, active_cutoff),
+                "online_label": _staff_online_label(
+                    session,
+                    active_cutoff,
+                    is_in_customer_call=staff.id in live_call_staff_ids,
+                ),
             }
         )
 
@@ -1904,8 +1971,6 @@ def end_staff_call(call, status=None, *, duration_seconds=None, ended_at=None, s
 
     now = timezone.now()
     session = get_open_session(call.staff, reconcile=True)
-    if session:
-        _touch_session_interaction(session, now, metadata={"source": "call_end"})
 
     resolved_duration = None if duration_seconds is None else max(0, int(duration_seconds))
     resolved_end_time = ended_at
@@ -1926,8 +1991,23 @@ def end_staff_call(call, status=None, *, duration_seconds=None, ended_at=None, s
     call.end_time = resolved_end_time
     call.duration_seconds = resolved_duration
     call.is_qualifying = call.duration_seconds >= SHORT_CALL_SECONDS
-    if not call.is_qualifying and requested_status == Call.Status.NO_ANSWER:
+    if session:
+        _credit_call_duration_to_session(
+            session,
+            resolved_end_time,
+            resolved_duration,
+            metadata={
+                "source": "call_end",
+                "duration_seconds": resolved_duration,
+            },
+        )
+    if not call.is_qualifying and requested_status in {
+        Call.Status.NO_ANSWER,
+        Call.Status.NOT_INTERESTED,
+    }:
         call.status = Call.Status.NO_ANSWER
+        if requested_status == Call.Status.NOT_INTERESTED:
+            call.status = Call.Status.NOT_INTERESTED
     else:
         call.status = Call.Status.INVALID_SHORT if not call.is_qualifying else call.status
     call.save(
@@ -1960,7 +2040,10 @@ def end_staff_call(call, status=None, *, duration_seconds=None, ended_at=None, s
         },
     )
 
-    if requested_status and (call.is_qualifying or requested_status == Call.Status.NO_ANSWER):
+    if requested_status and (
+        call.is_qualifying
+        or requested_status in {Call.Status.NO_ANSWER, Call.Status.NOT_INTERESTED}
+    ):
         update_staff_call_status(call, requested_status, callback_window)
     return call
 

@@ -28,7 +28,8 @@ const Duration kHeartbeatInterval = Duration(seconds: 45);
 const Duration kIdleMonitorInterval = Duration(seconds: 15);
 const Duration kIdleWarningAfter = Duration(minutes: 5);
 const Duration kIdleWarningGrace = Duration(minutes: 5);
-const Duration kBackgroundSessionTimeout = Duration(minutes: 10);
+const Duration kBackgroundSessionTimeout = Duration(minutes: 5);
+const Duration kShortCallReviewThreshold = Duration(seconds: 10);
 const int kCallLogSyncAttempts = 6;
 const Duration kCallLogSyncRetryDelay = Duration(seconds: 2);
 
@@ -136,8 +137,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   DateTime? _lastInteractionAt;
+  DateTime? _lastCallActivityAt;
   DateTime? _backgroundedAt;
-  DateTime? _warningShownAt;
   BuildContext? _idleWarningDialogContext;
   BuildContext? _callStatusDialogContext;
   bool _isIdleWarningVisible = false;
@@ -187,9 +188,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (state == AppLifecycleState.resumed) {
       unawaited(_handleResumeFromBackground());
     } else if (_isBackgroundState(state)) {
-      _backgroundedAt ??= DateTime.now();
+      if (_hasActiveCustomerCall) {
+        _backgroundedAt = null;
+      } else {
+        _backgroundedAt ??= DateTime.now();
+      }
       _dismissIdleWarning();
-      unawaited(_sendHeartbeat('background', source: 'lifecycle'));
+      if (!_hasActiveCustomerCall) {
+        unawaited(_sendHeartbeat('background', source: 'lifecycle'));
+      }
     }
   }
 
@@ -211,6 +218,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   bool get _hasPendingCallStatus =>
       _pendingStatusCallId != null && _pendingStatusCallId!.isNotEmpty;
+
+  bool get _hasActiveCustomerCall =>
+      _activeCallId != null && _pendingDialerCall != null;
 
   List<TrainingLesson> get _filteredLessons {
     final query = _learningQuery.trim().toLowerCase();
@@ -516,8 +526,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _learningQuery = '';
       _loginErrorText = null;
       _lastInteractionAt = null;
+      _lastCallActivityAt = null;
       _backgroundedAt = null;
-      _warningShownAt = null;
       _clearPendingCallStatus();
     });
     _updatePreferredOrientations();
@@ -551,8 +561,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _learningQuery = '';
       _loginErrorText = null;
       _lastInteractionAt = null;
+      _lastCallActivityAt = null;
       _backgroundedAt = null;
-      _warningShownAt = null;
       _clearPendingCallStatus();
     });
     _updatePreferredOrientations();
@@ -580,8 +590,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       setState(() {
         _summary = response.summary;
         _lastInteractionAt = DateTime.now();
+        _lastCallActivityAt = DateTime.now();
         _backgroundedAt = null;
-        _warningShownAt = null;
       });
       _syncPresenceMonitoring();
       _isTrainingPromptVisible = false;
@@ -628,7 +638,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       setState(() {
         _summary = response.summary;
         _backgroundedAt = null;
-        _warningShownAt = null;
       });
       _syncPresenceMonitoring();
       _showMessage('Work session closed.');
@@ -734,7 +743,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (launched != true) {
       await _apiClient.endCall(
         callId: call.id,
-        status: _statusValue(_callStatus),
+        status: 'no_answer',
         durationSeconds: 0,
         endedAt: dialStartedAt,
         source: 'direct_call_failed',
@@ -756,6 +765,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         phone: lead.phone,
         startedAt: dialStartedAt,
       );
+      _lastCallActivityAt = dialStartedAt;
       _elapsed = Duration.zero;
     });
     _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -889,12 +899,18 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     return null;
   }
 
-  Future<NoAnswerDecision?> _askNoAnswerDecision() async {
+  Future<ShortCallDecision?> _askShortCallDecision(int durationSeconds) async {
     if (!mounted) {
       return null;
     }
 
-    return showDialog<NoAnswerDecision>(
+    final isNoResponse = durationSeconds <= 0;
+    final title = isNoResponse ? 'No Response?' : 'Short Call Warning';
+    final message = isNoResponse
+        ? 'The customer did not attend the call. Call again, or mark it as No Response or Rejected.'
+        : 'This call lasted less than 10 seconds. Call the customer again, or if the outcome is confirmed, mark No Response or Rejected.';
+
+    return showDialog<ShortCallDecision>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
@@ -902,20 +918,24 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
-          title: const Text('No Response?'),
-          content: const Text(
-            'The customer did not attend the call. Mark it as No Response or call again.',
-          ),
+          title: Text(title),
+          content: Text(message),
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(dialogContext).pop(NoAnswerDecision.markNoAnswer);
+                Navigator.of(dialogContext).pop(ShortCallDecision.markNoResponse);
               },
               child: const Text('Mark No Response'),
             ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(dialogContext).pop(ShortCallDecision.markRejected);
+              },
+              child: const Text('Mark Rejected'),
+            ),
             ElevatedButton(
               onPressed: () {
-                Navigator.of(dialogContext).pop(NoAnswerDecision.callAgain);
+                Navigator.of(dialogContext).pop(ShortCallDecision.callAgain);
               },
               child: const Text('Call Again'),
             ),
@@ -925,17 +945,24 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     );
   }
 
-  Future<void> _completeNoAnswerCall(
+  Future<void> _completeShortCallDecision(
     PendingDialerCall pendingCall,
     DateTime endedAt, {
-    required bool callAgain,
+    required int durationSeconds,
+    required ShortCallDecision decision,
   }) async {
+    final status = switch (decision) {
+      ShortCallDecision.markRejected => 'not_interested',
+      _ => 'no_answer',
+    };
     final call = await _apiClient.endCall(
       callId: pendingCall.callId,
-      status: 'no_answer',
-      durationSeconds: 0,
+      status: status,
+      durationSeconds: durationSeconds,
       endedAt: endedAt,
-      source: callAgain ? 'call_log_no_answer_recall' : 'call_log_no_answer',
+      source: decision == ShortCallDecision.callAgain
+          ? 'call_log_short_recall'
+          : 'call_log_short_resolution',
     );
 
     _resetActiveCallTracking();
@@ -943,14 +970,18 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    setState(() => _callStatus = 'No Response');
+    setState(() {
+      _callStatus = decision == ShortCallDecision.markRejected
+          ? 'Rejected'
+          : 'No Response';
+    });
     await _loadDashboardData(showLoader: false);
     if (!mounted) {
       return;
     }
 
-    if (callAgain) {
-      _showMessage('Marked as No Response. Calling again.');
+    if (decision == ShortCallDecision.callAgain) {
+      _showMessage('Short call detected. Marked as No Response and calling again.');
       final lead = _leadById(pendingCall.leadId);
       if (lead != null) {
         await _placeCallForLead(lead);
@@ -965,6 +996,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     if (call.status == 'no_answer') {
       _showMessage('Call marked as No Response.');
+    } else if (call.status == 'not_interested') {
+      _showMessage('Call marked as Rejected.');
     } else {
       _showMessage(
         'Call duration was less than 5 seconds, so it was not counted.',
@@ -983,15 +1016,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     );
     final endedAt = startedAt.add(Duration(seconds: durationSeconds));
 
-    if (durationSeconds == 0) {
-      final decision = await _askNoAnswerDecision();
+    if (durationSeconds < kShortCallReviewThreshold.inSeconds) {
+      final decision = await _askShortCallDecision(durationSeconds);
       if (decision == null) {
         return;
       }
-      await _completeNoAnswerCall(
+      await _completeShortCallDecision(
         pendingCall,
         endedAt,
-        callAgain: decision == NoAnswerDecision.callAgain,
+        durationSeconds: durationSeconds,
+        decision: decision,
       );
       return;
     }
@@ -1011,6 +1045,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     setState(() {
       _elapsed = Duration(seconds: durationSeconds);
+      _lastCallActivityAt = endedAt;
       if (call.status == 'started') {
         _pendingStatusCallId = call.id;
         _pendingStatusLeadName = lead?.name ?? '';
@@ -1054,6 +1089,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     setState(() {
+      _lastCallActivityAt = DateTime.now();
       if (call.status == 'started') {
         _pendingStatusCallId = call.id;
         _pendingStatusLeadName = lead?.name ?? '';
@@ -1160,7 +1196,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (!_summary.workingNow) {
       _lastInteractionAt = null;
       _backgroundedAt = null;
-      _warningShownAt = null;
       _dismissIdleWarning();
       return;
     }
@@ -1183,12 +1218,23 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _backgroundedAt = null;
 
     await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+    if (_pendingDialerCall != null) {
+      await _syncCallFromLog(
+        allowManualFallback: false,
+        showMissingMessage: false,
+      );
+    }
+
     if (!_summary.workingNow) {
+      return;
+    }
+
+    if (_summary.currentState == 'offline' && !_hasActiveCustomerCall) {
       if (backgroundedAt != null &&
           DateTime.now().difference(backgroundedAt) >=
               kBackgroundSessionTimeout) {
         _showMessage(
-          'Work session stopped after 10 minutes in background.',
+          'Marked offline after 5 minutes away from the app. Start calling to return online.',
           isError: true,
         );
       }
@@ -1197,37 +1243,25 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     _lastInteractionAt = DateTime.now();
     await _sendHeartbeat('foreground', interaction: true, source: 'lifecycle');
-    if (_pendingDialerCall != null) {
-      await _syncCallFromLog(
-        allowManualFallback: false,
-        showMissingMessage: false,
-      );
-    }
   }
 
   void _evaluateIdleState() {
     if (!mounted ||
         !_summary.workingNow ||
-        _isBackgroundState(_lifecycleState)) {
+        _isBackgroundState(_lifecycleState) ||
+        _hasActiveCustomerCall) {
       return;
     }
 
     final now = DateTime.now();
-    final warningShownAt = _warningShownAt;
-    if (warningShownAt != null) {
-      if (now.difference(warningShownAt) >= kIdleWarningGrace) {
-        unawaited(_markOfflineFromInactivity());
-      }
-      return;
-    }
-
     if (_summary.currentState == 'offline') {
       return;
     }
 
     final lastInteractionAt = _lastInteractionAt ?? now;
-    if (now.difference(lastInteractionAt) >= kIdleWarningAfter) {
-      unawaited(_showIdleWarning());
+    final lastCallActivityAt = _lastCallActivityAt ?? lastInteractionAt;
+    if (now.difference(lastCallActivityAt) >= kIdleWarningAfter) {
+      unawaited(_markOfflineFromInactivity());
     }
   }
 
@@ -1251,7 +1285,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   void _dismissIdleWarning() {
     final dialogContext = _idleWarningDialogContext;
     _idleWarningDialogContext = null;
-    _warningShownAt = null;
     _isIdleWarningVisible = false;
     if (dialogContext == null) {
       return;
@@ -1275,11 +1308,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     _isIdleWarningVisible = true;
-    _warningShownAt = DateTime.now();
     await _sendHeartbeat('warning', source: 'idle_warning');
     if (!mounted || !_summary.workingNow) {
       _isIdleWarningVisible = false;
-      _warningShownAt = null;
       return;
     }
 
@@ -1303,7 +1334,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 onPressed: () async {
                   Navigator.of(dialogContext).pop();
                   _isIdleWarningVisible = false;
-                  _warningShownAt = null;
                   await _endWork();
                 },
                 child: const Text('End Work'),
@@ -1312,7 +1342,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 onPressed: () async {
                   Navigator.of(dialogContext).pop();
                   _isIdleWarningVisible = false;
-                  _warningShownAt = null;
                   await _acknowledgeIdleWarning();
                 },
                 child: const Text("I'm Here"),
@@ -1348,7 +1377,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _dismissIdleWarning();
     await _sendHeartbeat('offline', source: 'idle_timeout');
     if (mounted && _summary.workingNow) {
-      _showMessage('Marked offline due to inactivity.', isError: true);
+      _showMessage(
+        'Marked offline due to no call activity. Start calling to go back online.',
+        isError: true,
+      );
     }
   }
 
@@ -1478,6 +1510,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
       setState(() {
         _callStatus = label;
+        _lastCallActivityAt = DateTime.now();
         _clearPendingCallStatus();
       });
       await _loadDashboardData(showLoader: false, promptTrainingGate: true);
@@ -1748,7 +1781,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     return Listener(
       behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => _registerInteraction(),
+      onPointerDown: (_) => _registerInteraction(syncServer: false),
       child: Scaffold(
         appBar: AppBar(
           title: const BrandWordmark(
@@ -3146,7 +3179,7 @@ class PendingDialerCall {
   final DateTime startedAt;
 }
 
-enum NoAnswerDecision { markNoAnswer, callAgain }
+enum ShortCallDecision { markNoResponse, markRejected, callAgain }
 
 class InfoCard extends StatelessWidget {
   const InfoCard({
