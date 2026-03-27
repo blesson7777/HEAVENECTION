@@ -4,13 +4,22 @@ from random import choice, randint
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from backend.apps.telecalling.models import Call, Lead, Session, Staff
+from backend.apps.telecalling.models import Call, CompanyProfile, Lead, Session, Staff
 
 
 class Command(BaseCommand):
     help = "Seed demo telecalling data for the Heavenection dashboard."
 
     def handle(self, *args, **options):
+        CompanyProfile.objects.update_or_create(
+            id=1,
+            defaults={
+                "company_name": "Heavenection",
+                "description": "Telecalling operations, staff monitoring, and salary tracking.",
+                "country": "India",
+            },
+        )
+
         if Staff.objects.filter(role=Staff.Role.STAFF).exists():
             self.stdout.write(self.style.WARNING("Demo data already exists."))
             return

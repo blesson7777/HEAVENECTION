@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from backend.apps.telecalling.models import Call, Lead, Salary, Session, Staff, StaffAction
+from backend.apps.telecalling.models import Call, CompanyProfile, Lead, Salary, Session, Staff, StaffAction
 
 
 class LoginSerializer(serializers.Serializer):
@@ -123,6 +123,136 @@ class UpdateStaffSerializer(serializers.Serializer):
         if password:
             instance.set_password(password)
         instance.save()
+        return instance
+
+
+class AdminProfileSerializer(serializers.ModelSerializer):
+    role_label = serializers.CharField(source="get_role_display", read_only=True)
+
+    class Meta:
+        model = Staff
+        fields = (
+            "id",
+            "name",
+            "phone",
+            "role",
+            "role_label",
+            "is_active",
+            "last_seen_at",
+        )
+
+
+class AdminProfileUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=150, required=False)
+    phone = serializers.CharField(max_length=20, required=False)
+    password = serializers.CharField(min_length=6, write_only=True, required=False, allow_blank=False)
+
+    def validate_phone(self, value):
+        phone = value.strip()
+        instance = getattr(self, "instance", None)
+        queryset = Staff.objects.filter(phone=phone)
+        if instance:
+            queryset = queryset.exclude(pk=instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Phone number already exists.")
+        return phone
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("password", None)
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
+
+
+class CompanyProfileSerializer(serializers.ModelSerializer):
+    logo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CompanyProfile
+        fields = (
+            "id",
+            "company_name",
+            "legal_name",
+            "company_email",
+            "company_phone",
+            "support_phone",
+            "website",
+            "address_line_1",
+            "address_line_2",
+            "city",
+            "state",
+            "postal_code",
+            "country",
+            "tax_identifier",
+            "description",
+            "logo",
+            "logo_url",
+            "updated_at",
+        )
+
+    def get_logo_url(self, obj):
+        request = self.context.get("request")
+        if not obj.logo:
+            return ""
+        if request:
+            return request.build_absolute_uri(obj.logo.url)
+        return obj.logo.url
+
+
+class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
+    remove_logo = serializers.BooleanField(required=False, default=False, write_only=True)
+
+    class Meta:
+        model = CompanyProfile
+        fields = (
+            "company_name",
+            "legal_name",
+            "company_email",
+            "company_phone",
+            "support_phone",
+            "website",
+            "address_line_1",
+            "address_line_2",
+            "city",
+            "state",
+            "postal_code",
+            "country",
+            "tax_identifier",
+            "description",
+            "logo",
+            "remove_logo",
+        )
+
+    def validate_logo(self, value):
+        if not value:
+            return value
+        content_type = getattr(value, "content_type", "")
+        if content_type and not content_type.startswith("image/"):
+            raise serializers.ValidationError("Upload an image file for the company logo.")
+        if getattr(value, "size", 0) > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Logo size must be 5 MB or smaller.")
+        return value
+
+    def update(self, instance, validated_data):
+        remove_logo = validated_data.pop("remove_logo", False)
+        new_logo = validated_data.get("logo")
+        previous_logo = instance.logo if instance.logo else None
+
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+
+        if remove_logo:
+            instance.logo = None
+
+        instance.save()
+
+        if remove_logo and previous_logo:
+            previous_logo.delete(save=False)
+        elif new_logo and previous_logo and previous_logo.name != instance.logo.name:
+            previous_logo.delete(save=False)
         return instance
 
 

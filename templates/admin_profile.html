@@ -1,0 +1,210 @@
+{% extends "admin_base.html" %}
+{% load static %}
+
+{% block page_actions %}
+<a href="{% url 'dashboard' %}" class="btn btn-outline-primary btn-sm">Back to Dashboard</a>
+{% endblock %}
+
+{% block admin_content %}
+{% if messages %}
+<div class="hc-alert-stack mb-4">
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'success' %}alert-success{% else %}alert-danger{% endif %} hc-alert-card mb-0" role="alert">
+        {{ message }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+<section class="row g-4">
+    <div class="col-xl-4">
+        <div class="hc-surface-card hc-profile-summary animate-on-scroll">
+            <div class="hc-profile-branding">
+                <div class="hc-profile-logo-wrap">
+                    {% if company_profile.logo %}
+                    <img src="{{ company_profile.logo.url }}" alt="{{ company_profile.company_name }}" class="hc-profile-logo">
+                    {% else %}
+                    <img src="{% static 'images/logo.svg' %}" alt="{{ company_profile.company_name|default:'Heavenection' }}" class="hc-profile-logo">
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="mf-db2-kicker">Brand Identity</span>
+                    <h4 class="mb-1">{{ company_profile.company_name|default:"Heavenection" }}</h4>
+                    <p class="mb-0">{{ company_summary.description }}</p>
+                </div>
+            </div>
+
+            <div class="hc-profile-meta-grid">
+                <article class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Admin</span>
+                    <strong>{{ profile_summary.name }}</strong>
+                    <small>{{ profile_summary.role_label }} | {{ profile_summary.status_label }}</small>
+                </article>
+                <article class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Login Number</span>
+                    <strong>{{ profile_summary.phone }}</strong>
+                    <small>Last seen {{ profile_summary.last_seen }}</small>
+                </article>
+                <article class="hc-profile-meta-card hc-profile-meta-card-wide">
+                    <span class="hc-profile-meta-label">Company Address</span>
+                    <strong>{{ company_summary.address }}</strong>
+                    <small>Keep this updated for invoices, reports, and branding exports.</small>
+                </article>
+            </div>
+
+            <div class="hc-settings-list">
+                {% for label, value in company_summary.details %}
+                <div class="hc-settings-list-row">
+                    <span>{{ label }}</span>
+                    <strong>{{ value }}</strong>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-8">
+        <div class="row g-4">
+            <div class="col-12">
+                <div class="hc-surface-card animate-on-scroll">
+                    <div class="mf-db2-panel-head mb-3">
+                        <div>
+                            <span class="mf-db2-kicker">Admin Profile</span>
+                            <h5>Manage admin login details</h5>
+                        </div>
+                    </div>
+
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="settings_section" value="profile">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="profileName">Admin Name</label>
+                                <input type="text" class="form-control{% if profile_errors.name %} is-invalid{% endif %}" id="profileName" name="name" value="{{ profile_form_data.name }}" required>
+                                {% if profile_errors.name %}<div class="invalid-feedback">{{ profile_errors.name }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="profilePhone">Login Phone</label>
+                                <input type="text" class="form-control{% if profile_errors.phone %} is-invalid{% endif %}" id="profilePhone" name="phone" value="{{ profile_form_data.phone }}" required>
+                                {% if profile_errors.phone %}<div class="invalid-feedback">{{ profile_errors.phone }}</div>{% endif %}
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold" for="profilePassword">New Password</label>
+                                <input type="password" class="form-control{% if profile_errors.password %} is-invalid{% endif %}" id="profilePassword" name="password" placeholder="Leave blank to keep the current password">
+                                {% if profile_errors.password %}<div class="invalid-feedback">{{ profile_errors.password }}</div>{% endif %}
+                                <div class="form-text">Use this only when you want to change the admin login password.</div>
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-end mt-4">
+                            <button type="submit" class="btn btn-primary">Save Admin Profile</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="hc-surface-card animate-on-scroll">
+                    <div class="mf-db2-panel-head mb-3">
+                        <div>
+                            <span class="mf-db2-kicker">Company Settings</span>
+                            <h5>Branding, contact information, and address</h5>
+                        </div>
+                    </div>
+
+                    <form method="post" enctype="multipart/form-data" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="settings_section" value="company">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="companyName">Company Name</label>
+                                <input type="text" class="form-control{% if company_errors.company_name %} is-invalid{% endif %}" id="companyName" name="company_name" value="{{ company_form_data.company_name }}" required>
+                                {% if company_errors.company_name %}<div class="invalid-feedback">{{ company_errors.company_name }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="legalName">Legal Name</label>
+                                <input type="text" class="form-control{% if company_errors.legal_name %} is-invalid{% endif %}" id="legalName" name="legal_name" value="{{ company_form_data.legal_name }}">
+                                {% if company_errors.legal_name %}<div class="invalid-feedback">{{ company_errors.legal_name }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="companyEmail">Company Email</label>
+                                <input type="email" class="form-control{% if company_errors.company_email %} is-invalid{% endif %}" id="companyEmail" name="company_email" value="{{ company_form_data.company_email }}">
+                                {% if company_errors.company_email %}<div class="invalid-feedback">{{ company_errors.company_email }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="website">Website</label>
+                                <input type="url" class="form-control{% if company_errors.website %} is-invalid{% endif %}" id="website" name="website" value="{{ company_form_data.website }}" placeholder="https://example.com">
+                                {% if company_errors.website %}<div class="invalid-feedback">{{ company_errors.website }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="companyPhone">Company Phone</label>
+                                <input type="text" class="form-control{% if company_errors.company_phone %} is-invalid{% endif %}" id="companyPhone" name="company_phone" value="{{ company_form_data.company_phone }}">
+                                {% if company_errors.company_phone %}<div class="invalid-feedback">{{ company_errors.company_phone }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="supportPhone">Support Phone</label>
+                                <input type="text" class="form-control{% if company_errors.support_phone %} is-invalid{% endif %}" id="supportPhone" name="support_phone" value="{{ company_form_data.support_phone }}">
+                                {% if company_errors.support_phone %}<div class="invalid-feedback">{{ company_errors.support_phone }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label fw-semibold" for="addressLine1">Address Line 1</label>
+                                <input type="text" class="form-control{% if company_errors.address_line_1 %} is-invalid{% endif %}" id="addressLine1" name="address_line_1" value="{{ company_form_data.address_line_1 }}">
+                                {% if company_errors.address_line_1 %}<div class="invalid-feedback">{{ company_errors.address_line_1 }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold" for="taxIdentifier">Tax ID / GST</label>
+                                <input type="text" class="form-control{% if company_errors.tax_identifier %} is-invalid{% endif %}" id="taxIdentifier" name="tax_identifier" value="{{ company_form_data.tax_identifier }}">
+                                {% if company_errors.tax_identifier %}<div class="invalid-feedback">{{ company_errors.tax_identifier }}</div>{% endif %}
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold" for="addressLine2">Address Line 2</label>
+                                <input type="text" class="form-control{% if company_errors.address_line_2 %} is-invalid{% endif %}" id="addressLine2" name="address_line_2" value="{{ company_form_data.address_line_2 }}">
+                                {% if company_errors.address_line_2 %}<div class="invalid-feedback">{{ company_errors.address_line_2 }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold" for="city">City</label>
+                                <input type="text" class="form-control{% if company_errors.city %} is-invalid{% endif %}" id="city" name="city" value="{{ company_form_data.city }}">
+                                {% if company_errors.city %}<div class="invalid-feedback">{{ company_errors.city }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold" for="state">State</label>
+                                <input type="text" class="form-control{% if company_errors.state %} is-invalid{% endif %}" id="state" name="state" value="{{ company_form_data.state }}">
+                                {% if company_errors.state %}<div class="invalid-feedback">{{ company_errors.state }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold" for="postalCode">Postal Code</label>
+                                <input type="text" class="form-control{% if company_errors.postal_code %} is-invalid{% endif %}" id="postalCode" name="postal_code" value="{{ company_form_data.postal_code }}">
+                                {% if company_errors.postal_code %}<div class="invalid-feedback">{{ company_errors.postal_code }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="country">Country</label>
+                                <input type="text" class="form-control{% if company_errors.country %} is-invalid{% endif %}" id="country" name="country" value="{{ company_form_data.country }}">
+                                {% if company_errors.country %}<div class="invalid-feedback">{{ company_errors.country }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="logoUpload">Company Logo</label>
+                                <input type="file" class="form-control{% if company_errors.logo %} is-invalid{% endif %}" id="logoUpload" name="logo" accept="image/*">
+                                {% if company_errors.logo %}<div class="invalid-feedback">{{ company_errors.logo }}</div>{% endif %}
+                                <div class="form-text">Upload PNG, JPG, SVG, or other image formats up to 5 MB.</div>
+                            </div>
+                            <div class="col-12">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="removeLogo" name="remove_logo" {% if company_form_data.remove_logo %}checked{% endif %}>
+                                    <label class="form-check-label" for="removeLogo">Remove the custom logo and use the default brand mark</label>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold" for="companyDescription">Company Description</label>
+                                <textarea class="form-control{% if company_errors.description %} is-invalid{% endif %}" id="companyDescription" name="description" rows="4">{{ company_form_data.description }}</textarea>
+                                {% if company_errors.description %}<div class="invalid-feedback">{{ company_errors.description }}</div>{% endif %}
+                            </div>
+                        </div>
+                        <div class="d-flex justify-content-end mt-4">
+                            <button type="submit" class="btn btn-primary">Save Company Settings</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

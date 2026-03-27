@@ -9,6 +9,7 @@ urlpatterns = [
     path("login/", views.web_login_page, name="web-login"),
     path("logout/", views.web_logout, name="web-logout"),
     path("", views.dashboard_page, name="dashboard"),
+    path("settings/", views.settings_page, name="settings-page"),
     path("staff/", views.staff_page, name="staff-page"),
     path("leads/", views.leads_page, name="leads-page"),
     path("calls/", views.calls_page, name="calls-page"),
@@ -20,3 +21,4 @@ urlpatterns = [
 
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

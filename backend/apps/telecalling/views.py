@@ -10,7 +10,11 @@ from backend.apps.telecalling.auth import clear_auth_cookies, get_staff_from_req
 from backend.apps.telecalling.models import Call, Lead, Salary, Staff, StaffAction
 from backend.apps.telecalling.permissions import IsAdminStaff, IsCallingStaff
 from backend.apps.telecalling.serializers import (
+    AdminProfileSerializer,
+    AdminProfileUpdateSerializer,
     CallSerializer,
+    CompanyProfileSerializer,
+    CompanyProfileUpdateSerializer,
     CallStatusSerializer,
     CreateLeadSerializer,
     CreateStaffSerializer,
@@ -31,12 +35,14 @@ from backend.apps.telecalling.services import (
     build_call_detail_payload,
     build_dashboard_payload,
     build_lead_management_payload,
+    build_settings_payload,
     build_staff_today_payload,
     build_team_management_payload,
     build_work_hours_payload,
     end_staff_call,
     end_staff_session,
     get_assigned_leads,
+    get_company_profile,
     mark_staff_seen,
     read_root_file,
     record_session_heartbeat,
@@ -48,8 +54,10 @@ from backend.apps.telecalling.services import (
 
 def _admin_web_context(request, current_user, *, active_page, page_title, page_heading, page_subtitle, extra_context=None):
     mark_staff_seen(current_user)
+    company_profile = get_company_profile()
     context = {
         "admin_user": current_user,
+        "company_profile": company_profile,
         "active_page": active_page,
         "page_title": page_title,
         "page_heading": page_heading,
@@ -65,6 +73,20 @@ def _get_admin_user_or_redirect(request):
     if not current_user or current_user.role != Staff.Role.ADMIN or not current_user.is_active:
         return None
     return current_user
+
+
+def _normalize_errors(error_dict):
+    normalized = {}
+    for field, value in error_dict.items():
+        if isinstance(value, dict):
+            nested = _normalize_errors(value)
+            normalized[field] = " ".join(nested.values())
+            continue
+        if isinstance(value, (list, tuple)):
+            normalized[field] = " ".join(str(item) for item in value)
+            continue
+        normalized[field] = str(value)
+    return normalized
 
 
 @require_http_methods(["GET", "POST"])
@@ -137,6 +159,114 @@ def dashboard_page(request):
         },
     )
     return render(request, "heavenection_calltrack_web.html", context)
+
+
+@require_http_methods(["GET", "POST"])
+def settings_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    settings_payload = build_settings_payload(current_user)
+    company_profile = settings_payload["company_profile"]
+    profile_form_data = {
+        "name": current_user.name,
+        "phone": current_user.phone,
+        "password": "",
+    }
+    company_form_data = {
+        "company_name": company_profile.company_name,
+        "legal_name": company_profile.legal_name,
+        "company_email": company_profile.company_email,
+        "company_phone": company_profile.company_phone,
+        "support_phone": company_profile.support_phone,
+        "website": company_profile.website,
+        "address_line_1": company_profile.address_line_1,
+        "address_line_2": company_profile.address_line_2,
+        "city": company_profile.city,
+        "state": company_profile.state,
+        "postal_code": company_profile.postal_code,
+        "country": company_profile.country,
+        "tax_identifier": company_profile.tax_identifier,
+        "description": company_profile.description,
+        "remove_logo": False,
+    }
+    profile_errors = {}
+    company_errors = {}
+    active_settings_tab = "profile"
+
+    if request.method == "POST":
+        settings_section = request.POST.get("settings_section", "profile")
+        active_settings_tab = settings_section
+
+        if settings_section == "profile":
+            password_value = request.POST.get("password", "")
+            profile_form_data = {
+                "name": request.POST.get("name", "").strip(),
+                "phone": request.POST.get("phone", "").strip(),
+                "password": password_value,
+            }
+            profile_data = {
+                "name": profile_form_data["name"],
+                "phone": profile_form_data["phone"],
+            }
+            if password_value.strip():
+                profile_data["password"] = password_value.strip()
+            serializer = AdminProfileUpdateSerializer(current_user, data=profile_data, partial=True)
+            if serializer.is_valid():
+                current_user = serializer.save()
+                messages.success(request, "Admin profile updated successfully.")
+                return redirect("settings-page")
+            profile_errors = _normalize_errors(serializer.errors)
+            messages.error(request, "Please correct the admin profile details and try again.")
+
+        elif settings_section == "company":
+            company_form_data = {
+                "company_name": request.POST.get("company_name", "").strip(),
+                "legal_name": request.POST.get("legal_name", "").strip(),
+                "company_email": request.POST.get("company_email", "").strip(),
+                "company_phone": request.POST.get("company_phone", "").strip(),
+                "support_phone": request.POST.get("support_phone", "").strip(),
+                "website": request.POST.get("website", "").strip(),
+                "address_line_1": request.POST.get("address_line_1", "").strip(),
+                "address_line_2": request.POST.get("address_line_2", "").strip(),
+                "city": request.POST.get("city", "").strip(),
+                "state": request.POST.get("state", "").strip(),
+                "postal_code": request.POST.get("postal_code", "").strip(),
+                "country": request.POST.get("country", "").strip(),
+                "tax_identifier": request.POST.get("tax_identifier", "").strip(),
+                "description": request.POST.get("description", "").strip(),
+                "remove_logo": request.POST.get("remove_logo") == "on",
+            }
+            company_data = company_form_data.copy()
+            if request.FILES.get("logo"):
+                company_data["logo"] = request.FILES["logo"]
+            serializer = CompanyProfileUpdateSerializer(company_profile, data=company_data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                messages.success(request, "Company settings updated successfully.")
+                return redirect("settings-page")
+            company_errors = _normalize_errors(serializer.errors)
+            messages.error(request, "Please correct the company details and try again.")
+
+    settings_payload = build_settings_payload(current_user)
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="settings",
+        page_title="Admin Profile",
+        page_heading="Admin Profile",
+        page_subtitle="Manage admin access, branding, company contact information, and address details.",
+        extra_context={
+            **settings_payload,
+            "profile_form_data": profile_form_data,
+            "company_form_data": company_form_data,
+            "profile_errors": profile_errors,
+            "company_errors": company_errors,
+            "active_settings_tab": active_settings_tab,
+        },
+    )
+    return render(request, "admin_profile.html", context)
 
 
 @require_GET
@@ -262,6 +392,31 @@ def logout_api(request):
 @permission_classes([IsAdminStaff])
 def dashboard_data_api(request):
     return Response(build_dashboard_payload())
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAdminStaff])
+def admin_profile_api(request):
+    if request.method == "GET":
+        return Response(AdminProfileSerializer(request.user).data)
+
+    serializer = AdminProfileUpdateSerializer(request.user, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    user = serializer.save()
+    return Response(AdminProfileSerializer(user).data)
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAdminStaff])
+def company_profile_api(request):
+    company_profile = get_company_profile()
+    if request.method == "GET":
+        return Response(CompanyProfileSerializer(company_profile, context={"request": request}).data)
+
+    serializer = CompanyProfileUpdateSerializer(company_profile, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    company_profile = serializer.save()
+    return Response(CompanyProfileSerializer(company_profile, context={"request": request}).data)
 
 
 @api_view(["GET", "POST"])

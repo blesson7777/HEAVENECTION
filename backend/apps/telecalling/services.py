@@ -7,7 +7,7 @@ from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 
-from backend.apps.telecalling.models import Call, Lead, Salary, Session, Staff, StaffAction
+from backend.apps.telecalling.models import Call, CompanyProfile, Lead, Salary, Session, Staff, StaffAction
 
 
 ONLINE_WINDOW_SECONDS = 90
@@ -16,6 +16,17 @@ BACKGROUND_TIMEOUT_SECONDS = 10 * 60
 IDLE_WARNING_AFTER_SECONDS = 5 * 60
 IDLE_WARNING_GRACE_SECONDS = 5 * 60
 IDLE_OFFLINE_AFTER_SECONDS = IDLE_WARNING_AFTER_SECONDS + IDLE_WARNING_GRACE_SECONDS
+
+
+def get_company_profile():
+    profile, _ = CompanyProfile.objects.get_or_create(
+        id=1,
+        defaults={
+            "company_name": "Heavenection",
+            "country": "India",
+        },
+    )
+    return profile
 
 
 def _today_range():
@@ -567,6 +578,43 @@ def build_team_management_payload():
     return {
         "today_label": today.strftime("%A, %d %b %Y"),
         "team_rows": team_rows,
+    }
+
+
+def build_settings_payload(current_user):
+    company_profile = get_company_profile()
+    company_details = [
+        ("Company Email", company_profile.company_email or "Not added yet"),
+        ("Company Phone", company_profile.company_phone or "Not added yet"),
+        ("Support Phone", company_profile.support_phone or "Not added yet"),
+        ("Website", company_profile.website or "Not added yet"),
+        ("Tax ID", company_profile.tax_identifier or "Not added yet"),
+        ("Country", company_profile.country or "Not added yet"),
+    ]
+    address_parts = [
+        company_profile.address_line_1,
+        company_profile.address_line_2,
+        company_profile.city,
+        company_profile.state,
+        company_profile.postal_code,
+        company_profile.country,
+    ]
+    formatted_address = ", ".join(part for part in address_parts if part) or "Not added yet"
+
+    return {
+        "company_profile": company_profile,
+        "profile_summary": {
+            "name": current_user.name,
+            "phone": current_user.phone,
+            "role_label": current_user.get_role_display(),
+            "last_seen": _format_datetime(current_user.last_seen_at),
+            "status_label": "Active" if current_user.is_active else "Inactive",
+        },
+        "company_summary": {
+            "address": formatted_address,
+            "description": company_profile.description or "Add company details, address, and support information here.",
+            "details": company_details,
+        },
     }
 
 

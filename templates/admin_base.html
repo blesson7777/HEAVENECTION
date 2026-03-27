@@ -28,7 +28,17 @@
     <aside class="mf-sidebar" id="mfSidebar">
         <div class="mf-sidebar-head">
             <a href="{% url 'dashboard' %}" class="mf-brand d-flex align-items-center gap-3 text-decoration-none">
-                <img src="{% static 'images/logo.svg' %}" alt="Heavenection" class="hc-brand-logo">
+                <span class="hc-brand-mark">
+                    {% if company_profile.logo %}
+                    <img src="{{ company_profile.logo.url }}" alt="{{ company_profile.company_name }}" class="hc-brand-logo">
+                    {% else %}
+                    <img src="{% static 'images/logo.svg' %}" alt="{{ company_profile.company_name|default:'Heavenection' }}" class="hc-brand-logo">
+                    {% endif %}
+                </span>
+                <span class="hc-brand-copy">
+                    <strong>{{ company_profile.company_name|default:"Heavenection" }}</strong>
+                    <small>{{ company_profile.company_email|default:"CallTrack Admin Console" }}</small>
+                </span>
             </a>
         </div>
         <div class="mf-nav-group">Workspace Navigation</div>
@@ -117,6 +127,33 @@
                         <a href="{% url 'working-hours-page' %}" class="hc-sidebar-link{% if active_page == 'hours' %} active{% endif %}">
                             <i class="bi bi-clock-history"></i>
                             <span>Working Hours</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hc-sidebar-section{% if active_page == 'settings' %} is-expanded{% endif %}">
+                <button
+                    type="button"
+                    class="hc-sidebar-toggle"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#hcSidebarAdministration"
+                    aria-expanded="{% if active_page == 'settings' %}true{% else %}false{% endif %}"
+                    aria-controls="hcSidebarAdministration"
+                >
+                    <span class="hc-sidebar-toggle-icon"><i class="bi bi-sliders2"></i></span>
+                    <span class="hc-sidebar-toggle-copy">
+                        <strong>Administration</strong>
+                        <small>Profile, brand, and company settings</small>
+                    </span>
+                    <span class="hc-sidebar-toggle-badge">1</span>
+                    <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
+                </button>
+                <div class="collapse{% if active_page == 'settings' %} show{% endif %}" id="hcSidebarAdministration" data-bs-parent="#hcSidebarNav">
+                    <div class="hc-sidebar-links">
+                        <a href="{% url 'settings-page' %}" class="hc-sidebar-link{% if active_page == 'settings' %} active{% endif %}">
+                            <i class="bi bi-person-gear"></i>
+                            <span>Admin Profile</span>
                         </a>
                     </div>
                 </div>

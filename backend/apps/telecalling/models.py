@@ -60,6 +60,34 @@ class Staff(AbstractBaseUser, PermissionsMixin):
         return self.name
 
 
+class CompanyProfile(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    company_name = models.CharField(max_length=150, default="Heavenection")
+    legal_name = models.CharField(max_length=200, blank=True)
+    company_email = models.EmailField(blank=True)
+    company_phone = models.CharField(max_length=20, blank=True)
+    support_phone = models.CharField(max_length=20, blank=True)
+    website = models.URLField(blank=True)
+    address_line_1 = models.CharField(max_length=255, blank=True)
+    address_line_2 = models.CharField(max_length=255, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    state = models.CharField(max_length=100, blank=True)
+    postal_code = models.CharField(max_length=20, blank=True)
+    country = models.CharField(max_length=100, blank=True, default="India")
+    tax_identifier = models.CharField(max_length=50, blank=True)
+    description = models.TextField(blank=True)
+    logo = models.FileField(upload_to="branding/", blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Company Profile"
+        verbose_name_plural = "Company Profile"
+
+    def __str__(self):
+        return self.company_name
+
+
 class Lead(models.Model):
     class Status(models.TextChoices):
         NEW = "new", "New"
