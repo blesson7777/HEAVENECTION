@@ -1402,6 +1402,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _lastCallActivityAt = endedAt;
       if (call.status == 'started') {
         _pendingStatusCallId = call.id;
+        _pendingStatusLeadId = pendingCall.leadId;
         _pendingStatusLeadName = lead?.name ?? '';
         _pendingStatusLeadPhone = lead?.phone ?? pendingCall.phone;
         _callStatus = 'Follow Up';
@@ -1446,6 +1447,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _lastCallActivityAt = DateTime.now();
       if (call.status == 'started') {
         _pendingStatusCallId = call.id;
+        _pendingStatusLeadId = leadId;
         _pendingStatusLeadName = lead?.name ?? '';
         _pendingStatusLeadPhone = lead?.phone ?? '';
         _callStatus = 'Follow Up';
@@ -2073,6 +2075,71 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     });
   }
 
+  Future<void> _recoverPendingCallStatusPrompt() async {
+    _registerInteraction(syncServer: false);
+    _callStatusDialogContext = null;
+    _isCallStatusPromptVisible = false;
+
+    await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+    if (!mounted) {
+      return;
+    }
+    if (!_hasPendingCallStatus) {
+      _showMessage('There is no pending call result to mark right now.');
+      return;
+    }
+    await _showPendingCallStatusPrompt();
+  }
+
+  Widget _buildPendingCallStatusBanner() {
+    if (!_hasPendingCallStatus) {
+      return const SizedBox.shrink();
+    }
+
+    final leadSummary = _pendingStatusLeadName.isNotEmpty
+        ? _pendingStatusLeadName
+        : (_pendingStatusLeadPhone.isNotEmpty
+              ? _pendingStatusLeadPhone
+              : 'recent customer');
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: kOrange.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.assignment_late, color: kOrange),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Call Result Pending',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Finish the result for $leadSummary before moving on to the next customer.',
+            style: const TextStyle(fontSize: 15.5, color: Colors.black54),
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            onPressed: _recoverPendingCallStatusPrompt,
+            icon: const Icon(Icons.assignment_turned_in),
+            label: const Text('Mark Call Result'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showMessage(String message, {bool isError = false}) {
     if (!mounted) {
       return;
@@ -2150,6 +2217,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             markSize: 36,
           ),
           actions: [
+            if (_hasPendingCallStatus)
+              IconButton(
+                onPressed: _recoverPendingCallStatusPrompt,
+                icon: const Icon(Icons.assignment_late),
+              ),
             IconButton(
               onPressed: _isLoadingData
                   ? null
@@ -2437,6 +2509,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             ),
             const SizedBox(height: 18),
           ],
+          if (_hasPendingCallStatus) ...[
+            _buildPendingCallStatusBanner(),
+            const SizedBox(height: 18),
+          ],
           Row(
             children: [
               Expanded(
@@ -2555,6 +2631,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             style: const TextStyle(fontSize: 16.5, color: Colors.black54),
           ),
           const SizedBox(height: 16),
+          if (_hasPendingCallStatus) ...[
+            _buildPendingCallStatusBanner(),
+            const SizedBox(height: 16),
+          ],
           if (_leads.isEmpty)
             Container(
               padding: const EdgeInsets.all(18),
