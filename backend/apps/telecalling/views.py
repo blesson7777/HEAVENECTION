@@ -31,6 +31,8 @@ from backend.apps.telecalling.serializers import (
     StaffActionSerializer,
     StaffSerializer,
     StartCallSerializer,
+    StaffProfileSerializer,
+    StaffProfileUpdateSerializer,
     TrainingLessonSerializer,
     UpdateLeadSerializer,
     UpdateStaffSerializer,
@@ -728,6 +730,18 @@ def login_api(request):
 @api_view(["GET"])
 def auth_me_api(request):
     return Response(StaffSerializer(request.user).data)
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsCallingStaff])
+def staff_profile_api(request):
+    if request.method == "GET":
+        return Response(StaffProfileSerializer(request.user, context={"request": request}).data)
+
+    serializer = StaffProfileUpdateSerializer(request.user, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    staff = serializer.save()
+    return Response(StaffProfileSerializer(staff, context={"request": request}).data)
 
 
 @api_view(["POST"])

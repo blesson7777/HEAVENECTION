@@ -106,6 +106,120 @@ class StaffSerializer(serializers.ModelSerializer):
         )
 
 
+class StaffProfileSerializer(serializers.ModelSerializer):
+    role_label = serializers.CharField(source="get_role_display", read_only=True)
+    aadhar_photo_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Staff
+        fields = (
+            "id",
+            "name",
+            "phone",
+            "email",
+            "role",
+            "role_label",
+            "is_active",
+            "bank_account_name",
+            "bank_name",
+            "bank_account_number",
+            "bank_ifsc_code",
+            "aadhar_number",
+            "aadhar_photo_url",
+            "last_seen_at",
+        )
+
+    def get_aadhar_photo_url(self, obj):
+        request = self.context.get("request")
+        if not obj.aadhar_photo:
+            return ""
+        if request:
+            return request.build_absolute_uri(obj.aadhar_photo.url)
+        return obj.aadhar_photo.url
+
+
+class StaffProfileUpdateSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=150, required=False)
+    phone = serializers.CharField(max_length=20, required=False)
+    email = serializers.EmailField(required=False, allow_blank=True)
+    bank_account_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    bank_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    bank_account_number = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    bank_ifsc_code = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    aadhar_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    aadhar_photo = serializers.FileField(required=False, allow_null=True)
+    remove_aadhar_photo = serializers.BooleanField(required=False, default=False, write_only=True)
+    current_password = serializers.CharField(required=False, allow_blank=False, write_only=True)
+    new_password = serializers.CharField(min_length=6, required=False, allow_blank=False, write_only=True)
+
+    def validate_phone(self, value):
+        phone = value.strip()
+        instance = getattr(self, "instance", None)
+        queryset = Staff.objects.filter(phone=phone)
+        if instance:
+            queryset = queryset.exclude(pk=instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Phone number already exists.")
+        return phone
+
+    def validate_aadhar_number(self, value):
+        normalized = "".join(char for char in value if char.isdigit())
+        if normalized and len(normalized) != 12:
+            raise serializers.ValidationError("Enter a valid 12-digit Aadhaar number.")
+        return normalized
+
+    def validate_aadhar_photo(self, value):
+        if not value:
+            return value
+        content_type = getattr(value, "content_type", "")
+        if content_type and not content_type.startswith("image/"):
+            raise serializers.ValidationError("Upload an image file for the Aadhaar photo.")
+        if getattr(value, "size", 0) > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Aadhaar photo size must be 5 MB or smaller.")
+        return value
+
+    def validate(self, attrs):
+        current_password = attrs.get("current_password")
+        new_password = attrs.get("new_password")
+        instance = getattr(self, "instance", None)
+
+        if new_password and not current_password:
+            raise serializers.ValidationError(
+                {"current_password": "Enter your current password to set a new password."}
+            )
+        if current_password and instance and not instance.check_password(current_password):
+            raise serializers.ValidationError(
+                {"current_password": "Current password is incorrect."}
+            )
+        return attrs
+
+    def update(self, instance, validated_data):
+        remove_aadhar_photo = validated_data.pop("remove_aadhar_photo", False)
+        new_photo = validated_data.pop("aadhar_photo", None)
+        validated_data.pop("current_password", None)
+        new_password = validated_data.pop("new_password", None)
+        previous_photo = instance.aadhar_photo if instance.aadhar_photo else None
+
+        for field, value in validated_data.items():
+            setattr(instance, field, value)
+
+        if remove_aadhar_photo:
+            instance.aadhar_photo = None
+        elif new_photo is not None:
+            instance.aadhar_photo = new_photo
+
+        if new_password:
+            instance.set_password(new_password)
+
+        instance.save()
+
+        if remove_aadhar_photo and previous_photo:
+            previous_photo.delete(save=False)
+        elif new_photo is not None and previous_photo and previous_photo.name != instance.aadhar_photo.name:
+            previous_photo.delete(save=False)
+        return instance
+
+
 class CreateStaffSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150)
     phone = serializers.CharField(max_length=20)

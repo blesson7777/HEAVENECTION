@@ -6,6 +6,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_phone_direct_caller/flutter_phone_direct_caller.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
@@ -105,9 +106,22 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     with WidgetsBindingObserver {
   final phone = TextEditingController();
   final password = TextEditingController();
+  final _profileNameController = TextEditingController();
+  final _profilePhoneController = TextEditingController();
+  final _profileEmailController = TextEditingController();
+  final _bankAccountNameController = TextEditingController();
+  final _bankNameController = TextEditingController();
+  final _bankAccountNumberController = TextEditingController();
+  final _bankIfscController = TextEditingController();
+  final _aadharNumberController = TextEditingController();
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final ImagePicker _imagePicker = ImagePicker();
   final ApiClient _apiClient = ApiClient(baseUrl: kApiBaseUrl);
 
   StaffUser? _user;
+  StaffProfile? _profile;
   DailySummary _summary = DailySummary.empty();
   LearningSummary _learningSummary = LearningSummary.empty();
   List<LeadItem> _leads = const [];
@@ -116,6 +130,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _isBootstrapping = true;
   bool _isLoggingIn = false;
   bool _isLoadingData = false;
+  bool _isProfileLoading = false;
+  bool _isProfileSaving = false;
   bool _isSessionBusy = false;
   bool _isTrainingPromptVisible = false;
   bool _isNetworkErrorVisible = false;
@@ -148,6 +164,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _isHeartbeatRequestInFlight = false;
   bool _isSyncingCallLog = false;
   bool _isCallStatusPromptVisible = false;
+  File? _selectedAadharPhoto;
+  bool _removeAadharPhoto = false;
 
   @override
   void initState() {
@@ -163,6 +181,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     WidgetsBinding.instance.removeObserver(this);
     phone.dispose();
     password.dispose();
+    _profileNameController.dispose();
+    _profilePhoneController.dispose();
+    _profileEmailController.dispose();
+    _bankAccountNameController.dispose();
+    _bankNameController.dispose();
+    _bankAccountNumberController.dispose();
+    _bankIfscController.dispose();
+    _aadharNumberController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     _callTimer?.cancel();
     _heartbeatTimer?.cancel();
     _idleMonitorTimer?.cancel();
@@ -233,6 +262,29 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     return _lessons
         .where((lesson) => lesson.searchableText.contains(query))
         .toList();
+  }
+
+  void _applyProfile(StaffProfile profile) {
+    _profile = profile;
+    _user = StaffUser(
+      id: profile.id,
+      name: profile.name,
+      phone: profile.phone,
+      role: profile.role,
+    );
+    _profileNameController.text = profile.name;
+    _profilePhoneController.text = profile.phone;
+    _profileEmailController.text = profile.email;
+    _bankAccountNameController.text = profile.bankAccountName;
+    _bankNameController.text = profile.bankName;
+    _bankAccountNumberController.text = profile.bankAccountNumber;
+    _bankIfscController.text = profile.bankIfscCode;
+    _aadharNumberController.text = profile.aadharNumber;
+    _currentPasswordController.clear();
+    _newPasswordController.clear();
+    _confirmPasswordController.clear();
+    _selectedAadharPhoto = null;
+    _removeAadharPhoto = false;
   }
 
   void _applyLearningPayload(LearningCenterPayload payload) {
@@ -518,9 +570,13 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           _user = restoredUser;
           _updatePreferredOrientations();
           await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+          await _loadProfile(showLoader: false);
         }
       } else {
         await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+        if (_tab == 3 || _profile == null) {
+          await _loadProfile(showLoader: false);
+        }
       }
 
       if (!mounted) {
@@ -533,7 +589,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _isNetworkErrorVisible = false;
         _tab = _lastLoadedTab < 0
             ? 0
-            : (_lastLoadedTab > 2 ? 2 : _lastLoadedTab);
+            : (_lastLoadedTab > 3 ? 3 : _lastLoadedTab);
       });
     } on ApiException catch (error) {
       if (error.code != 'network_error') {
@@ -554,6 +610,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _user = restoredUser;
         _updatePreferredOrientations();
         await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+        await _loadProfile(showLoader: false);
       }
     } on ApiException catch (error) {
       if (error.code == 'network_error') {
@@ -627,6 +684,46 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
+  Future<void> _loadProfile({bool showLoader = true}) async {
+    if (_isProfileLoading) {
+      return;
+    }
+
+    if (showLoader && mounted) {
+      setState(() => _isProfileLoading = true);
+    } else {
+      _isProfileLoading = true;
+    }
+
+    try {
+      final profile = await _apiClient.fetchStaffProfile();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _applyProfile(profile);
+        _isNetworkErrorVisible = false;
+      });
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+        return;
+      }
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Unable to load the profile right now. Reconnect and try again.',
+        );
+        return;
+      }
+      _showMessage(error.message, isError: true);
+    } finally {
+      _isProfileLoading = false;
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
   Future<void> _handleLogin() async {
     FocusScope.of(context).unfocus();
     setState(() => _loginErrorText = null);
@@ -652,6 +749,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _user = user;
       _updatePreferredOrientations();
       await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+      await _loadProfile(showLoader: false);
     } on ApiException catch (error) {
       if (error.code == 'network_error') {
         _showNetworkError(
@@ -679,6 +777,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
     setState(() {
       _user = null;
+      _profile = null;
       _summary = DailySummary.empty();
       _learningSummary = LearningSummary.empty();
       _leads = const [];
@@ -692,6 +791,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _lastCallActivityAt = null;
       _backgroundedAt = null;
       _clearPendingCallStatus();
+      _selectedAadharPhoto = null;
+      _removeAadharPhoto = false;
     });
     _updatePreferredOrientations();
     _showMessage('Session expired. Please sign in again.', isError: true);
@@ -714,6 +815,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
     setState(() {
       _user = null;
+      _profile = null;
       _summary = DailySummary.empty();
       _learningSummary = LearningSummary.empty();
       _leads = const [];
@@ -727,8 +829,98 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _lastCallActivityAt = null;
       _backgroundedAt = null;
       _clearPendingCallStatus();
+      _selectedAadharPhoto = null;
+      _removeAadharPhoto = false;
     });
     _updatePreferredOrientations();
+  }
+
+  Future<void> _pickAadharPhoto() async {
+    _registerInteraction(syncServer: false);
+    try {
+      final image = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1600,
+      );
+      if (image == null || !mounted) {
+        return;
+      }
+      setState(() {
+        _selectedAadharPhoto = File(image.path);
+        _removeAadharPhoto = false;
+      });
+    } catch (_) {
+      _showMessage('Could not open the photo picker.', isError: true);
+    }
+  }
+
+  Future<void> _saveProfile() async {
+    FocusScope.of(context).unfocus();
+    if (_isProfileSaving) {
+      return;
+    }
+    if (_profileNameController.text.trim().isEmpty ||
+        _profilePhoneController.text.trim().isEmpty) {
+      _showMessage('Name and phone number are required.', isError: true);
+      return;
+    }
+    if (_newPasswordController.text.isNotEmpty &&
+        _confirmPasswordController.text != _newPasswordController.text) {
+      _showMessage('New password and confirm password must match.', isError: true);
+      return;
+    }
+    if (_newPasswordController.text.isNotEmpty &&
+        _currentPasswordController.text.isEmpty) {
+      _showMessage(
+        'Enter the current password before changing it.',
+        isError: true,
+      );
+      return;
+    }
+
+    setState(() => _isProfileSaving = true);
+    try {
+      final profile = await _apiClient.updateStaffProfile(
+        name: _profileNameController.text.trim(),
+        phone: _profilePhoneController.text.trim(),
+        email: _profileEmailController.text.trim(),
+        bankAccountName: _bankAccountNameController.text.trim(),
+        bankName: _bankNameController.text.trim(),
+        bankAccountNumber: _bankAccountNumberController.text.trim(),
+        bankIfscCode: _bankIfscController.text.trim(),
+        aadharNumber: _aadharNumberController.text.trim(),
+        currentPassword: _currentPasswordController.text.trim().isEmpty
+            ? null
+            : _currentPasswordController.text,
+        newPassword: _newPasswordController.text.trim().isEmpty
+            ? null
+            : _newPasswordController.text,
+        aadharPhoto: _selectedAadharPhoto,
+        removeAadharPhoto: _removeAadharPhoto,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() => _applyProfile(profile));
+      _showMessage('Profile updated successfully.');
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+        return;
+      }
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Unable to save the profile because the network is unavailable.',
+        );
+        return;
+      }
+      _showMessage(error.message, isError: true);
+    } finally {
+      if (mounted) {
+        setState(() => _isProfileSaving = false);
+      }
+    }
   }
 
   Future<void> _startWork({bool fromTraining = false}) async {
@@ -1939,7 +2131,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (_user == null) {
       return _login();
     }
-    final pages = [_dashboard(), _leadList(), _learningCenter()];
+    final pages = [
+      _dashboard(),
+      _leadList(),
+      _learningCenter(),
+      _staffProfilePage(),
+    ];
 
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -1959,6 +2156,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   : () {
                       _registerInteraction(syncServer: false);
                       _loadDashboardData(promptTrainingGate: false);
+                      if (_tab == 3) {
+                        _loadProfile(showLoader: false);
+                      }
                     },
               icon: _isLoadingData
                   ? const SizedBox(
@@ -1967,13 +2167,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.refresh),
-            ),
-            IconButton(
-              onPressed: () {
-                _registerInteraction(syncServer: false);
-                _logout();
-              },
-              icon: const Icon(Icons.logout),
             ),
           ],
         ),
@@ -1991,6 +2184,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             _registerInteraction(syncServer: false);
             _lastLoadedTab = value;
             setState(() => _tab = value);
+            if (value == 3 && _profile == null) {
+              unawaited(_loadProfile());
+            }
           },
           destinations: const [
             NavigationDestination(
@@ -2007,6 +2203,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               icon: Icon(Icons.school_outlined),
               selectedIcon: Icon(Icons.school),
               label: 'Learn',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'Profile',
             ),
           ],
         ),
@@ -2773,6 +2974,389 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         ],
       ),
     );
+  }
+
+  Widget _staffProfilePage() {
+    final profile = _profile;
+    final imageWidget = _selectedAadharPhoto != null
+        ? ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Image.file(
+              _selectedAadharPhoto!,
+              width: double.infinity,
+              height: 190,
+              fit: BoxFit.cover,
+            ),
+          )
+        : (_removeAadharPhoto || profile == null || !profile.hasAadharPhoto)
+        ? Container(
+            width: double.infinity,
+            height: 190,
+            decoration: BoxDecoration(
+              color: kSoft,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.badge_outlined, size: 42, color: kPrimaryDark),
+                SizedBox(height: 10),
+                Text(
+                  'No Aadhaar photo added',
+                  style: TextStyle(
+                    fontSize: 15.5,
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          )
+        : ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Image.network(
+              profile.aadharPhotoUrl,
+              width: double.infinity,
+              height: 190,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  width: double.infinity,
+                  height: 190,
+                  decoration: BoxDecoration(
+                    color: kSoft,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Could not load the saved Aadhaar photo.',
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+
+    return RefreshIndicator(
+      onRefresh: () {
+        _registerInteraction(syncServer: false);
+        return _loadProfile();
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          const Text(
+            'Profile',
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            profile == null
+                ? 'Keep your account, banking, and identity details up to date.'
+                : 'Signed in as ${profile.name}. Update personal and payout details here.',
+            style: const TextStyle(fontSize: 16.5, color: Colors.black54),
+          ),
+          const SizedBox(height: 16),
+          if (_isProfileLoading && profile == null)
+            Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: const Center(child: CircularProgressIndicator()),
+            )
+          else ...[
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InfoCard(
+                          title: 'Role',
+                          value: profile?.roleLabel.isNotEmpty == true
+                              ? profile!.roleLabel
+                              : 'Staff',
+                          color: kPrimary,
+                          icon: Icons.badge,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: InfoCard(
+                          title: 'Status',
+                          value: profile?.isActive == true ? 'Active' : 'Inactive',
+                          color: profile?.isActive == true ? kGreen : kRed,
+                          icon: Icons.verified_user,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (profile?.lastSeenAt != null) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: kSoft,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Text(
+                        'Last seen: ${_formatProfileDate(profile!.lastSeenAt!)}',
+                        style: const TextStyle(
+                          color: kPrimaryDark,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Personal details',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _profileNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Full Name',
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _profilePhoneController,
+                    keyboardType: TextInputType.phone,
+                    decoration: const InputDecoration(
+                      labelText: 'Phone Number',
+                      prefixIcon: Icon(Icons.phone),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _profileEmailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: const InputDecoration(
+                      labelText: 'Email',
+                      prefixIcon: Icon(Icons.email_outlined),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Bank details',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _bankAccountNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Account Holder Name',
+                      prefixIcon: Icon(Icons.account_circle_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _bankNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Bank Name',
+                      prefixIcon: Icon(Icons.account_balance_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _bankAccountNumberController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Account Number',
+                      prefixIcon: Icon(Icons.numbers),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _bankIfscController,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      labelText: 'IFSC Code',
+                      prefixIcon: Icon(Icons.approval_outlined),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Aadhaar details',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _aadharNumberController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Aadhaar Number',
+                      prefixIcon: Icon(Icons.badge_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  imageWidget,
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _pickAadharPhoto,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('Choose Photo'),
+                      ),
+                      if (_selectedAadharPhoto != null ||
+                          (profile?.hasAadharPhoto == true && !_removeAadharPhoto))
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _selectedAadharPhoto = null;
+                              _removeAadharPhoto = true;
+                            });
+                          },
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Remove Photo'),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Change password',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _currentPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Current Password',
+                      prefixIcon: Icon(Icons.lock_outline),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _newPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'New Password',
+                      prefixIcon: Icon(Icons.lock_reset_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _confirmPasswordController,
+                    obscureText: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Confirm New Password',
+                      prefixIcon: Icon(Icons.verified_outlined),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton.icon(
+              onPressed: _isProfileSaving ? null : _saveProfile,
+              icon: _isProfileSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.save_outlined),
+              label: Text(_isProfileSaving ? 'Saving...' : 'Save Profile'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _logout,
+              icon: const Icon(Icons.logout),
+              style: OutlinedButton.styleFrom(foregroundColor: kRed),
+              label: const Text('Logout'),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatProfileDate(DateTime value) {
+    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+    final minute = value.minute.toString().padLeft(2, '0');
+    final period = value.hour >= 12 ? 'PM' : 'AM';
+    final months = const [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${value.day} ${months[value.month - 1]} ${value.year}, $hour:$minute $period';
   }
 }
 

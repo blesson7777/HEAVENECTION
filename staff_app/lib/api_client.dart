@@ -81,6 +81,49 @@ class ApiClient {
     return StaffUser.fromJson(_decodeMap(response.body));
   }
 
+  Future<StaffProfile> fetchStaffProfile() async {
+    final response = await _send('GET', '/api/staff/profile/');
+    return StaffProfile.fromJson(_decodeMap(response.body));
+  }
+
+  Future<StaffProfile> updateStaffProfile({
+    required String name,
+    required String phone,
+    required String email,
+    required String bankAccountName,
+    required String bankName,
+    required String bankAccountNumber,
+    required String bankIfscCode,
+    required String aadharNumber,
+    String? currentPassword,
+    String? newPassword,
+    File? aadharPhoto,
+    bool removeAadharPhoto = false,
+  }) async {
+    final response = await _sendMultipart(
+      'PATCH',
+      '/api/staff/profile/',
+      fields: {
+        'name': name,
+        'phone': phone,
+        'email': email,
+        'bank_account_name': bankAccountName,
+        'bank_name': bankName,
+        'bank_account_number': bankAccountNumber,
+        'bank_ifsc_code': bankIfscCode,
+        'aadhar_number': aadharNumber,
+        'remove_aadhar_photo': removeAadharPhoto ? 'true' : 'false',
+        if (currentPassword != null && currentPassword.isNotEmpty)
+          'current_password': currentPassword,
+        if (newPassword != null && newPassword.isNotEmpty)
+          'new_password': newPassword,
+      },
+      fileFieldName: aadharPhoto != null ? 'aadhar_photo' : null,
+      filePath: aadharPhoto?.path,
+    );
+    return StaffProfile.fromJson(_decodeMap(response.body));
+  }
+
   Future<DailySummary> fetchTodaySummary() async {
     final response = await _send('GET', '/api/staff/today-summary/');
     final payload = _decodeMap(response.body);
@@ -289,11 +332,69 @@ class ApiClient {
 
     if (response.statusCode >= 400) {
       final payload = _tryDecodeMap(response.body);
-      final detail = payload?['detail']?.toString();
       final code = payload?['code']?.toString();
-      final message = detail == null || detail.isEmpty
-          ? 'Request failed.'
-          : detail;
+      final message = _errorMessageFromPayload(payload);
+      throw ApiException(message, statusCode: response.statusCode, code: code);
+    }
+
+    return response;
+  }
+
+  Future<http.Response> _sendMultipart(
+    String method,
+    String path, {
+    required Map<String, String> fields,
+    String? fileFieldName,
+    String? filePath,
+    bool requiresAuth = true,
+    bool retryOnAuthFailure = true,
+  }) async {
+    final uri = Uri.parse('$baseUrl$path');
+    final request = http.MultipartRequest(method, uri);
+    request.headers['Accept'] = 'application/json';
+    if (requiresAuth && _accessToken != null) {
+      request.headers['Authorization'] = 'Bearer $_accessToken';
+    }
+    request.fields.addAll(fields);
+    if (fileFieldName != null && filePath != null && filePath.isNotEmpty) {
+      request.files.add(await http.MultipartFile.fromPath(fileFieldName, filePath));
+    }
+
+    late http.Response response;
+    try {
+      final streamed = await _client.send(request);
+      response = await http.Response.fromStream(streamed);
+    } on SocketException {
+      throw const ApiException(
+        'Network connection lost.',
+        statusCode: 0,
+        code: 'network_error',
+      );
+    } on http.ClientException {
+      throw const ApiException(
+        'Network connection lost.',
+        statusCode: 0,
+        code: 'network_error',
+      );
+    }
+
+    if (response.statusCode == 401 && requiresAuth && retryOnAuthFailure) {
+      await _refreshAccessToken();
+      return _sendMultipart(
+        method,
+        path,
+        fields: fields,
+        fileFieldName: fileFieldName,
+        filePath: filePath,
+        requiresAuth: requiresAuth,
+        retryOnAuthFailure: false,
+      );
+    }
+
+    if (response.statusCode >= 400) {
+      final payload = _tryDecodeMap(response.body);
+      final code = payload?['code']?.toString();
+      final message = _errorMessageFromPayload(payload);
       throw ApiException(message, statusCode: response.statusCode, code: code);
     }
 
@@ -312,5 +413,43 @@ class ApiClient {
     } catch (_) {
       return null;
     }
+  }
+
+  String _errorMessageFromPayload(Map<String, dynamic>? payload) {
+    if (payload == null || payload.isEmpty) {
+      return 'Request failed.';
+    }
+    final detail = payload['detail']?.toString();
+    if (detail != null && detail.isNotEmpty) {
+      return detail;
+    }
+    for (final entry in payload.entries) {
+      final message = _flattenErrorValue(entry.value);
+      if (message.isNotEmpty) {
+        return '${entry.key}: $message';
+      }
+    }
+    return 'Request failed.';
+  }
+
+  String _flattenErrorValue(Object? value) {
+    if (value == null) {
+      return '';
+    }
+    if (value is String) {
+      return value;
+    }
+    if (value is List) {
+      return value.map(_flattenErrorValue).where((item) => item.isNotEmpty).join(' ');
+    }
+    if (value is Map) {
+      for (final entry in value.entries) {
+        final message = _flattenErrorValue(entry.value);
+        if (message.isNotEmpty) {
+          return '${entry.key}: $message';
+        }
+      }
+    }
+    return value.toString();
   }
 }

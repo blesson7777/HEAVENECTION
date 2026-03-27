@@ -21,6 +21,63 @@ class StaffUser {
   }
 }
 
+class StaffProfile {
+  const StaffProfile({
+    required this.id,
+    required this.name,
+    required this.phone,
+    required this.email,
+    required this.role,
+    required this.roleLabel,
+    required this.isActive,
+    required this.bankAccountName,
+    required this.bankName,
+    required this.bankAccountNumber,
+    required this.bankIfscCode,
+    required this.aadharNumber,
+    required this.aadharPhotoUrl,
+    required this.lastSeenAt,
+  });
+
+  final String id;
+  final String name;
+  final String phone;
+  final String email;
+  final String role;
+  final String roleLabel;
+  final bool isActive;
+  final String bankAccountName;
+  final String bankName;
+  final String bankAccountNumber;
+  final String bankIfscCode;
+  final String aadharNumber;
+  final String aadharPhotoUrl;
+  final DateTime? lastSeenAt;
+
+  bool get hasAadharPhoto => aadharPhotoUrl.trim().isNotEmpty;
+
+  factory StaffProfile.fromJson(Map<String, dynamic> json) {
+    return StaffProfile(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      role: json['role']?.toString() ?? '',
+      roleLabel: json['role_label']?.toString() ?? '',
+      isActive: json['is_active'] == true,
+      bankAccountName: json['bank_account_name']?.toString() ?? '',
+      bankName: json['bank_name']?.toString() ?? '',
+      bankAccountNumber: json['bank_account_number']?.toString() ?? '',
+      bankIfscCode: json['bank_ifsc_code']?.toString() ?? '',
+      aadharNumber: json['aadhar_number']?.toString() ?? '',
+      aadharPhotoUrl: json['aadhar_photo_url']?.toString() ?? '',
+      lastSeenAt: json['last_seen_at'] == null
+          ? null
+          : DateTime.tryParse(json['last_seen_at'].toString())?.toLocal(),
+    );
+  }
+}
+
 class LeadItem {
   const LeadItem({
     required this.id,

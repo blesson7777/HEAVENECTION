@@ -28,6 +28,7 @@ urlpatterns = [
     path("salary/control/<uuid:staff_id>/", views.salary_control_detail_api, name="api-salary-control-detail"),
     path("staff/today-summary/", views.staff_today_summary_api, name="api-staff-today-summary"),
     path("staff/leads/", views.assigned_leads_api, name="api-staff-leads"),
+    path("staff/profile/", views.staff_profile_api, name="api-staff-profile"),
     path("staff/learning/", views.staff_learning_api, name="api-staff-learning"),
     path("staff/learning/<uuid:lesson_id>/complete/", views.complete_training_lesson_api, name="api-staff-learning-complete"),
     path("staff/session/start/", views.start_session_api, name="api-session-start"),
