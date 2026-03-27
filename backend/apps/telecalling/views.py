@@ -21,6 +21,7 @@ from backend.apps.telecalling.serializers import (
     CreateStaffSerializer,
     CreateTrainingLessonSerializer,
     EndCallSerializer,
+    FollowupUpdateUploadSerializer,
     HeartbeatSerializer,
     LeadSerializer,
     LeadImportUploadSerializer,
@@ -40,6 +41,8 @@ from backend.apps.telecalling.services import (
     authenticate_staff,
     build_call_detail_payload,
     build_dashboard_payload,
+    build_followup_csv_response,
+    build_followup_payload,
     build_learning_management_payload,
     build_lead_management_payload,
     build_salary_control_payload,
@@ -65,6 +68,7 @@ from backend.apps.telecalling.services import (
     start_staff_session,
     TrainingRequiredError,
     update_staff_call_status,
+    update_followups_from_upload,
 )
 
 
@@ -482,6 +486,64 @@ def leads_page(request):
         extra_context=payload,
     )
     return render(request, "admin_leads.html", context)
+
+
+@require_http_methods(["GET", "POST"])
+def followups_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    if request.method == "POST":
+        followup_action = request.POST.get("followup_action")
+        if followup_action == "csv_update":
+            serializer = FollowupUpdateUploadSerializer(data={"file": request.FILES.get("file")})
+            if serializer.is_valid():
+                try:
+                    summary = update_followups_from_upload(serializer.validated_data["file"])
+                except ValueError as error:
+                    messages.error(request, str(error))
+                else:
+                    if summary["error_messages"]:
+                        messages.warning(
+                            request,
+                            "Follow-up updates finished with some skipped rows. "
+                            + " ".join(summary["error_messages"]),
+                        )
+                    messages.success(
+                        request,
+                        "Follow-up CSV processed. "
+                        f"Updated {summary['updated_count']}, skipped {summary['skipped_count']}, "
+                        f"not found {summary['missing_count']}.",
+                    )
+                return redirect("followups-page")
+
+            messages.error(
+                request,
+                "Follow-up CSV update failed. "
+                + " ".join(_normalize_errors(serializer.errors).values()),
+            )
+            return redirect("followups-page")
+
+        messages.error(request, "Follow-up request could not be processed.")
+        return redirect("followups-page")
+
+    if request.GET.get("download") == "csv":
+        csv_content = build_followup_csv_response()
+        response = HttpResponse(csv_content, content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="heavenection-followups.csv"'
+        return response
+
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="followups",
+        page_title="Follow-Up Queue",
+        page_heading="Follow-Up Queue",
+        page_subtitle="Review leads that need another touch and update them in bulk with CSV.",
+        extra_context=build_followup_payload(),
+    )
+    return render(request, "admin_followups.html", context)
 
 
 @require_GET

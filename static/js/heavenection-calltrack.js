@@ -192,6 +192,7 @@
     function bindSearchAndFilters() {
         const setups = [
             { inputId: "leadSearchInput", tableBodyId: "leadTableBody" },
+            { inputId: "followupSearchInput", tableBodyId: "followupTableBody" },
             { inputId: "callSearchInput", tableBodyId: "callTableBody" },
             { inputId: "staffSearchInput", tableBodyId: "staffTableBody" },
             { inputId: "learningSearchInput", tableBodyId: "learningTableBody" },

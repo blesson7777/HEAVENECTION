@@ -44,6 +44,10 @@ ACTIVE_QUEUE_STATUSES = (
     Lead.Status.CALL_BACK,
     Lead.Status.INTERESTED,
 )
+FOLLOW_UP_STATUSES = (
+    Lead.Status.INTERESTED,
+    Lead.Status.CALL_BACK,
+)
 TERMINAL_QUEUE_STATUSES = (
     Lead.Status.NOT_INTERESTED,
     Lead.Status.NO_ANSWER,
@@ -81,6 +85,46 @@ PHONE_COLUMN_ALIASES = {
     "number",
     "whatsapp",
     "whatsapp number",
+}
+LEAD_ID_COLUMN_ALIASES = {
+    "id",
+    "lead id",
+    "leadid",
+}
+STATUS_COLUMN_ALIASES = {
+    "status",
+    "lead status",
+    "call status",
+    "result",
+    "followup status",
+    "follow up status",
+}
+CALLBACK_WINDOW_COLUMN_ALIASES = {
+    "callback window",
+    "callback slot",
+    "call back slot",
+    "time slot",
+    "schedule",
+    "callback time",
+}
+NOTES_COLUMN_ALIASES = {
+    "notes",
+    "remarks",
+    "comment",
+    "comments",
+}
+ASSIGNED_STAFF_PHONE_COLUMN_ALIASES = {
+    "assigned to phone",
+    "assigned staff phone",
+    "staff phone",
+    "assignee phone",
+}
+ASSIGNED_STAFF_NAME_COLUMN_ALIASES = {
+    "assigned to",
+    "assigned staff",
+    "staff",
+    "staff name",
+    "assignee",
 }
 
 
@@ -519,6 +563,40 @@ def _is_active_queue_status(status):
     return status in ACTIVE_QUEUE_STATUSES
 
 
+def _follow_up_queryset():
+    return Lead.objects.filter(status__in=FOLLOW_UP_STATUSES)
+
+
+def _normalize_status_value(value):
+    normalized = _normalize_column_name(value)
+    status_map = {
+        "new": Lead.Status.NEW,
+        "follow up": Lead.Status.INTERESTED,
+        "followup": Lead.Status.INTERESTED,
+        "interested": Lead.Status.INTERESTED,
+        "rejected": Lead.Status.NOT_INTERESTED,
+        "not interested": Lead.Status.NOT_INTERESTED,
+        "no response": Lead.Status.NO_ANSWER,
+        "no answer": Lead.Status.NO_ANSWER,
+        "callback": Lead.Status.CALL_BACK,
+        "call back": Lead.Status.CALL_BACK,
+        "converted": Lead.Status.CONVERTED,
+    }
+    return status_map.get(normalized, "")
+
+
+def _normalize_callback_window_value(value):
+    normalized = _normalize_column_name(value)
+    callback_map = {
+        "": "",
+        "noon": Lead.CallbackWindow.NOON,
+        "afternoon": Lead.CallbackWindow.NOON,
+        "evening": Lead.CallbackWindow.EVENING,
+        "night": Lead.CallbackWindow.NIGHT,
+    }
+    return callback_map.get(normalized, "")
+
+
 def _current_callback_window(now=None):
     local_now = timezone.localtime(now or timezone.now())
     hour = local_now.hour
@@ -810,6 +888,170 @@ def import_leads_from_upload(uploaded_file):
         "assigned_count": allocation["assigned_count"],
         "remaining_unassigned_count": allocation["remaining_unassigned_count"],
         "queue_limit": get_lead_queue_limit(),
+    }
+
+
+def _detect_followup_update_column_indexes(rows):
+    if not rows:
+        raise ValueError("The uploaded file is empty.")
+
+    header = [_normalize_column_name(cell) for cell in rows[0]]
+    indexes = {
+        "lead_id": None,
+        "phone": None,
+        "status": None,
+        "callback_window": None,
+        "notes": None,
+        "assigned_staff_phone": None,
+        "assigned_staff_name": None,
+    }
+
+    for index, value in enumerate(header):
+        if indexes["lead_id"] is None and value in LEAD_ID_COLUMN_ALIASES:
+            indexes["lead_id"] = index
+        if indexes["phone"] is None and value in PHONE_COLUMN_ALIASES:
+            indexes["phone"] = index
+        if indexes["status"] is None and value in STATUS_COLUMN_ALIASES:
+            indexes["status"] = index
+        if indexes["callback_window"] is None and value in CALLBACK_WINDOW_COLUMN_ALIASES:
+            indexes["callback_window"] = index
+        if indexes["notes"] is None and value in NOTES_COLUMN_ALIASES:
+            indexes["notes"] = index
+        if indexes["assigned_staff_phone"] is None and value in ASSIGNED_STAFF_PHONE_COLUMN_ALIASES:
+            indexes["assigned_staff_phone"] = index
+        if indexes["assigned_staff_name"] is None and value in ASSIGNED_STAFF_NAME_COLUMN_ALIASES:
+            indexes["assigned_staff_name"] = index
+
+    if indexes["lead_id"] is None and indexes["phone"] is None:
+        raise ValueError("The update file must include either lead id or phone number.")
+
+    editable_columns = (
+        indexes["status"],
+        indexes["callback_window"],
+        indexes["notes"],
+        indexes["assigned_staff_phone"],
+        indexes["assigned_staff_name"],
+    )
+    if all(index is None for index in editable_columns):
+        raise ValueError(
+            "Include at least one update column: status, callback window, notes, or assigned staff."
+        )
+
+    return indexes, rows[1:]
+
+
+def _cell_value(row_values, index):
+    if index is None or index >= len(row_values):
+        return ""
+    return str(row_values[index] or "").strip()
+
+
+def update_followups_from_upload(uploaded_file):
+    rows = _read_lead_rows_from_upload(uploaded_file)
+    indexes, data_rows = _detect_followup_update_column_indexes(rows)
+
+    staff_by_phone = {
+        _normalize_phone(staff.phone): staff
+        for staff in _staff_queryset().filter(is_active=True)
+    }
+    staff_by_name = {
+        _normalize_column_name(staff.name): staff
+        for staff in _staff_queryset().filter(is_active=True)
+    }
+
+    updated_count = 0
+    skipped_count = 0
+    missing_count = 0
+    error_messages = []
+
+    for row_number, row in enumerate(data_rows, start=2):
+        row_values = list(row)
+        lead_id = _cell_value(row_values, indexes["lead_id"])
+        phone = _normalize_phone(_cell_value(row_values, indexes["phone"]))
+        if not lead_id and not phone:
+            skipped_count += 1
+            continue
+
+        lead = None
+        if lead_id:
+            lead = Lead.objects.filter(id=lead_id).first()
+        if lead is None and phone:
+            lead = Lead.objects.filter(phone=phone).order_by("-updated_at").first()
+
+        if lead is None:
+            missing_count += 1
+            continue
+
+        payload = {}
+        status_value = _cell_value(row_values, indexes["status"])
+        if status_value:
+            normalized_status = _normalize_status_value(status_value)
+            if not normalized_status:
+                error_messages.append(f"Row {row_number}: unknown status '{status_value}'.")
+                continue
+            payload["status"] = normalized_status
+
+        callback_value = _cell_value(row_values, indexes["callback_window"])
+        if indexes["callback_window"] is not None:
+            normalized_callback = _normalize_callback_window_value(callback_value)
+            if callback_value and not normalized_callback:
+                error_messages.append(
+                    f"Row {row_number}: callback slot must be Noon, Evening, or Night."
+                )
+                continue
+            payload["callback_window"] = normalized_callback
+
+        if indexes["notes"] is not None:
+            payload["notes"] = _cell_value(row_values, indexes["notes"])
+
+        assigned_staff_phone = _normalize_phone(
+            _cell_value(row_values, indexes["assigned_staff_phone"])
+        )
+        assigned_staff_name = _normalize_column_name(
+            _cell_value(row_values, indexes["assigned_staff_name"])
+        )
+        if indexes["assigned_staff_phone"] is not None or indexes["assigned_staff_name"] is not None:
+            if assigned_staff_phone:
+                assigned_staff = staff_by_phone.get(assigned_staff_phone)
+                if not assigned_staff:
+                    error_messages.append(
+                        f"Row {row_number}: no active staff found for phone '{assigned_staff_phone}'."
+                    )
+                    continue
+                payload["assigned_to"] = assigned_staff.id
+            elif assigned_staff_name:
+                assigned_staff = staff_by_name.get(assigned_staff_name)
+                if not assigned_staff:
+                    error_messages.append(
+                        f"Row {row_number}: no active staff found for '{assigned_staff_name}'."
+                    )
+                    continue
+                payload["assigned_to"] = assigned_staff.id
+            else:
+                payload["assigned_to"] = None
+
+        if not payload:
+            skipped_count += 1
+            continue
+
+        from backend.apps.telecalling.serializers import UpdateLeadSerializer
+
+        serializer = UpdateLeadSerializer(lead, data=payload, partial=True)
+        if not serializer.is_valid():
+            error_messages.append(
+                f"Row {row_number}: {' '.join(str(value[0]) if isinstance(value, list) else str(value) for value in serializer.errors.values())}"
+            )
+            continue
+
+        serializer.save()
+        updated_count += 1
+
+    auto_allocate_leads()
+    return {
+        "updated_count": updated_count,
+        "skipped_count": skipped_count,
+        "missing_count": missing_count,
+        "error_messages": error_messages[:10],
     }
 
 
@@ -1637,6 +1879,97 @@ def build_lead_management_payload():
             "queue_limit": queue_limit,
         },
     }
+
+
+def build_followup_payload():
+    current_slot = _current_callback_window()
+    followups = (
+        _follow_up_queryset()
+        .select_related("assigned_to")
+        .annotate(
+            callback_priority=Case(
+                When(status=Lead.Status.CALL_BACK, callback_window=current_slot, then=Value(0)),
+                When(status=Lead.Status.CALL_BACK, then=Value(1)),
+                default=Value(2),
+                output_field=IntegerField(),
+            )
+        )
+        .order_by("callback_priority", "-last_contacted_at", "-updated_at")
+    )
+
+    followup_rows = []
+    for lead in followups:
+        followup_rows.append(
+            {
+                "id": str(lead.id),
+                "name": lead.name,
+                "phone": lead.phone,
+                "status": lead.status,
+                "status_label": lead.get_status_display(),
+                "callback_window": lead.callback_window,
+                "callback_window_label": lead.get_callback_window_display() if lead.callback_window else "",
+                "assigned_to_id": str(lead.assigned_to_id) if lead.assigned_to_id else "",
+                "assigned_to": lead.assigned_to.name if lead.assigned_to else "Unassigned",
+                "assigned_to_phone": lead.assigned_to.phone if lead.assigned_to else "",
+                "notes": lead.notes,
+                "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
+                "updated_at": _format_datetime(lead.updated_at),
+                "is_due_now": lead.status == Lead.Status.CALL_BACK and lead.callback_window == current_slot,
+            }
+        )
+
+    return {
+        "followup_rows": followup_rows,
+        "staff_options": [
+            {"id": str(staff.id), "name": staff.name}
+            for staff in _staff_queryset().filter(is_active=True)
+        ],
+        "followup_summary": {
+            "total_followups": len(followup_rows),
+            "follow_up_count": sum(1 for row in followup_rows if row["status"] == Lead.Status.INTERESTED),
+            "callback_count": sum(1 for row in followup_rows if row["status"] == Lead.Status.CALL_BACK),
+            "due_now_count": sum(1 for row in followup_rows if row["is_due_now"]),
+            "unassigned_count": sum(1 for row in followup_rows if not row["assigned_to_id"]),
+            "current_slot_label": dict(Lead.CallbackWindow.choices).get(current_slot, "No slot"),
+        },
+    }
+
+
+def build_followup_csv_response():
+    response = io.StringIO()
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Lead ID",
+            "Name",
+            "Phone",
+            "Status",
+            "Callback Window",
+            "Assigned Staff",
+            "Assigned Staff Phone",
+            "Notes",
+            "Last Contacted",
+            "Updated At",
+        ]
+    )
+
+    for row in build_followup_payload()["followup_rows"]:
+        writer.writerow(
+            [
+                row["id"],
+                row["name"],
+                row["phone"],
+                row["status_label"],
+                row["callback_window_label"],
+                row["assigned_to"],
+                row["assigned_to_phone"],
+                row["notes"],
+                row["last_contacted"],
+                row["updated_at"],
+            ]
+        )
+
+    return response.getvalue()
 
 
 def build_call_detail_payload(limit=200):

@@ -456,6 +456,16 @@ class LeadImportUploadSerializer(serializers.Serializer):
         return value
 
 
+class FollowupUpdateUploadSerializer(serializers.Serializer):
+    file = serializers.FileField()
+
+    def validate_file(self, value):
+        file_name = str(getattr(value, "name", "")).lower()
+        if not file_name.endswith((".csv", ".xlsx", ".xlsm")):
+            raise serializers.ValidationError("Upload a CSV or Excel file for follow-up updates.")
+        return value
+
+
 class SessionSerializer(serializers.ModelSerializer):
     staff_name = serializers.CharField(source="staff.name", read_only=True)
 
