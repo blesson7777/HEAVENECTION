@@ -1,4 +1,6 @@
 (function () {
+    document.body.classList.add('hc-ux-ready');
+
     function formatMetricValue(value, format) {
         const rounded = Math.round(value);
         if (format === 'number') {

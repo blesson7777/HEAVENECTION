@@ -1,14 +1,14 @@
-const CACHE_NAME = "heavenection-calltrack-v3";
+const CACHE_NAME = "heavenection-calltrack-v4";
 const STATIC_ASSETS = [
     "/offline/",
     "/manifest.webmanifest",
-    "/static/css/style.css",
-    "/static/css/dashboard.css",
-    "/static/css/heavenection-calltrack.css",
-    "/static/js/dashboard-ux.js",
-    "/static/js/heavenection-calltrack.js",
-    "/static/js/heavenection-network.js",
-    "/static/js/heavenection-pwa.js",
+    "/static/css/style.css?v=20260327c",
+    "/static/css/dashboard.css?v=20260327c",
+    "/static/css/heavenection-calltrack.css?v=20260327c",
+    "/static/js/dashboard-ux.js?v=20260327c",
+    "/static/js/heavenection-calltrack.js?v=20260327c",
+    "/static/js/heavenection-network.js?v=20260327c",
+    "/static/js/heavenection-pwa.js?v=20260327c",
     "/static/pwa/icon-192.png",
     "/static/pwa/icon-512.png"
 ];
