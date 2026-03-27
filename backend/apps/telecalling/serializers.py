@@ -1,3 +1,4 @@
+from django.db.models import Sum
 from rest_framework import serializers
 from django.utils import timezone
 
@@ -110,6 +111,7 @@ class StaffSerializer(serializers.ModelSerializer):
 class StaffProfileSerializer(serializers.ModelSerializer):
     role_label = serializers.CharField(source="get_role_display", read_only=True)
     aadhar_photo_url = serializers.SerializerMethodField()
+    salary_summary = serializers.SerializerMethodField()
     salary_history = serializers.SerializerMethodField()
 
     class Meta:
@@ -129,6 +131,7 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             "aadhar_number",
             "aadhar_photo_url",
             "last_seen_at",
+            "salary_summary",
             "salary_history",
         )
 
@@ -143,6 +146,29 @@ class StaffProfileSerializer(serializers.ModelSerializer):
     def get_salary_history(self, obj):
         records = obj.salary_records.filter(is_paid=True).order_by("-paid_at", "-period_end")[:20]
         return SalaryHistorySerializer(records, many=True).data
+
+    def get_salary_summary(self, obj):
+        totals = obj.salary_records.filter(is_paid=True).aggregate(
+            total_hours=Sum("total_hours"),
+            total_earned=Sum("final_salary"),
+            total_paid=Sum("paid_amount"),
+        )
+        latest_record = obj.salary_records.filter(is_paid=True).order_by("-paid_at", "-period_end").first()
+        total_hours = totals.get("total_hours") or 0
+        total_earned = totals.get("total_earned") or 0
+        total_paid = totals.get("total_paid") or 0
+        return {
+            "total_working_hours": float(total_hours),
+            "total_working_hours_label": f"{float(total_hours):,.1f}h",
+            "total_earned_amount": float(total_earned),
+            "total_earned_amount_label": f"Rs. {float(total_earned):,.2f}",
+            "total_paid_amount": float(total_paid),
+            "total_paid_amount_label": f"Rs. {float(total_paid):,.2f}",
+            "latest_transaction_id": latest_record.payment_reference if latest_record and latest_record.payment_reference else "",
+            "latest_paid_at_label": timezone.localtime(latest_record.paid_at).strftime("%d %b %Y, %I:%M %p")
+            if latest_record and latest_record.paid_at
+            else "--",
+        }
 
 
 class StaffProfileUpdateSerializer(serializers.Serializer):
@@ -717,6 +743,8 @@ class SalaryHistorySerializer(serializers.ModelSerializer):
     payout_cycle_label = serializers.CharField(source="get_payout_cycle_display", read_only=True)
     payment_method_label = serializers.CharField(source="get_payment_method_display", read_only=True)
     period_label = serializers.SerializerMethodField()
+    total_hours_label = serializers.SerializerMethodField()
+    final_salary_label = serializers.SerializerMethodField()
     paid_amount_label = serializers.SerializerMethodField()
     paid_at_label = serializers.SerializerMethodField()
 
@@ -730,7 +758,9 @@ class SalaryHistorySerializer(serializers.ModelSerializer):
             "payout_cycle",
             "payout_cycle_label",
             "total_hours",
+            "total_hours_label",
             "final_salary",
+            "final_salary_label",
             "paid_amount",
             "paid_amount_label",
             "paid_at",
@@ -743,6 +773,12 @@ class SalaryHistorySerializer(serializers.ModelSerializer):
 
     def get_period_label(self, obj):
         return f"{obj.period_start.strftime('%d %b %Y')} to {obj.period_end.strftime('%d %b %Y')}"
+
+    def get_total_hours_label(self, obj):
+        return f"{float(obj.total_hours or 0):,.1f}h"
+
+    def get_final_salary_label(self, obj):
+        return f"Rs. {float(obj.final_salary or 0):,.2f}"
 
     def get_paid_amount_label(self, obj):
         return f"Rs. {float(obj.paid_amount or 0):,.2f}"

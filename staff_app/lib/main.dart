@@ -3058,6 +3058,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   Widget _staffProfilePage() {
     final profile = _profile;
+    final salarySummary = profile?.salarySummary;
     final salaryHistory = profile?.salaryHistory ?? const <SalaryHistoryItem>[];
     final imageWidget = _selectedAadharPhoto != null
         ? ClipRRect(
@@ -3198,6 +3199,103 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                       ),
                     ),
                   ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Salary overview',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Track total worked hours, earned salary, paid salary, and the latest transaction details.',
+                    style: TextStyle(fontSize: 14.5, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      SizedBox(
+                        width: 150,
+                        child: InfoCard(
+                          title: 'Hours',
+                          value: salarySummary?.totalWorkingHoursLabel ?? '0.0h',
+                          color: kPrimary,
+                          icon: Icons.timer_outlined,
+                        ),
+                      ),
+                      SizedBox(
+                        width: 150,
+                        child: InfoCard(
+                          title: 'Earned',
+                          value: salarySummary?.totalEarnedAmountLabel ?? 'Rs. 0.00',
+                          color: kGreen,
+                          icon: Icons.account_balance_wallet_outlined,
+                        ),
+                      ),
+                      SizedBox(
+                        width: 150,
+                        child: InfoCard(
+                          title: 'Paid',
+                          value: salarySummary?.totalPaidAmountLabel ?? 'Rs. 0.00',
+                          color: kOrange,
+                          icon: Icons.payments_outlined,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: kSoft,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Latest transaction ID',
+                          style: TextStyle(
+                            color: Colors.black54,
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          salarySummary?.latestTransactionId.isNotEmpty == true
+                              ? salarySummary!.latestTransactionId
+                              : 'Transaction ID not added yet',
+                          style: const TextStyle(
+                            color: kPrimaryDark,
+                            fontSize: 15.5,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Last payment: ${salarySummary?.latestPaidAtLabel ?? '--'}',
+                          style: const TextStyle(
+                            color: Colors.black54,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -3496,20 +3594,30 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  'Hours ${salary.totalHours.toStringAsFixed(1)} • Calculated Rs. ${salary.finalSalary.toStringAsFixed(2)}',
+                                  'Worked ${salary.totalHoursLabel} • Earned ${salary.finalSalaryLabel}',
                                   style: const TextStyle(
                                     fontSize: 13.5,
                                     color: Colors.black54,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Paid amount: ${salary.paidAmountLabel}',
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    color: Colors.black54,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 if (salary.paymentReference.isNotEmpty &&
                                     salary.paymentReference != '--') ...[
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Reference: ${salary.paymentReference}',
+                                    'Transaction ID: ${salary.paymentReference}',
                                     style: const TextStyle(
                                       fontSize: 13.5,
                                       color: Colors.black54,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ],

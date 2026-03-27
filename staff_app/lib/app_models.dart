@@ -44,6 +44,7 @@ class StaffProfile {
     required this.aadharNumber,
     required this.aadharPhotoUrl,
     required this.lastSeenAt,
+    required this.salarySummary,
     required this.salaryHistory,
   });
 
@@ -61,6 +62,7 @@ class StaffProfile {
   final String aadharNumber;
   final String aadharPhotoUrl;
   final DateTime? lastSeenAt;
+  final SalarySummary salarySummary;
   final List<SalaryHistoryItem> salaryHistory;
 
   bool get hasAadharPhoto => aadharPhotoUrl.trim().isNotEmpty;
@@ -78,19 +80,62 @@ class StaffProfile {
       bankName: json['bank_name']?.toString() ?? '',
       bankAccountNumber: json['bank_account_number']?.toString() ?? '',
       bankIfscCode: json['bank_ifsc_code']?.toString() ?? '',
-        aadharNumber: json['aadhar_number']?.toString() ?? '',
-        aadharPhotoUrl: json['aadhar_photo_url']?.toString() ?? '',
-        lastSeenAt: json['last_seen_at'] == null
-            ? null
-            : DateTime.tryParse(json['last_seen_at'].toString())?.toLocal(),
-        salaryHistory: (json['salary_history'] as List?)
-                ?.whereType<Map<String, dynamic>>()
-                .map(SalaryHistoryItem.fromJson)
-                .toList() ??
-            const [],
-      );
-    }
+      aadharNumber: json['aadhar_number']?.toString() ?? '',
+      aadharPhotoUrl: json['aadhar_photo_url']?.toString() ?? '',
+      lastSeenAt: json['last_seen_at'] == null
+          ? null
+          : DateTime.tryParse(json['last_seen_at'].toString())?.toLocal(),
+      salarySummary: SalarySummary.fromJson(
+        json['salary_summary'] is Map<String, dynamic>
+            ? json['salary_summary'] as Map<String, dynamic>
+            : const {},
+      ),
+      salaryHistory: (json['salary_history'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .map(SalaryHistoryItem.fromJson)
+              .toList() ??
+          const [],
+    );
   }
+}
+
+class SalarySummary {
+  const SalarySummary({
+    required this.totalWorkingHours,
+    required this.totalWorkingHoursLabel,
+    required this.totalEarnedAmount,
+    required this.totalEarnedAmountLabel,
+    required this.totalPaidAmount,
+    required this.totalPaidAmountLabel,
+    required this.latestTransactionId,
+    required this.latestPaidAtLabel,
+  });
+
+  final double totalWorkingHours;
+  final String totalWorkingHoursLabel;
+  final double totalEarnedAmount;
+  final String totalEarnedAmountLabel;
+  final double totalPaidAmount;
+  final String totalPaidAmountLabel;
+  final String latestTransactionId;
+  final String latestPaidAtLabel;
+
+  factory SalarySummary.fromJson(Map<String, dynamic> json) {
+    return SalarySummary(
+      totalWorkingHours: _asDouble(json['total_working_hours']),
+      totalWorkingHoursLabel:
+          json['total_working_hours_label']?.toString() ?? '0.0h',
+      totalEarnedAmount: _asDouble(json['total_earned_amount']),
+      totalEarnedAmountLabel:
+          json['total_earned_amount_label']?.toString() ?? 'Rs. 0.00',
+      totalPaidAmount: _asDouble(json['total_paid_amount']),
+      totalPaidAmountLabel:
+          json['total_paid_amount_label']?.toString() ?? 'Rs. 0.00',
+      latestTransactionId: json['latest_transaction_id']?.toString() ?? '',
+      latestPaidAtLabel: json['latest_paid_at_label']?.toString() ?? '--',
+    );
+  }
+}
 
 class SalaryHistoryItem {
   const SalaryHistoryItem({
@@ -98,7 +143,9 @@ class SalaryHistoryItem {
     required this.periodLabel,
     required this.payoutCycleLabel,
     required this.totalHours,
+    required this.totalHoursLabel,
     required this.finalSalary,
+    required this.finalSalaryLabel,
     required this.paidAmount,
     required this.paidAmountLabel,
     required this.paidAt,
@@ -112,7 +159,9 @@ class SalaryHistoryItem {
   final String periodLabel;
   final String payoutCycleLabel;
   final double totalHours;
+  final String totalHoursLabel;
   final double finalSalary;
+  final String finalSalaryLabel;
   final double paidAmount;
   final String paidAmountLabel;
   final DateTime? paidAt;
@@ -127,7 +176,9 @@ class SalaryHistoryItem {
       periodLabel: json['period_label']?.toString() ?? '',
       payoutCycleLabel: json['payout_cycle_label']?.toString() ?? '',
       totalHours: _asDouble(json['total_hours']),
+      totalHoursLabel: json['total_hours_label']?.toString() ?? '0.0h',
       finalSalary: _asDouble(json['final_salary']),
+      finalSalaryLabel: json['final_salary_label']?.toString() ?? 'Rs. 0.00',
       paidAmount: _asDouble(json['paid_amount']),
       paidAmountLabel: json['paid_amount_label']?.toString() ?? '',
       paidAt: json['paid_at'] == null
