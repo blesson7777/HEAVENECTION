@@ -1628,8 +1628,43 @@ def build_team_management_payload():
     }
 
     team_rows = []
+    total_assigned = 0
+    total_calls_today = 0
+    total_converted_today = 0
+    active_accounts = 0
+    online_now = 0
+    attention_needed = 0
     for staff in staff_queryset:
         session = open_sessions.get(staff.id)
+        online_label = _staff_online_label(
+            session,
+            active_cutoff,
+            is_in_customer_call=staff.id in live_call_staff_ids,
+        )
+        calls_today = call_totals.get(staff.id, 0)
+        converted_today = converted_totals.get(staff.id, 0)
+        assigned_leads = assigned_totals.get(staff.id, 0)
+        is_available = staff.is_active and online_label in {"Online", "On Call"}
+        status_filter = "inactive"
+        status_tone = "muted"
+        if staff.is_active:
+            active_accounts += 1
+            if online_label in {"Online", "On Call"}:
+                online_now += 1
+                status_filter = "online"
+                status_tone = "success"
+            elif online_label in {"Away", "Warning"}:
+                attention_needed += 1
+                status_filter = "attention"
+                status_tone = "warning"
+            else:
+                attention_needed += 1
+                status_filter = "offline"
+                status_tone = "muted"
+
+        total_assigned += assigned_leads
+        total_calls_today += calls_today
+        total_converted_today += converted_today
         team_rows.append(
             {
                 "id": str(staff.id),
@@ -1645,23 +1680,31 @@ def build_team_management_payload():
                 "target_hours_per_month": float(staff.target_hours_per_month),
                 "call_rate": _format_currency(staff.call_rate),
                 "bonus_per_conversion": _format_currency(staff.bonus_per_conversion),
-                "online_label": _staff_online_label(
-                    session,
-                    active_cutoff,
-                    is_in_customer_call=staff.id in live_call_staff_ids,
-                ),
+                "online_label": online_label,
+                "status_filter": status_filter,
+                "status_tone": status_tone,
                 "session_state": session.last_known_state if session else "stopped",
                 "active_hours_today": _format_hours(active_totals.get(staff.id, 0)),
                 "active_seconds_today": active_totals.get(staff.id, 0),
-                "calls_today": call_totals.get(staff.id, 0),
-                "converted_today": converted_totals.get(staff.id, 0),
-                "assigned_leads": assigned_totals.get(staff.id, 0),
+                "calls_today": calls_today,
+                "converted_today": converted_today,
+                "assigned_leads": assigned_leads,
                 "last_seen": _format_datetime(staff.last_seen_at),
+                "is_available": is_available,
             }
         )
 
     return {
         "today_label": today.strftime("%A, %d %b %Y"),
+        "team_summary": {
+            "total_staff": len(team_rows),
+            "active_accounts": active_accounts,
+            "online_now": online_now,
+            "attention_needed": attention_needed,
+            "total_assigned": total_assigned,
+            "total_calls_today": total_calls_today,
+            "total_converted_today": total_converted_today,
+        },
         "team_rows": team_rows,
     }
 
