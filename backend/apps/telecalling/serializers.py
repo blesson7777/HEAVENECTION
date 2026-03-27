@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.utils import timezone
 
 from backend.apps.telecalling.models import (
     Call,
@@ -109,6 +110,7 @@ class StaffSerializer(serializers.ModelSerializer):
 class StaffProfileSerializer(serializers.ModelSerializer):
     role_label = serializers.CharField(source="get_role_display", read_only=True)
     aadhar_photo_url = serializers.SerializerMethodField()
+    salary_history = serializers.SerializerMethodField()
 
     class Meta:
         model = Staff
@@ -127,6 +129,7 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             "aadhar_number",
             "aadhar_photo_url",
             "last_seen_at",
+            "salary_history",
         )
 
     def get_aadhar_photo_url(self, obj):
@@ -136,6 +139,10 @@ class StaffProfileSerializer(serializers.ModelSerializer):
         if request:
             return request.build_absolute_uri(obj.aadhar_photo.url)
         return obj.aadhar_photo.url
+
+    def get_salary_history(self, obj):
+        records = obj.salary_records.filter(is_paid=True).order_by("-paid_at", "-period_end")[:20]
+        return SalaryHistorySerializer(records, many=True).data
 
 
 class StaffProfileUpdateSerializer(serializers.Serializer):
@@ -675,6 +682,8 @@ class CallSerializer(serializers.ModelSerializer):
 
 class SalarySerializer(serializers.ModelSerializer):
     staff_name = serializers.CharField(source="staff.name", read_only=True)
+    payout_cycle_label = serializers.CharField(source="get_payout_cycle_display", read_only=True)
+    payment_method_label = serializers.CharField(source="get_payment_method_display", read_only=True)
 
     class Meta:
         model = Salary
@@ -684,12 +693,79 @@ class SalarySerializer(serializers.ModelSerializer):
             "staff_name",
             "period_start",
             "period_end",
+            "payout_cycle",
+            "payout_cycle_label",
             "total_hours",
             "total_call_minutes",
             "converted_leads",
+            "base_pay",
+            "call_earnings",
+            "bonus_earnings",
             "incentives",
             "final_salary",
+            "paid_amount",
+            "is_paid",
+            "paid_at",
+            "payment_method",
+            "payment_method_label",
+            "payment_reference",
+            "payment_note",
         )
+
+
+class SalaryHistorySerializer(serializers.ModelSerializer):
+    payout_cycle_label = serializers.CharField(source="get_payout_cycle_display", read_only=True)
+    payment_method_label = serializers.CharField(source="get_payment_method_display", read_only=True)
+    period_label = serializers.SerializerMethodField()
+    paid_amount_label = serializers.SerializerMethodField()
+    paid_at_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Salary
+        fields = (
+            "id",
+            "period_start",
+            "period_end",
+            "period_label",
+            "payout_cycle",
+            "payout_cycle_label",
+            "total_hours",
+            "final_salary",
+            "paid_amount",
+            "paid_amount_label",
+            "paid_at",
+            "paid_at_label",
+            "payment_method",
+            "payment_method_label",
+            "payment_reference",
+            "payment_note",
+        )
+
+    def get_period_label(self, obj):
+        return f"{obj.period_start.strftime('%d %b %Y')} to {obj.period_end.strftime('%d %b %Y')}"
+
+    def get_paid_amount_label(self, obj):
+        return f"Rs. {float(obj.paid_amount or 0):,.2f}"
+
+    def get_paid_at_label(self, obj):
+        if not obj.paid_at:
+            return "--"
+        return timezone.localtime(obj.paid_at).strftime("%d %b %Y, %I:%M %p")
+
+
+class SalaryPaymentSerializer(serializers.Serializer):
+    payout_cycle = serializers.ChoiceField(choices=Salary.PayoutCycle.choices)
+    period_start = serializers.DateField()
+    period_end = serializers.DateField()
+    paid_amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+    payment_method = serializers.ChoiceField(choices=Salary.PaymentMethod.choices, required=False, allow_blank=True)
+    payment_reference = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    payment_note = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        if attrs["period_end"] < attrs["period_start"]:
+            raise serializers.ValidationError({"period_end": "End date must be on or after the start date."})
+        return attrs
 
 
 class TrainingLessonSerializer(serializers.ModelSerializer):

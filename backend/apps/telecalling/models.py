@@ -270,15 +270,47 @@ class StaffAction(models.Model):
 
 
 class Salary(models.Model):
+    class PayoutCycle(models.TextChoices):
+        WEEKLY = "weekly", "Weekly"
+        MONTHLY = "monthly", "Monthly"
+        CUSTOM = "custom", "Custom"
+
+    class PaymentMethod(models.TextChoices):
+        BANK_TRANSFER = "bank_transfer", "Bank Transfer"
+        CASH = "cash", "Cash"
+        UPI = "upi", "UPI"
+        CHEQUE = "cheque", "Cheque"
+        OTHER = "other", "Other"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     staff = models.ForeignKey(Staff, on_delete=models.CASCADE, related_name="salary_records")
     period_start = models.DateField()
     period_end = models.DateField()
+    payout_cycle = models.CharField(
+        max_length=20,
+        choices=PayoutCycle.choices,
+        default=PayoutCycle.MONTHLY,
+        db_index=True,
+    )
     total_hours = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_call_minutes = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     converted_leads = models.PositiveIntegerField(default=0)
+    base_pay = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    call_earnings = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    bonus_earnings = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     incentives = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     final_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    is_paid = models.BooleanField(default=False, db_index=True)
+    paid_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    payment_method = models.CharField(
+        max_length=30,
+        choices=PaymentMethod.choices,
+        blank=True,
+        default="",
+    )
+    payment_reference = models.CharField(max_length=120, blank=True)
+    payment_note = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

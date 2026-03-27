@@ -18,6 +18,7 @@ urlpatterns = [
     path("recovery-leads/", views.recovery_leads_page, name="recovery-leads-page"),
     path("learning/", views.learning_page, name="learning-page"),
     path("salary/", views.salary_page, name="salary-page"),
+    path("salary/<uuid:staff_id>/", views.salary_detail_page, name="salary-detail-page"),
     path("salary-control/", views.salary_control_page, name="salary-control-page"),
     path("calls/", views.calls_page, name="calls-page"),
     path("working-hours/", views.working_hours_page, name="working-hours-page"),

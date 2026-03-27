@@ -1,3 +1,10 @@
+double _asDouble(dynamic value) {
+  if (value is num) {
+    return value.toDouble();
+  }
+  return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
 class StaffUser {
   const StaffUser({
     required this.id,
@@ -37,6 +44,7 @@ class StaffProfile {
     required this.aadharNumber,
     required this.aadharPhotoUrl,
     required this.lastSeenAt,
+    required this.salaryHistory,
   });
 
   final String id;
@@ -53,6 +61,7 @@ class StaffProfile {
   final String aadharNumber;
   final String aadharPhotoUrl;
   final DateTime? lastSeenAt;
+  final List<SalaryHistoryItem> salaryHistory;
 
   bool get hasAadharPhoto => aadharPhotoUrl.trim().isNotEmpty;
 
@@ -69,11 +78,65 @@ class StaffProfile {
       bankName: json['bank_name']?.toString() ?? '',
       bankAccountNumber: json['bank_account_number']?.toString() ?? '',
       bankIfscCode: json['bank_ifsc_code']?.toString() ?? '',
-      aadharNumber: json['aadhar_number']?.toString() ?? '',
-      aadharPhotoUrl: json['aadhar_photo_url']?.toString() ?? '',
-      lastSeenAt: json['last_seen_at'] == null
+        aadharNumber: json['aadhar_number']?.toString() ?? '',
+        aadharPhotoUrl: json['aadhar_photo_url']?.toString() ?? '',
+        lastSeenAt: json['last_seen_at'] == null
+            ? null
+            : DateTime.tryParse(json['last_seen_at'].toString())?.toLocal(),
+        salaryHistory: (json['salary_history'] as List?)
+                ?.whereType<Map<String, dynamic>>()
+                .map(SalaryHistoryItem.fromJson)
+                .toList() ??
+            const [],
+      );
+    }
+  }
+
+class SalaryHistoryItem {
+  const SalaryHistoryItem({
+    required this.id,
+    required this.periodLabel,
+    required this.payoutCycleLabel,
+    required this.totalHours,
+    required this.finalSalary,
+    required this.paidAmount,
+    required this.paidAmountLabel,
+    required this.paidAt,
+    required this.paidAtLabel,
+    required this.paymentMethodLabel,
+    required this.paymentReference,
+    required this.paymentNote,
+  });
+
+  final String id;
+  final String periodLabel;
+  final String payoutCycleLabel;
+  final double totalHours;
+  final double finalSalary;
+  final double paidAmount;
+  final String paidAmountLabel;
+  final DateTime? paidAt;
+  final String paidAtLabel;
+  final String paymentMethodLabel;
+  final String paymentReference;
+  final String paymentNote;
+
+  factory SalaryHistoryItem.fromJson(Map<String, dynamic> json) {
+    return SalaryHistoryItem(
+      id: json['id']?.toString() ?? '',
+      periodLabel: json['period_label']?.toString() ?? '',
+      payoutCycleLabel: json['payout_cycle_label']?.toString() ?? '',
+      totalHours: _asDouble(json['total_hours']),
+      finalSalary: _asDouble(json['final_salary']),
+      paidAmount: _asDouble(json['paid_amount']),
+      paidAmountLabel: json['paid_amount_label']?.toString() ?? '',
+      paidAt: json['paid_at'] == null
           ? null
-          : DateTime.tryParse(json['last_seen_at'].toString())?.toLocal(),
+          : DateTime.tryParse(json['paid_at'].toString())?.toLocal(),
+      paidAtLabel: json['paid_at_label']?.toString() ?? '',
+      paymentMethodLabel: json['payment_method_label']?.toString() ?? '',
+      paymentReference: json['payment_reference']?.toString() ?? '',
+      paymentNote: json['payment_note']?.toString() ?? '',
     );
   }
 }

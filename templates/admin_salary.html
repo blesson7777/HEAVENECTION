@@ -67,6 +67,7 @@
                     <th>This Week</th>
                     <th>This Month</th>
                     <th>Selected Payout</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="salaryTableBody">
@@ -95,10 +96,18 @@
                     <td>
                         <strong>{{ row.current_payable }}</strong>
                         <div class="text-muted small">{{ row.current_cycle_label }}</div>
+                        <div class="text-muted small">Credited {{ row.credited_total }}</div>
+                        <div class="text-muted small">Last paid {{ row.last_paid_at }}</div>
+                    </td>
+                    <td class="text-end">
+                        <a href="{% url 'salary-detail-page' row.id %}" class="btn btn-dark btn-sm">
+                            <i class="bi bi-wallet2"></i>
+                            <span>Details</span>
+                        </a>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" class="text-center py-4">No salary records available.</td></tr>
+                <tr><td colspan="7" class="text-center py-4">No salary records available.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

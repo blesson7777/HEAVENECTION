@@ -6,7 +6,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.conf import settings
-from django.db.models import Case, Count, IntegerField, Q, Sum, Value, When
+from django.db.models import Case, Count, IntegerField, Max, Q, Sum, Value, When
 from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 
@@ -263,6 +263,110 @@ def _current_cycle_payout(staff, weekly_breakdown, monthly_breakdown):
     if staff.compensation_type == Staff.CompensationType.MONTHLY:
         return monthly_breakdown["total_pay"], "Monthly Payout"
     return monthly_breakdown["total_pay"], "Hourly Running Total"
+
+
+def _quantized_decimal(value):
+    return Decimal(value or 0).quantize(TWOPLACES)
+
+
+def _date_range_bounds(period_start, period_end):
+    start_at = timezone.make_aware(timezone.datetime.combine(period_start, timezone.datetime.min.time()))
+    end_at = timezone.make_aware(timezone.datetime.combine(period_end, timezone.datetime.max.time()))
+    return start_at, end_at
+
+
+def calculate_staff_payout_for_dates(staff, period_start, period_end):
+    start_at, end_at = _date_range_bounds(period_start, period_end)
+    active_seconds = (
+        Session.objects.filter(staff=staff, login_time__range=(start_at, end_at)).aggregate(total=Sum("active_seconds")).get("total")
+        or 0
+    )
+    call_seconds = (
+        Call.objects.filter(staff=staff, start_time__range=(start_at, end_at), is_qualifying=True)
+        .aggregate(total=Sum("duration_seconds"))
+        .get("total")
+        or 0
+    )
+    converted_leads = Call.objects.filter(
+        staff=staff,
+        start_time__range=(start_at, end_at),
+        status=Call.Status.CONVERTED,
+        is_qualifying=True,
+    ).count()
+    breakdown = calculate_staff_payout(
+        staff,
+        active_seconds=active_seconds,
+        call_seconds=call_seconds,
+        converted_leads=converted_leads,
+    )
+    breakdown["period_start"] = period_start
+    breakdown["period_end"] = period_end
+    return breakdown
+
+
+def _salary_history_row(record):
+    return {
+        "id": str(record.id),
+        "period_start": record.period_start,
+        "period_end": record.period_end,
+        "period_label": f"{record.period_start.strftime('%d %b %Y')} to {record.period_end.strftime('%d %b %Y')}",
+        "payout_cycle": record.payout_cycle,
+        "payout_cycle_label": record.get_payout_cycle_display(),
+        "total_hours": float(record.total_hours or 0),
+        "total_hours_label": f"{round(float(record.total_hours or 0), 1)}h",
+        "final_salary": _format_currency(record.final_salary),
+        "paid_amount": _format_currency(record.paid_amount),
+        "is_paid": record.is_paid,
+        "paid_at": _format_datetime(record.paid_at),
+        "payment_method": record.payment_method,
+        "payment_method_label": record.get_payment_method_display() if record.payment_method else "Manual",
+        "payment_reference": record.payment_reference or "--",
+        "payment_note": record.payment_note or "--",
+    }
+
+
+def build_staff_salary_history_rows(staff, limit=20):
+    records = Salary.objects.filter(staff=staff, is_paid=True).order_by("-paid_at", "-period_end")[:limit]
+    return [_salary_history_row(record) for record in records]
+
+
+def record_staff_salary_payment(
+    staff,
+    *,
+    payout_cycle,
+    period_start,
+    period_end,
+    paid_amount,
+    payment_method="",
+    payment_reference="",
+    payment_note="",
+):
+    breakdown = calculate_staff_payout_for_dates(staff, period_start, period_end)
+    recommended_amount = _money(breakdown["total_pay"])
+    paid_amount_value = _money(paid_amount if paid_amount is not None else recommended_amount)
+    salary_record, created = Salary.objects.update_or_create(
+        staff=staff,
+        period_start=period_start,
+        period_end=period_end,
+        defaults={
+            "payout_cycle": payout_cycle,
+            "total_hours": _quantized_decimal(breakdown["active_hours"]),
+            "total_call_minutes": _quantized_decimal(breakdown["call_minutes"]),
+            "converted_leads": int(breakdown["converted_leads"]),
+            "base_pay": _money(breakdown["base_pay"]),
+            "call_earnings": _money(breakdown["call_earnings"]),
+            "bonus_earnings": _money(breakdown["bonus_earnings"]),
+            "incentives": _money(breakdown["call_earnings"] + breakdown["bonus_earnings"]),
+            "final_salary": recommended_amount,
+            "paid_amount": paid_amount_value,
+            "is_paid": True,
+            "paid_at": timezone.now(),
+            "payment_method": payment_method,
+            "payment_reference": payment_reference.strip(),
+            "payment_note": payment_note.strip(),
+        },
+    )
+    return salary_record, created
 
 
 def _salary_setting_target_label(staff):
@@ -1858,6 +1962,14 @@ def build_salary_page_payload():
     month_start, month_end = _month_range()
     week_session_totals, week_call_totals, week_converted = _staff_period_totals(week_start, week_end)
     month_session_totals, month_call_totals, month_converted = _staff_period_totals(month_start, month_end)
+    paid_totals_by_staff = {
+        row["staff_id"]: row["paid_total"] or Decimal("0.00")
+        for row in Salary.objects.filter(is_paid=True).values("staff_id").annotate(paid_total=Sum("paid_amount"))
+    }
+    paid_meta_by_staff = {
+        row["staff_id"]: row["last_paid_at"]
+        for row in Salary.objects.filter(is_paid=True).values("staff_id").annotate(last_paid_at=Max("paid_at"))
+    }
 
     weekly_total = Decimal("0.00")
     monthly_total = Decimal("0.00")
@@ -1919,6 +2031,8 @@ def build_salary_page_payload():
                 "current_cycle_label": cycle_label,
                 "current_payable_raw": current_payable,
                 "current_payable": _format_currency(current_payable),
+                "credited_total": _format_currency(paid_totals_by_staff.get(staff.id, Decimal("0.00"))),
+                "last_paid_at": _format_datetime(paid_meta_by_staff.get(staff.id)),
             }
         )
 
@@ -1947,6 +2061,65 @@ def build_salary_page_payload():
             "top_payout_value": top_row["current_payable"] if top_row else _format_currency(0),
         },
         "salary_rows": salary_rows,
+    }
+
+
+def build_salary_detail_payload(staff):
+    today = timezone.localdate()
+    week_start_at, _ = _week_range()
+    month_start_at, _ = _month_range()
+    week_start = timezone.localtime(week_start_at).date()
+    month_start = timezone.localtime(month_start_at).date()
+
+    weekly_breakdown = calculate_staff_payout_for_dates(staff, week_start, today)
+    monthly_breakdown = calculate_staff_payout_for_dates(staff, month_start, today)
+    salary_history = build_staff_salary_history_rows(staff, limit=40)
+    total_paid = Salary.objects.filter(staff=staff, is_paid=True).aggregate(total=Sum("paid_amount")).get("total") or Decimal("0.00")
+    latest_paid = Salary.objects.filter(staff=staff, is_paid=True).order_by("-paid_at", "-period_end").first()
+
+    return {
+        "staff_member": staff,
+        "summary": {
+            "weekly_payable": _format_currency(weekly_breakdown["total_pay"]),
+            "monthly_payable": _format_currency(monthly_breakdown["total_pay"]),
+            "weekly_hours": f"{round(float(weekly_breakdown['active_hours']), 1)}h",
+            "monthly_hours": f"{round(float(monthly_breakdown['active_hours']), 1)}h",
+            "total_paid": _format_currency(total_paid),
+            "last_paid_at": _format_datetime(latest_paid.paid_at) if latest_paid else "--",
+            "last_paid_amount": _format_currency(latest_paid.paid_amount) if latest_paid else _format_currency(0),
+        },
+        "weekly_breakdown": {
+            "period_label": f"{week_start.strftime('%d %b %Y')} to {today.strftime('%d %b %Y')}",
+            "period_start": week_start.isoformat(),
+            "period_end": today.isoformat(),
+            "hours": f"{round(float(weekly_breakdown['active_hours']), 1)}h",
+            "base_pay": _format_currency(weekly_breakdown["base_pay"]),
+            "call_earnings": _format_currency(weekly_breakdown["call_earnings"]),
+            "bonus_earnings": _format_currency(weekly_breakdown["bonus_earnings"]),
+            "recommended_amount": _format_currency(weekly_breakdown["total_pay"]),
+            "recommended_amount_raw": f"{_money(weekly_breakdown['total_pay']):.2f}",
+        },
+        "monthly_breakdown": {
+            "period_label": f"{month_start.strftime('%d %b %Y')} to {today.strftime('%d %b %Y')}",
+            "period_start": month_start.isoformat(),
+            "period_end": today.isoformat(),
+            "hours": f"{round(float(monthly_breakdown['active_hours']), 1)}h",
+            "base_pay": _format_currency(monthly_breakdown["base_pay"]),
+            "call_earnings": _format_currency(monthly_breakdown["call_earnings"]),
+            "bonus_earnings": _format_currency(monthly_breakdown["bonus_earnings"]),
+            "recommended_amount": _format_currency(monthly_breakdown["total_pay"]),
+            "recommended_amount_raw": f"{_money(monthly_breakdown['total_pay']):.2f}",
+        },
+        "custom_defaults": {
+            "period_start": month_start.isoformat(),
+            "period_end": today.isoformat(),
+            "paid_amount": f"{_money(monthly_breakdown['total_pay']):.2f}",
+        },
+        "payment_method_options": [
+            {"value": value, "label": label}
+            for value, label in Salary.PaymentMethod.choices
+        ],
+        "salary_history_rows": salary_history,
     }
 
 

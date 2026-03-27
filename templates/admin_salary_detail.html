@@ -1,0 +1,259 @@
+{% extends "admin_base.html" %}
+
+{% block page_actions %}
+<a href="{% url 'salary-page' %}" class="btn btn-outline-primary btn-sm">Back To Salary Overview</a>
+{% endblock %}
+
+{% block admin_content %}
+<section class="row g-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Weekly Payable</span>
+            <h4 class="mt-2 mb-1">{{ summary.weekly_payable }}</h4>
+            <p class="text-muted mb-0">{{ weekly_breakdown.period_label }}</p>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Monthly Payable</span>
+            <h4 class="mt-2 mb-1">{{ summary.monthly_payable }}</h4>
+            <p class="text-muted mb-0">{{ monthly_breakdown.period_label }}</p>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Total Credited</span>
+            <h4 class="mt-2 mb-1">{{ summary.total_paid }}</h4>
+            <p class="text-muted mb-0">Paid salary history</p>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Last Credit</span>
+            <h4 class="mt-2 mb-1">{{ summary.last_paid_amount }}</h4>
+            <p class="text-muted mb-0">{{ summary.last_paid_at }}</p>
+        </div>
+    </div>
+</section>
+
+<section class="row g-4 mt-1">
+    <div class="col-xl-6">
+        <div class="hc-surface-card h-100">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Weekly Breakdown</span>
+                    <h5>{{ staff_member.name }} weekly salary details</h5>
+                </div>
+                <span class="hc-sync-pill"><i class="bi bi-calendar2-week"></i> {{ weekly_breakdown.period_label }}</span>
+            </div>
+            <div class="hc-profile-meta-grid">
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Hours</span>
+                    <strong>{{ weekly_breakdown.hours }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Recommended</span>
+                    <strong>{{ weekly_breakdown.recommended_amount }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Base Pay</span>
+                    <strong>{{ weekly_breakdown.base_pay }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Call Earnings</span>
+                    <strong>{{ weekly_breakdown.call_earnings }}</strong>
+                </div>
+                <div class="hc-profile-meta-card hc-profile-meta-card-wide">
+                    <span class="hc-profile-meta-label">Bonus</span>
+                    <strong>{{ weekly_breakdown.bonus_earnings }}</strong>
+                </div>
+            </div>
+            <form method="post" action="{% url 'salary-detail-page' staff_member.id %}" class="mt-4">
+                {% csrf_token %}
+                <input type="hidden" name="payment_action" value="mark_weekly_paid">
+                <input type="hidden" name="period_start" value="{{ weekly_breakdown.period_start }}">
+                <input type="hidden" name="period_end" value="{{ weekly_breakdown.period_end }}">
+                <input type="hidden" name="paid_amount" value="{{ weekly_breakdown.recommended_amount_raw }}">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="weeklyPaymentReference">Reference</label>
+                        <input type="text" class="form-control" id="weeklyPaymentReference" name="payment_reference" placeholder="Txn id / bank ref">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="weeklyPaymentNote">Note</label>
+                        <input type="text" class="form-control" id="weeklyPaymentNote" name="payment_note" placeholder="Optional note">
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end mt-4">
+                    <button type="submit" class="btn btn-primary">Mark Weekly Salary Paid</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-xl-6">
+        <div class="hc-surface-card h-100">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Monthly Breakdown</span>
+                    <h5>{{ staff_member.name }} monthly salary details</h5>
+                </div>
+                <span class="hc-sync-pill"><i class="bi bi-calendar2-month"></i> {{ monthly_breakdown.period_label }}</span>
+            </div>
+            <div class="hc-profile-meta-grid">
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Hours</span>
+                    <strong>{{ monthly_breakdown.hours }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Recommended</span>
+                    <strong>{{ monthly_breakdown.recommended_amount }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Base Pay</span>
+                    <strong>{{ monthly_breakdown.base_pay }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Call Earnings</span>
+                    <strong>{{ monthly_breakdown.call_earnings }}</strong>
+                </div>
+                <div class="hc-profile-meta-card hc-profile-meta-card-wide">
+                    <span class="hc-profile-meta-label">Bonus</span>
+                    <strong>{{ monthly_breakdown.bonus_earnings }}</strong>
+                </div>
+            </div>
+            <form method="post" action="{% url 'salary-detail-page' staff_member.id %}" class="mt-4">
+                {% csrf_token %}
+                <input type="hidden" name="payment_action" value="mark_monthly_paid">
+                <input type="hidden" name="period_start" value="{{ monthly_breakdown.period_start }}">
+                <input type="hidden" name="period_end" value="{{ monthly_breakdown.period_end }}">
+                <input type="hidden" name="paid_amount" value="{{ monthly_breakdown.recommended_amount_raw }}">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="monthlyPaymentReference">Reference</label>
+                        <input type="text" class="form-control" id="monthlyPaymentReference" name="payment_reference" placeholder="Txn id / bank ref">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="monthlyPaymentNote">Note</label>
+                        <input type="text" class="form-control" id="monthlyPaymentNote" name="payment_note" placeholder="Optional note">
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end mt-4">
+                    <button type="submit" class="btn btn-dark">Mark Monthly Salary Paid</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<section class="row g-4 mt-1">
+    <div class="col-xl-5">
+        <div class="hc-surface-card h-100">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Custom Payment</span>
+                    <h5>Credit a custom salary amount</h5>
+                </div>
+            </div>
+            <form method="post" action="{% url 'salary-detail-page' staff_member.id %}" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="payment_action" value="mark_custom_paid">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="customPayoutCycle">Payout Cycle</label>
+                        <select class="form-select{% if custom_payment_errors.payout_cycle %} is-invalid{% endif %}" id="customPayoutCycle" name="payout_cycle">
+                            <option value="custom"{% if custom_form_data.payout_cycle == 'custom' %} selected{% endif %}>Custom</option>
+                            <option value="weekly"{% if custom_form_data.payout_cycle == 'weekly' %} selected{% endif %}>Weekly</option>
+                            <option value="monthly"{% if custom_form_data.payout_cycle == 'monthly' %} selected{% endif %}>Monthly</option>
+                        </select>
+                        {% if custom_payment_errors.payout_cycle %}<div class="invalid-feedback">{{ custom_payment_errors.payout_cycle }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="customPaidAmount">Credited Amount</label>
+                        <input type="number" step="0.01" min="0" class="form-control{% if custom_payment_errors.paid_amount %} is-invalid{% endif %}" id="customPaidAmount" name="paid_amount" value="{{ custom_form_data.paid_amount }}">
+                        {% if custom_payment_errors.paid_amount %}<div class="invalid-feedback">{{ custom_payment_errors.paid_amount }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="customPeriodStart">Period Start</label>
+                        <input type="date" class="form-control{% if custom_payment_errors.period_start %} is-invalid{% endif %}" id="customPeriodStart" name="period_start" value="{{ custom_form_data.period_start }}">
+                        {% if custom_payment_errors.period_start %}<div class="invalid-feedback">{{ custom_payment_errors.period_start }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="customPeriodEnd">Period End</label>
+                        <input type="date" class="form-control{% if custom_payment_errors.period_end %} is-invalid{% endif %}" id="customPeriodEnd" name="period_end" value="{{ custom_form_data.period_end }}">
+                        {% if custom_payment_errors.period_end %}<div class="invalid-feedback">{{ custom_payment_errors.period_end }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="customPaymentMethod">Payment Method</label>
+                        <select class="form-select{% if custom_payment_errors.payment_method %} is-invalid{% endif %}" id="customPaymentMethod" name="payment_method">
+                            {% for option in payment_method_options %}
+                            <option value="{{ option.value }}"{% if custom_form_data.payment_method == option.value %} selected{% endif %}>{{ option.label }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if custom_payment_errors.payment_method %}<div class="invalid-feedback">{{ custom_payment_errors.payment_method }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="customPaymentReference">Reference</label>
+                        <input type="text" class="form-control{% if custom_payment_errors.payment_reference %} is-invalid{% endif %}" id="customPaymentReference" name="payment_reference" value="{{ custom_form_data.payment_reference }}" placeholder="Txn id / bank ref">
+                        {% if custom_payment_errors.payment_reference %}<div class="invalid-feedback">{{ custom_payment_errors.payment_reference }}</div>{% endif %}
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold" for="customPaymentNote">Note</label>
+                        <textarea class="form-control{% if custom_payment_errors.payment_note %} is-invalid{% endif %}" id="customPaymentNote" name="payment_note" rows="4" placeholder="Add a note for this credit">{{ custom_form_data.payment_note }}</textarea>
+                        {% if custom_payment_errors.payment_note %}<div class="invalid-feedback">{{ custom_payment_errors.payment_note }}</div>{% endif %}
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end mt-4">
+                    <button type="submit" class="btn btn-primary">Save Custom Payment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="col-xl-7">
+        <div class="hc-surface-card h-100">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Salary History</span>
+                    <h5>Credited salary records</h5>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table hc-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th>Cycle</th>
+                            <th>Hours</th>
+                            <th>Credited</th>
+                            <th>Method</th>
+                            <th>Paid At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in salary_history_rows %}
+                        <tr>
+                            <td>
+                                <strong>{{ row.period_label }}</strong>
+                                <div class="text-muted small">Ref {{ row.payment_reference }}</div>
+                                <div class="text-muted small">{{ row.payment_note }}</div>
+                            </td>
+                            <td>{{ row.payout_cycle_label }}</td>
+                            <td>{{ row.total_hours_label }}</td>
+                            <td>
+                                <strong>{{ row.paid_amount }}</strong>
+                                <div class="text-muted small">Calculated {{ row.final_salary }}</div>
+                            </td>
+                            <td>{{ row.payment_method_label }}</td>
+                            <td>{{ row.paid_at }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" class="text-center py-4">No salary credits recorded yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

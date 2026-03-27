@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from backend.apps.telecalling.auth import clear_auth_cookies, get_staff_from_request, issue_tokens_for_user, set_auth_cookies
-from backend.apps.telecalling.models import Call, Lead, Staff, StaffAction, TrainingLesson
+from backend.apps.telecalling.models import Call, Lead, Salary, Staff, StaffAction, TrainingLesson
 from backend.apps.telecalling.permissions import IsAdminStaff, IsCallingStaff
 from backend.apps.telecalling.serializers import (
     AdminProfileSerializer,
@@ -26,6 +26,7 @@ from backend.apps.telecalling.serializers import (
     LeadSerializer,
     LeadImportUploadSerializer,
     LoginSerializer,
+    SalaryPaymentSerializer,
     SalarySettingsSerializer,
     SessionSerializer,
     StaffActionSerializer,
@@ -49,6 +50,7 @@ from backend.apps.telecalling.services import (
     build_lead_management_payload,
     build_recovery_lead_payload,
     build_salary_control_payload,
+    build_salary_detail_payload,
     build_salary_page_payload,
     build_settings_payload,
     build_staff_profile_payload,
@@ -65,6 +67,7 @@ from backend.apps.telecalling.services import (
     import_leads_from_upload,
     mark_staff_seen,
     read_root_file,
+    record_staff_salary_payment,
     record_session_heartbeat,
     release_staff_queue,
     reactivate_oldest_recovery_leads,
@@ -656,6 +659,92 @@ def salary_page(request):
         extra_context=build_salary_page_payload(),
     )
     return render(request, "admin_salary.html", context)
+
+
+@require_http_methods(["GET", "POST"])
+def salary_detail_page(request, staff_id):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    try:
+        staff = Staff.objects.get(id=staff_id, role=Staff.Role.STAFF)
+    except Staff.DoesNotExist:
+        messages.error(request, "Staff member not found.")
+        return redirect("salary-page")
+
+    payment_errors = {}
+
+    if request.method == "POST":
+        payment_action = request.POST.get("payment_action", "").strip()
+        if payment_action == "mark_weekly_paid":
+            form_data = {
+                "payout_cycle": "weekly",
+                "period_start": request.POST.get("period_start"),
+                "period_end": request.POST.get("period_end"),
+                "paid_amount": request.POST.get("paid_amount"),
+                "payment_method": Salary.PaymentMethod.BANK_TRANSFER,
+                "payment_reference": request.POST.get("payment_reference", ""),
+                "payment_note": request.POST.get("payment_note", ""),
+            }
+        elif payment_action == "mark_monthly_paid":
+            form_data = {
+                "payout_cycle": "monthly",
+                "period_start": request.POST.get("period_start"),
+                "period_end": request.POST.get("period_end"),
+                "paid_amount": request.POST.get("paid_amount"),
+                "payment_method": Salary.PaymentMethod.BANK_TRANSFER,
+                "payment_reference": request.POST.get("payment_reference", ""),
+                "payment_note": request.POST.get("payment_note", ""),
+            }
+        else:
+            form_data = {
+                "payout_cycle": request.POST.get("payout_cycle", "custom"),
+                "period_start": request.POST.get("period_start"),
+                "period_end": request.POST.get("period_end"),
+                "paid_amount": request.POST.get("paid_amount"),
+                "payment_method": request.POST.get("payment_method", ""),
+                "payment_reference": request.POST.get("payment_reference", ""),
+                "payment_note": request.POST.get("payment_note", ""),
+            }
+
+        serializer = SalaryPaymentSerializer(data=form_data)
+        if serializer.is_valid():
+            record, created = record_staff_salary_payment(staff, **serializer.validated_data)
+            messages.success(
+                request,
+                f"Salary marked as paid for {staff.name}. "
+                f"Credited {record.paid_amount} for {record.period_start} to {record.period_end}.",
+            )
+            return redirect("salary-detail-page", staff_id=staff.id)
+
+        payment_errors = _normalize_errors(serializer.errors)
+        messages.error(request, "Please correct the salary payment details and try again.")
+
+    payload = build_salary_detail_payload(staff)
+    custom_form_data = {
+        "payout_cycle": request.POST.get("payout_cycle", "custom"),
+        "period_start": request.POST.get("period_start", payload["custom_defaults"]["period_start"]),
+        "period_end": request.POST.get("period_end", payload["custom_defaults"]["period_end"]),
+        "paid_amount": request.POST.get("paid_amount", payload["custom_defaults"]["paid_amount"]),
+        "payment_method": request.POST.get("payment_method", Salary.PaymentMethod.BANK_TRANSFER),
+        "payment_reference": request.POST.get("payment_reference", ""),
+        "payment_note": request.POST.get("payment_note", ""),
+    }
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="salary",
+        page_title=f"{staff.name} Salary",
+        page_heading=f"{staff.name} Salary Details",
+        page_subtitle="Review hourly payroll breakdowns, credit salary, and keep payment history in one place.",
+        extra_context={
+            **payload,
+            "custom_payment_errors": payment_errors,
+            "custom_form_data": custom_form_data,
+        },
+    )
+    return render(request, "admin_salary_detail.html", context)
 
 
 @require_GET

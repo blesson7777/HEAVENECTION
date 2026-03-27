@@ -3058,6 +3058,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   Widget _staffProfilePage() {
     final profile = _profile;
+    final salaryHistory = profile?.salaryHistory ?? const <SalaryHistoryItem>[];
     final imageWidget = _selectedAadharPhoto != null
         ? ClipRRect(
             borderRadius: BorderRadius.circular(20),
@@ -3387,6 +3388,148 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                       prefixIcon: Icon(Icons.verified_outlined),
                     ),
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Salary history',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Credited salary records will appear here after the admin marks them as paid.',
+                    style: TextStyle(fontSize: 14.5, color: Colors.black54),
+                  ),
+                  const SizedBox(height: 14),
+                  if (salaryHistory.isEmpty)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: kSoft,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Text(
+                        'No salary credits have been added yet.',
+                        style: TextStyle(
+                          color: kPrimaryDark,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    )
+                  else
+                    Column(
+                      children: [
+                        for (final salary in salaryHistory) ...[
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: kSoft,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        salary.paidAmountLabel.isNotEmpty
+                                            ? salary.paidAmountLabel
+                                            : 'Rs. 0.00',
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w800,
+                                          color: kPrimaryDark,
+                                        ),
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 7,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: kPrimary.withValues(alpha: 0.10),
+                                        borderRadius: BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        salary.payoutCycleLabel,
+                                        style: const TextStyle(
+                                          color: kPrimaryDark,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  salary.periodLabel.isNotEmpty
+                                      ? salary.periodLabel
+                                      : 'Salary period',
+                                  style: const TextStyle(
+                                    fontSize: 14.5,
+                                    color: Colors.black87,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Paid on ${salary.paidAtLabel} • ${salary.paymentMethodLabel}',
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Hours ${salary.totalHours.toStringAsFixed(1)} • Calculated Rs. ${salary.finalSalary.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    fontSize: 13.5,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                                if (salary.paymentReference.isNotEmpty &&
+                                    salary.paymentReference != '--') ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Reference: ${salary.paymentReference}',
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                ],
+                                if (salary.paymentNote.isNotEmpty &&
+                                    salary.paymentNote != '--') ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    salary.paymentNote,
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                 ],
               ),
             ),
