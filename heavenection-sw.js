@@ -1,6 +1,5 @@
-const CACHE_NAME = "heavenection-calltrack-v1";
-const APP_SHELL = [
-    "/",
+const CACHE_NAME = "heavenection-calltrack-v2";
+const STATIC_ASSETS = [
     "/manifest.webmanifest",
     "/static/css/style.css",
     "/static/css/dashboard.css",
@@ -14,7 +13,7 @@ const APP_SHELL = [
 
 self.addEventListener("install", (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
+        caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
     );
     self.skipWaiting();
 });
@@ -34,6 +33,29 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
     if (event.request.method !== "GET") {
+        return;
+    }
+
+    const requestUrl = new URL(event.request.url);
+    const isSameOrigin = requestUrl.origin === self.location.origin;
+    const isNavigationRequest = event.request.mode === "navigate";
+
+    if (isSameOrigin && isNavigationRequest) {
+        event.respondWith(
+            fetch(event.request)
+                .then((networkResponse) => {
+                    const responseClone = networkResponse.clone();
+                    caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+                    return networkResponse;
+                })
+                .catch(async () => {
+                    const cachedPage = await caches.match(event.request);
+                    if (cachedPage) {
+                        return cachedPage;
+                    }
+                    return caches.match("/");
+                })
+        );
         return;
     }
 

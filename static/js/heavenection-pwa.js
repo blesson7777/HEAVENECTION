@@ -2,6 +2,32 @@
     const config = window.heavenectionPwa;
     const installButton = document.getElementById("heavenectionInstallButton");
     let deferredPrompt = null;
+    const legacyHashRoutes = {
+        "#dashboard": "/",
+        "#staff": "/staff/",
+        "#team": "/staff/",
+        "#leads": "/leads/",
+        "#calls": "/calls/",
+        "#call-details": "/calls/",
+        "#reports": "/working-hours/",
+        "#working-hours": "/working-hours/",
+    };
+
+    function redirectLegacyHashRoute() {
+        const hash = (window.location.hash || "").toLowerCase();
+        const targetPath = legacyHashRoutes[hash];
+        if (!targetPath) {
+            return;
+        }
+
+        const targetUrl = new URL(targetPath, window.location.origin);
+        if (targetUrl.pathname === window.location.pathname) {
+            window.history.replaceState(null, "", targetUrl.pathname + targetUrl.search);
+            return;
+        }
+
+        window.location.replace(targetUrl.pathname + targetUrl.search);
+    }
 
     function isStandalone() {
         return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
@@ -16,9 +42,12 @@
 
     if (config?.serviceWorkerUrl && "serviceWorker" in navigator) {
         window.addEventListener("load", () => {
-            navigator.serviceWorker.register(config.serviceWorkerUrl).catch(() => {
-                toggleInstallButton(false);
-            });
+            navigator.serviceWorker
+                .register(config.serviceWorkerUrl, { updateViaCache: "none" })
+                .then((registration) => registration.update())
+                .catch(() => {
+                    toggleInstallButton(false);
+                });
         });
     }
 
@@ -52,4 +81,5 @@
     });
 
     toggleInstallButton(false);
+    redirectLegacyHashRoute();
 })();
