@@ -879,6 +879,7 @@
         const totalValueNode = document.getElementById("emiTotalValue");
         const feedbackNode = document.getElementById("emiCalculatorFeedback");
         const resetButton = document.getElementById("emiResetButton");
+        const calculateButton = document.getElementById("emiCalculateButton");
 
         function formatCurrency(value) {
             return new Intl.NumberFormat("en-IN", {
@@ -957,6 +958,11 @@
         }
 
         form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            calculateEmi();
+        });
+
+        calculateButton?.addEventListener("click", (event) => {
             event.preventDefault();
             calculateEmi();
         });
