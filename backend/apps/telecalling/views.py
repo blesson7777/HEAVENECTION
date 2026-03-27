@@ -45,6 +45,7 @@ from backend.apps.telecalling.services import (
     build_salary_control_payload,
     build_salary_page_payload,
     build_settings_payload,
+    build_staff_profile_payload,
     build_staff_learning_payload,
     build_staff_today_payload,
     build_team_management_payload,
@@ -101,6 +102,17 @@ def _normalize_errors(error_dict):
             continue
         normalized[field] = str(value)
     return normalized
+
+
+def _apply_staff_post_save_actions(staff, was_active):
+    released_count = 0
+    if was_active and not staff.is_active:
+        end_staff_session(staff, close_reason="admin_disabled")
+        released_count = release_staff_queue(staff)
+        auto_allocate_leads()
+    elif staff.is_active:
+        auto_allocate_leads(target_staff=staff)
+    return released_count
 
 
 @require_http_methods(["GET", "POST"])
@@ -302,6 +314,104 @@ def staff_page(request):
         extra_context=payload,
     )
     return render(request, "admin_staff.html", context)
+
+
+@require_http_methods(["GET", "POST"])
+def staff_profile_page(request, staff_id):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    try:
+        staff = Staff.objects.get(id=staff_id, role=Staff.Role.STAFF)
+    except Staff.DoesNotExist:
+        return redirect("staff-page")
+
+    staff_form_data = {
+        "name": staff.name,
+        "phone": staff.phone,
+        "password": "",
+        "hourly_rate": staff.hourly_rate,
+        "call_rate": staff.call_rate,
+        "bonus_per_conversion": staff.bonus_per_conversion,
+        "is_active": staff.is_active,
+    }
+    staff_errors = {}
+
+    if request.method == "POST":
+        staff_action = request.POST.get("staff_action", "save_profile")
+        if staff_action == "toggle_active":
+            desired_active = request.POST.get("set_active") == "1"
+            serializer = UpdateStaffSerializer(staff, data={"is_active": desired_active}, partial=True)
+            if serializer.is_valid():
+                was_active = staff.is_active
+                staff = serializer.save()
+                released_count = _apply_staff_post_save_actions(staff, was_active)
+                if staff.is_active:
+                    messages.success(request, f"{staff.name} is now enabled and can receive leads again.")
+                else:
+                    messages.success(
+                        request,
+                        f"{staff.name} is now disabled. {released_count} active leads were unassigned.",
+                    )
+                return redirect("staff-profile-page", staff_id=staff.id)
+
+            staff_errors = _normalize_errors(serializer.errors)
+            messages.error(request, "Unable to change the staff account status.")
+        else:
+            password_value = request.POST.get("password", "")
+            staff_form_data = {
+                "name": request.POST.get("name", "").strip(),
+                "phone": request.POST.get("phone", "").strip(),
+                "password": password_value,
+                "hourly_rate": request.POST.get("hourly_rate", "").strip(),
+                "call_rate": request.POST.get("call_rate", "").strip(),
+                "bonus_per_conversion": request.POST.get("bonus_per_conversion", "").strip(),
+                "is_active": request.POST.get("is_active") == "on",
+            }
+            staff_data = {
+                "name": staff_form_data["name"],
+                "phone": staff_form_data["phone"],
+                "hourly_rate": staff_form_data["hourly_rate"] or "0",
+                "call_rate": staff_form_data["call_rate"] or "0",
+                "bonus_per_conversion": staff_form_data["bonus_per_conversion"] or "0",
+                "is_active": staff_form_data["is_active"],
+            }
+            if password_value.strip():
+                staff_data["password"] = password_value.strip()
+
+            serializer = UpdateStaffSerializer(staff, data=staff_data, partial=True)
+            if serializer.is_valid():
+                was_active = staff.is_active
+                staff = serializer.save()
+                released_count = _apply_staff_post_save_actions(staff, was_active)
+                if was_active and not staff.is_active:
+                    messages.success(
+                        request,
+                        f"Staff profile updated. {staff.name} was disabled and {released_count} active leads were unassigned.",
+                    )
+                else:
+                    messages.success(request, f"{staff.name}'s profile updated successfully.")
+                return redirect("staff-profile-page", staff_id=staff.id)
+
+            staff_errors = _normalize_errors(serializer.errors)
+            messages.error(request, "Please correct the staff profile details and try again.")
+
+    payload = build_staff_profile_payload(staff)
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="staff",
+        page_title=f"{staff.name} Profile",
+        page_heading=f"{staff.name} Profile",
+        page_subtitle="Review staff activity, manage account access, and monitor assigned leads from one page.",
+        extra_context={
+            **payload,
+            "staff_form_data": staff_form_data,
+            "staff_errors": staff_errors,
+        },
+    )
+    return render(request, "admin_staff_profile.html", context)
 
 
 @require_http_methods(["GET", "POST"])
@@ -724,11 +834,7 @@ def team_member_detail_api(request, staff_id):
     serializer = UpdateStaffSerializer(staff, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     staff = serializer.save()
-    if was_active and not staff.is_active:
-        release_staff_queue(staff)
-        auto_allocate_leads()
-    elif staff.is_active:
-        auto_allocate_leads(target_staff=staff)
+    _apply_staff_post_save_actions(staff, was_active)
     return Response(StaffSerializer(staff).data)
 
 

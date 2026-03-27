@@ -48,6 +48,7 @@
                     <td>{{ staff.hourly_rate }} / {{ staff.call_rate }}</td>
                     <td>
                         <div class="d-flex gap-2 flex-wrap">
+                            <a href="{% url 'staff-profile-page' staff.id %}" class="btn btn-outline-dark btn-sm">View Profile</a>
                             <button
                                 type="button"
                                 class="btn btn-outline-primary btn-sm js-edit-staff"

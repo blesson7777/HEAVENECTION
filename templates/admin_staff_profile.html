@@ -1,0 +1,251 @@
+{% extends "admin_base.html" %}
+
+{% block page_actions %}
+<a href="{% url 'staff-page' %}" class="btn btn-outline-primary btn-sm">Back To Staff</a>
+{% endblock %}
+
+{% block admin_content %}
+<section class="row g-4">
+    <div class="col-xl-4">
+        <div class="hc-surface-card h-100">
+            <div class="d-flex align-items-start justify-content-between gap-3 mb-4">
+                <div>
+                    <span class="mf-db2-kicker">Staff Profile</span>
+                    <h4 class="mb-1">{{ staff_member.name }}</h4>
+                    <p class="text-muted mb-0">{{ staff_member.phone }}</p>
+                </div>
+                <span class="hc-status {% if summary.online_label == 'Online' %}hc-status-success{% elif summary.online_label == 'Away' or summary.online_label == 'Warning' %}hc-status-warning{% else %}hc-status-muted{% endif %}">
+                    {{ summary.online_label }}{% if not staff_member.is_active %} / Inactive{% endif %}
+                </span>
+            </div>
+
+            <div class="row g-3 mb-4">
+                <div class="col-6">
+                    <div class="hc-summary-card h-100">
+                        <span class="mf-db2-kicker">Hours Today</span>
+                        <h3 class="mb-1">{{ summary.active_hours_today }}</h3>
+                        <p class="mb-0 text-muted">{{ today_label }}</p>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="hc-summary-card h-100">
+                        <span class="mf-db2-kicker">Calls Today</span>
+                        <h3 class="mb-1">{{ summary.calls_today }}</h3>
+                        <p class="mb-0 text-muted">{{ summary.converted_today }} converted</p>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="hc-summary-card h-100">
+                        <span class="mf-db2-kicker">Assigned Leads</span>
+                        <h3 class="mb-1">{{ summary.assigned_leads }}</h3>
+                        <p class="mb-0 text-muted">Queue target: {{ summary.queue_target }}</p>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="hc-summary-card h-100">
+                        <span class="mf-db2-kicker">No Answer</span>
+                        <h3 class="mb-1">{{ summary.no_answer_today }}</h3>
+                        <p class="mb-0 text-muted">{{ summary.status_label }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hc-summary-card">
+                <div class="d-flex align-items-start justify-content-between gap-3">
+                    <div>
+                        <span class="mf-db2-kicker">Access Control</span>
+                        <h5 class="mb-2">{% if staff_member.is_active %}Disable Staff{% else %}Enable Staff{% endif %}</h5>
+                        <p class="text-muted mb-0">
+                            {% if staff_member.is_active %}
+                            Disabling this account stops future work, ends the current session, and unassigns active leads immediately.
+                            {% else %}
+                            Enabling this account allows the staff member to log in and receive leads again.
+                            {% endif %}
+                        </p>
+                    </div>
+                    <form method="post" action="{% url 'staff-profile-page' staff_member.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="staff_action" value="toggle_active">
+                        <input type="hidden" name="set_active" value="{% if staff_member.is_active %}0{% else %}1{% endif %}">
+                        <button type="submit" class="btn {% if staff_member.is_active %}btn-outline-danger{% else %}btn-primary{% endif %}">
+                            {% if staff_member.is_active %}Disable Staff{% else %}Enable Staff{% endif %}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-8">
+        <div class="hc-surface-card">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Manage Staff</span>
+                    <h5>Update account details and rates</h5>
+                </div>
+                <span class="hc-sync-pill"><i class="bi bi-clock-history"></i> {{ summary.last_seen }}</span>
+            </div>
+
+            <form method="post" action="{% url 'staff-profile-page' staff_member.id %}" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="staff_action" value="save_profile">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="staffProfileName">Name</label>
+                        <input type="text" class="form-control{% if staff_errors.name %} is-invalid{% endif %}" id="staffProfileName" name="name" value="{{ staff_form_data.name }}" required>
+                        {% if staff_errors.name %}<div class="invalid-feedback">{{ staff_errors.name }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="staffProfilePhone">Phone Number</label>
+                        <input type="text" class="form-control{% if staff_errors.phone %} is-invalid{% endif %}" id="staffProfilePhone" name="phone" value="{{ staff_form_data.phone }}" required>
+                        {% if staff_errors.phone %}<div class="invalid-feedback">{{ staff_errors.phone }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="staffProfileHourlyRate">Hourly Rate</label>
+                        <input type="number" step="0.01" class="form-control{% if staff_errors.hourly_rate %} is-invalid{% endif %}" id="staffProfileHourlyRate" name="hourly_rate" value="{{ staff_form_data.hourly_rate }}">
+                        {% if staff_errors.hourly_rate %}<div class="invalid-feedback">{{ staff_errors.hourly_rate }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="staffProfileCallRate">Call Rate</label>
+                        <input type="number" step="0.01" class="form-control{% if staff_errors.call_rate %} is-invalid{% endif %}" id="staffProfileCallRate" name="call_rate" value="{{ staff_form_data.call_rate }}">
+                        {% if staff_errors.call_rate %}<div class="invalid-feedback">{{ staff_errors.call_rate }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="staffProfileBonus">Bonus</label>
+                        <input type="number" step="0.01" class="form-control{% if staff_errors.bonus_per_conversion %} is-invalid{% endif %}" id="staffProfileBonus" name="bonus_per_conversion" value="{{ staff_form_data.bonus_per_conversion }}">
+                        {% if staff_errors.bonus_per_conversion %}<div class="invalid-feedback">{{ staff_errors.bonus_per_conversion }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold" for="staffProfilePassword">Password</label>
+                        <input type="password" class="form-control{% if staff_errors.password %} is-invalid{% endif %}" id="staffProfilePassword" name="password" minlength="6" placeholder="Leave blank to keep the current password">
+                        {% if staff_errors.password %}<div class="invalid-feedback">{{ staff_errors.password }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="checkbox" id="staffProfileActive" name="is_active" {% if staff_form_data.is_active %}checked{% endif %}>
+                            <label class="form-check-label" for="staffProfileActive">Active account</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end mt-4">
+                    <button type="submit" class="btn btn-primary">Save Staff Profile</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<section class="row g-4 mt-1">
+    <div class="col-xl-6">
+        <div class="hc-surface-card h-100">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Assigned Leads</span>
+                    <h5>Current active lead queue</h5>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table hc-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Lead</th>
+                            <th>Status</th>
+                            <th>Last Contact</th>
+                            <th>Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lead in assigned_lead_rows %}
+                        <tr>
+                            <td>
+                                <strong>{{ lead.name }}</strong>
+                                <div class="text-muted small">{{ lead.phone }}</div>
+                            </td>
+                            <td>{{ lead.status_label }}</td>
+                            <td>{{ lead.last_contacted }}</td>
+                            <td>{{ lead.updated_at }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center py-4">No active leads assigned.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-6">
+        <div class="hc-surface-card h-100">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Recent Calls</span>
+                    <h5>Latest call activity</h5>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table hc-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Lead</th>
+                            <th>Started</th>
+                            <th>Duration</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for call in recent_call_rows %}
+                        <tr>
+                            <td>
+                                <strong>{{ call.lead_name }}</strong>
+                                <div class="text-muted small">{{ call.lead_phone }}</div>
+                            </td>
+                            <td>{{ call.start_time }}</td>
+                            <td>{{ call.duration_label }}</td>
+                            <td>{{ call.status_label }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="4" class="text-center py-4">No recent calls recorded.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="hc-surface-card mt-4">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Recent Sessions</span>
+            <h5>Work login history</h5>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Login</th>
+                    <th>Logout</th>
+                    <th>Active Time</th>
+                    <th>Status</th>
+                    <th>Close Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in recent_session_rows %}
+                <tr>
+                    <td>{{ session.login_time }}</td>
+                    <td>{{ session.logout_time }}</td>
+                    <td>{{ session.active_label }}</td>
+                    <td>{{ session.state_label }}</td>
+                    <td>{{ session.close_reason }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center py-4">No session history available.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

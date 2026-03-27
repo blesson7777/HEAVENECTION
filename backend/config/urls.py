@@ -12,6 +12,7 @@ urlpatterns = [
     path("", views.dashboard_page, name="dashboard"),
     path("settings/", views.settings_page, name="settings-page"),
     path("staff/", views.staff_page, name="staff-page"),
+    path("staff/<uuid:staff_id>/", views.staff_profile_page, name="staff-profile-page"),
     path("leads/", views.leads_page, name="leads-page"),
     path("learning/", views.learning_page, name="learning-page"),
     path("salary/", views.salary_page, name="salary-page"),

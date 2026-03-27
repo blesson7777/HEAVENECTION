@@ -1194,6 +1194,88 @@ def build_team_management_payload():
     }
 
 
+def build_staff_profile_payload(staff):
+    today, start, end = _today_range()
+    active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
+    open_session = get_open_session(staff, reconcile=True)
+    latest_session = Session.objects.filter(staff=staff).order_by("-login_time").first()
+    sessions_today = Session.objects.filter(staff=staff, login_time__range=(start, end))
+    recent_sessions = Session.objects.filter(staff=staff).order_by("-login_time")[:12]
+    calls_today = Call.objects.filter(staff=staff, start_time__range=(start, end))
+    qualifying_calls_today = calls_today.filter(is_qualifying=True)
+    recent_calls = Call.objects.filter(staff=staff).select_related("lead").order_by("-start_time")[:20]
+    assigned_leads = (
+        Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES)
+        .select_related("assigned_to")
+        .order_by("-updated_at")
+    )
+
+    active_seconds_today = sessions_today.aggregate(total=Sum("active_seconds")).get("total") or 0
+    converted_today = qualifying_calls_today.filter(status=Call.Status.CONVERTED).count()
+    no_answer_today = qualifying_calls_today.filter(status=Call.Status.NO_ANSWER).count()
+
+    assigned_lead_rows = [
+        {
+            "id": str(lead.id),
+            "name": lead.name,
+            "phone": lead.phone,
+            "status": lead.status,
+            "status_label": lead.get_status_display(),
+            "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
+            "updated_at": _format_datetime(lead.updated_at),
+        }
+        for lead in assigned_leads
+    ]
+    recent_call_rows = [
+        {
+            "id": str(call.id),
+            "lead_name": call.lead.name,
+            "lead_phone": call.lead.phone,
+            "start_time": _format_datetime(call.start_time),
+            "end_time": _format_datetime(call.end_time),
+            "duration_label": _format_duration(call.duration_seconds),
+            "status": call.status,
+            "status_label": call.get_status_display(),
+            "is_qualifying": call.is_qualifying,
+        }
+        for call in recent_calls
+    ]
+    recent_session_rows = [
+        {
+            "id": str(session.id),
+            "login_time": _format_datetime(session.login_time),
+            "logout_time": _format_datetime(session.logout_time),
+            "active_label": _format_duration(session.active_seconds),
+            "state_label": _session_status_label(session if session.is_open else None, latest_session=session),
+            "close_reason": session.close_reason or "Manual",
+        }
+        for session in recent_sessions
+    ]
+
+    return {
+        "today_label": today.strftime("%A, %d %b %Y"),
+        "staff_member": staff,
+        "summary": {
+            "online_label": _staff_online_label(open_session, active_cutoff),
+            "status_label": _session_status_label(open_session, latest_session=latest_session),
+            "last_seen": _format_datetime(staff.last_seen_at),
+            "assigned_leads": assigned_leads.count(),
+            "calls_today": qualifying_calls_today.count(),
+            "converted_today": converted_today,
+            "no_answer_today": no_answer_today,
+            "active_hours_today": _format_hours(active_seconds_today),
+            "hourly_rate": _format_currency(staff.hourly_rate),
+            "call_rate": _format_currency(staff.call_rate),
+            "bonus_per_conversion": _format_currency(staff.bonus_per_conversion),
+            "compensation_type_label": staff.get_compensation_type_display(),
+            "queue_target": get_lead_queue_limit(),
+        },
+        "assigned_lead_rows": assigned_lead_rows,
+        "recent_call_rows": recent_call_rows,
+        "recent_session_rows": recent_session_rows,
+    }
+
+
 def build_salary_control_payload():
     hourly_count = 0
     weekly_count = 0
