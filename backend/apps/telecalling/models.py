@@ -188,6 +188,8 @@ class StaffAction(models.Model):
         SESSION_STARTED = "session_started", "Session Started"
         SESSION_ENDED = "session_ended", "Session Ended"
         SESSION_AUTO_ENDED = "session_auto_ended", "Session Auto Ended"
+        TRAINING_REQUIRED_BLOCKED = "training_required_blocked", "Training Required Blocked"
+        TRAINING_COMPLETED = "training_completed", "Training Completed"
         APP_FOREGROUNDED = "app_foregrounded", "App Foregrounded"
         APP_BACKGROUNDED = "app_backgrounded", "App Backgrounded"
         IDLE_WARNING = "idle_warning", "Idle Warning"
@@ -259,5 +261,42 @@ class Salary(models.Model):
             models.UniqueConstraint(
                 fields=["staff", "period_start", "period_end"],
                 name="telecalling_unique_salary_period",
+            )
+        ]
+
+
+class TrainingLesson(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=180)
+    description = models.TextField(blank=True)
+    video_url = models.URLField(blank=True)
+    search_keywords = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    is_mandatory = models.BooleanField(default=True, db_index=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    published_at = models.DateTimeField(default=timezone.now, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("sort_order", "-published_at", "title")
+
+    def __str__(self):
+        return self.title
+
+
+class TrainingCompletion(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    staff = models.ForeignKey(Staff, on_delete=models.CASCADE, related_name="training_completions")
+    lesson = models.ForeignKey(TrainingLesson, on_delete=models.CASCADE, related_name="completions")
+    completed_at = models.DateTimeField(default=timezone.now, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-completed_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["staff", "lesson"],
+                name="telecalling_unique_training_completion",
             )
         ]

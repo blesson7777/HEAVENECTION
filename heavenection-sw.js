@@ -1,11 +1,13 @@
-const CACHE_NAME = "heavenection-calltrack-v2";
+const CACHE_NAME = "heavenection-calltrack-v3";
 const STATIC_ASSETS = [
+    "/offline/",
     "/manifest.webmanifest",
     "/static/css/style.css",
     "/static/css/dashboard.css",
     "/static/css/heavenection-calltrack.css",
     "/static/js/dashboard-ux.js",
     "/static/js/heavenection-calltrack.js",
+    "/static/js/heavenection-network.js",
     "/static/js/heavenection-pwa.js",
     "/static/pwa/icon-192.png",
     "/static/pwa/icon-512.png"
@@ -53,7 +55,7 @@ self.addEventListener("fetch", (event) => {
                     if (cachedPage) {
                         return cachedPage;
                     }
-                    return caches.match("/");
+                    return caches.match("/offline/");
                 })
         );
         return;
@@ -74,7 +76,7 @@ self.addEventListener("fetch", (event) => {
                     caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
                     return networkResponse;
                 })
-                .catch(() => caches.match("/"));
+                .catch(() => caches.match("/offline/"));
         })
     );
 });

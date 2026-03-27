@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -32,7 +33,10 @@ class ApiClient {
     }
     try {
       return await fetchMe();
-    } on ApiException {
+    } on ApiException catch (error) {
+      if (error.code == 'network_error') {
+        rethrow;
+      }
       await clearSession();
       return null;
     }
@@ -98,6 +102,21 @@ class ApiClient {
         .toList();
   }
 
+  Future<LearningCenterPayload> fetchLearningCenter() async {
+    final response = await _send('GET', '/api/staff/learning/');
+    return LearningCenterPayload.fromJson(_decodeMap(response.body));
+  }
+
+  Future<LearningCenterPayload> completeTrainingLesson({
+    required String lessonId,
+  }) async {
+    final response = await _send(
+      'POST',
+      '/api/staff/learning/$lessonId/complete/',
+    );
+    return LearningCenterPayload.fromJson(_decodeMap(response.body));
+  }
+
   Future<SessionResponse> startSession() async {
     final response = await _send('POST', '/api/staff/session/start/');
     return SessionResponse.fromJson(_decodeMap(response.body));
@@ -116,11 +135,7 @@ class ApiClient {
     final response = await _send(
       'POST',
       '/api/staff/heartbeat/',
-      body: {
-        'state': state,
-        'interaction': interaction,
-        'source': source,
-      },
+      body: {'state': state, 'interaction': interaction, 'source': source},
     );
     return SessionResponse.fromJson(_decodeMap(response.body));
   }
@@ -141,10 +156,7 @@ class ApiClient {
     DateTime? endedAt,
     String source = 'app',
   }) async {
-    final body = <String, dynamic>{
-      'status': status,
-      'source': source,
-    };
+    final body = <String, dynamic>{'status': status, 'source': source};
     if (durationSeconds != null) {
       body['duration_seconds'] = durationSeconds;
     }
@@ -203,19 +215,33 @@ class ApiClient {
     }
 
     late http.Response response;
-    switch (method) {
-      case 'GET':
-        response = await _client.get(uri, headers: headers);
-        break;
-      case 'POST':
-        response = await _client.post(
-          uri,
-          headers: headers,
-          body: body == null ? null : jsonEncode(body),
-        );
-        break;
-      default:
-        throw UnsupportedError('Unsupported method: $method');
+    try {
+      switch (method) {
+        case 'GET':
+          response = await _client.get(uri, headers: headers);
+          break;
+        case 'POST':
+          response = await _client.post(
+            uri,
+            headers: headers,
+            body: body == null ? null : jsonEncode(body),
+          );
+          break;
+        default:
+          throw UnsupportedError('Unsupported method: $method');
+      }
+    } on SocketException {
+      throw const ApiException(
+        'Network connection lost.',
+        statusCode: 0,
+        code: 'network_error',
+      );
+    } on http.ClientException {
+      throw const ApiException(
+        'Network connection lost.',
+        statusCode: 0,
+        code: 'network_error',
+      );
     }
 
     if (response.statusCode == 401 && requiresAuth && retryOnAuthFailure) {
@@ -232,10 +258,11 @@ class ApiClient {
     if (response.statusCode >= 400) {
       final payload = _tryDecodeMap(response.body);
       final detail = payload?['detail']?.toString();
+      final code = payload?['code']?.toString();
       final message = detail == null || detail.isEmpty
           ? 'Request failed.'
           : detail;
-      throw ApiException(message, statusCode: response.statusCode);
+      throw ApiException(message, statusCode: response.statusCode, code: code);
     }
 
     return response;

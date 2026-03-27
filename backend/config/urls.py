@@ -8,10 +8,12 @@ from backend.apps.telecalling import views
 urlpatterns = [
     path("login/", views.web_login_page, name="web-login"),
     path("logout/", views.web_logout, name="web-logout"),
+    path("offline/", views.offline_page, name="offline-page"),
     path("", views.dashboard_page, name="dashboard"),
     path("settings/", views.settings_page, name="settings-page"),
     path("staff/", views.staff_page, name="staff-page"),
     path("leads/", views.leads_page, name="leads-page"),
+    path("learning/", views.learning_page, name="learning-page"),
     path("salary/", views.salary_page, name="salary-page"),
     path("salary-control/", views.salary_control_page, name="salary-control-page"),
     path("calls/", views.calls_page, name="calls-page"),

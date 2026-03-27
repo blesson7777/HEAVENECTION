@@ -1,3 +1,4 @@
+from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.contrib import messages
 from django.shortcuts import redirect, render
@@ -7,7 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from backend.apps.telecalling.auth import clear_auth_cookies, get_staff_from_request, issue_tokens_for_user, set_auth_cookies
-from backend.apps.telecalling.models import Call, Lead, Staff, StaffAction
+from backend.apps.telecalling.models import Call, Lead, Staff, StaffAction, TrainingLesson
 from backend.apps.telecalling.permissions import IsAdminStaff, IsCallingStaff
 from backend.apps.telecalling.serializers import (
     AdminProfileSerializer,
@@ -18,6 +19,7 @@ from backend.apps.telecalling.serializers import (
     CallStatusSerializer,
     CreateLeadSerializer,
     CreateStaffSerializer,
+    CreateTrainingLessonSerializer,
     EndCallSerializer,
     HeartbeatSerializer,
     LeadSerializer,
@@ -27,29 +29,36 @@ from backend.apps.telecalling.serializers import (
     StaffActionSerializer,
     StaffSerializer,
     StartCallSerializer,
+    TrainingLessonSerializer,
     UpdateLeadSerializer,
     UpdateStaffSerializer,
+    UpdateTrainingLessonSerializer,
 )
 from backend.apps.telecalling.services import (
     authenticate_staff,
     build_call_detail_payload,
     build_dashboard_payload,
+    build_learning_management_payload,
     build_lead_management_payload,
     build_salary_control_payload,
     build_salary_page_payload,
     build_settings_payload,
+    build_staff_learning_payload,
     build_staff_today_payload,
     build_team_management_payload,
     build_work_hours_payload,
+    complete_training_lesson,
     end_staff_call,
     end_staff_session,
     get_assigned_leads,
     get_company_profile,
+    get_pending_mandatory_lessons,
     mark_staff_seen,
     read_root_file,
     record_session_heartbeat,
     start_staff_call,
     start_staff_session,
+    TrainingRequiredError,
     update_staff_call_status,
 )
 
@@ -310,6 +319,24 @@ def leads_page(request):
 
 
 @require_GET
+def learning_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="learning",
+        page_title="Learning Center",
+        page_heading="Learning Center",
+        page_subtitle="Publish training lessons, assign mandatory learning, and track lesson completion across the team.",
+        extra_context=build_learning_management_payload(),
+    )
+    return render(request, "admin_learning.html", context)
+
+
+@require_GET
 def salary_page(request):
     current_user = _get_admin_user_or_redirect(request)
     if not current_user:
@@ -389,6 +416,11 @@ def pwa_manifest(request):
 @require_GET
 def pwa_service_worker(request):
     return HttpResponse(read_root_file("heavenection-sw.js"), content_type="application/javascript")
+
+
+@require_GET
+def offline_page(request):
+    return render(request, "web_offline.html")
 
 
 @api_view(["POST"])
@@ -492,6 +524,64 @@ def lead_detail_api(request, lead_id):
     serializer.is_valid(raise_exception=True)
     lead = serializer.save()
     return Response(LeadSerializer(lead).data)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAdminStaff])
+def training_lessons_api(request):
+    queryset = TrainingLesson.objects.order_by("sort_order", "-published_at", "title")
+    if request.method == "GET":
+        search_query = request.query_params.get("q", "").strip()
+        if search_query:
+            queryset = queryset.filter(
+                Q(title__icontains=search_query)
+                | Q(description__icontains=search_query)
+                | Q(search_keywords__icontains=search_query)
+            )
+
+        active_staff_count = Staff.objects.filter(role=Staff.Role.STAFF, is_active=True).count()
+        lessons = list(queryset.annotate(completed_staff_count=Count("completions", distinct=True))[:200])
+        for lesson in lessons:
+            lesson.pending_staff_count = max(active_staff_count - lesson.completed_staff_count, 0)
+        return Response(TrainingLessonSerializer(lessons, many=True).data)
+
+    serializer = CreateTrainingLessonSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    lesson = serializer.save()
+    lesson.completed_staff_count = 0
+    lesson.pending_staff_count = Staff.objects.filter(role=Staff.Role.STAFF, is_active=True).count()
+    return Response(TrainingLessonSerializer(lesson).data, status=201)
+
+
+@api_view(["GET", "PATCH", "DELETE"])
+@permission_classes([IsAdminStaff])
+def training_lesson_detail_api(request, lesson_id):
+    try:
+        lesson = TrainingLesson.objects.get(id=lesson_id)
+    except TrainingLesson.DoesNotExist:
+        return Response({"detail": "Training lesson not found."}, status=404)
+
+    if request.method == "GET":
+        lesson.completed_staff_count = lesson.completions.count()
+        lesson.pending_staff_count = max(
+            Staff.objects.filter(role=Staff.Role.STAFF, is_active=True).count() - lesson.completed_staff_count,
+            0,
+        )
+        return Response(TrainingLessonSerializer(lesson).data)
+
+    if request.method == "DELETE":
+        lesson.delete()
+        return Response(status=204)
+
+    serializer = UpdateTrainingLessonSerializer(lesson, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    lesson = serializer.save()
+    lesson.completed_staff_count = lesson.completions.count()
+    lesson.pending_staff_count = max(
+        Staff.objects.filter(role=Staff.Role.STAFF, is_active=True).count() - lesson.completed_staff_count,
+        0,
+    )
+    return Response(TrainingLessonSerializer(lesson).data)
 
 
 @api_view(["GET"])
@@ -617,10 +707,38 @@ def assigned_leads_api(request):
     return Response(LeadSerializer(queryset[:100], many=True).data)
 
 
+@api_view(["GET"])
+@permission_classes([IsCallingStaff])
+def staff_learning_api(request):
+    return Response(build_staff_learning_payload(request.user))
+
+
+@api_view(["POST"])
+@permission_classes([IsCallingStaff])
+def complete_training_lesson_api(request, lesson_id):
+    try:
+        lesson = TrainingLesson.objects.get(id=lesson_id, is_active=True)
+    except TrainingLesson.DoesNotExist:
+        return Response({"detail": "Training lesson not found."}, status=404)
+
+    complete_training_lesson(request.user, lesson)
+    return Response(build_staff_learning_payload(request.user))
+
+
 @api_view(["POST"])
 @permission_classes([IsCallingStaff])
 def start_session_api(request):
-    session, created = start_staff_session(request.user)
+    try:
+        session, created = start_staff_session(request.user)
+    except TrainingRequiredError as error:
+        return Response(
+            {
+                "detail": "Complete mandatory training before starting work.",
+                "code": "training_required",
+                **error.payload,
+            },
+            status=409,
+        )
     return Response(
         {
             "created": created,

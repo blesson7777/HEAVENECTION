@@ -60,6 +60,9 @@ class DailySummary {
     required this.currentState,
     required this.statusLabel,
     required this.closeReason,
+    required this.pendingTrainingCount,
+    required this.trainingRequired,
+    required this.nextTrainingTitle,
   });
 
   final String activeLabel;
@@ -70,6 +73,9 @@ class DailySummary {
   final String currentState;
   final String statusLabel;
   final String closeReason;
+  final int pendingTrainingCount;
+  final bool trainingRequired;
+  final String nextTrainingTitle;
 
   factory DailySummary.empty() {
     return const DailySummary(
@@ -81,6 +87,9 @@ class DailySummary {
       currentState: 'stopped',
       statusLabel: 'Stopped',
       closeReason: '',
+      pendingTrainingCount: 0,
+      trainingRequired: false,
+      nextTrainingTitle: '',
     );
   }
 
@@ -95,6 +104,10 @@ class DailySummary {
       currentState: json['current_state']?.toString() ?? 'stopped',
       statusLabel: json['status_label']?.toString() ?? 'Stopped',
       closeReason: json['close_reason']?.toString() ?? '',
+      pendingTrainingCount:
+          (json['pending_training_count'] as num?)?.toInt() ?? 0,
+      trainingRequired: json['training_required'] == true,
+      nextTrainingTitle: json['next_training_title']?.toString() ?? '',
     );
   }
 }
@@ -134,9 +147,117 @@ class CallRecord {
   }
 }
 
+class LearningSummary {
+  const LearningSummary({
+    required this.totalLessons,
+    required this.completedCount,
+    required this.pendingMandatoryCount,
+    required this.hasPendingMandatory,
+    required this.nextRequiredTitle,
+  });
+
+  final int totalLessons;
+  final int completedCount;
+  final int pendingMandatoryCount;
+  final bool hasPendingMandatory;
+  final String nextRequiredTitle;
+
+  factory LearningSummary.empty() {
+    return const LearningSummary(
+      totalLessons: 0,
+      completedCount: 0,
+      pendingMandatoryCount: 0,
+      hasPendingMandatory: false,
+      nextRequiredTitle: '',
+    );
+  }
+
+  factory LearningSummary.fromJson(Map<String, dynamic> json) {
+    return LearningSummary(
+      totalLessons: (json['total_lessons'] as num?)?.toInt() ?? 0,
+      completedCount: (json['completed_count'] as num?)?.toInt() ?? 0,
+      pendingMandatoryCount:
+          (json['pending_mandatory_count'] as num?)?.toInt() ?? 0,
+      hasPendingMandatory: json['has_pending_mandatory'] == true,
+      nextRequiredTitle: json['next_required_title']?.toString() ?? '',
+    );
+  }
+}
+
+class TrainingLesson {
+  const TrainingLesson({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.videoUrl,
+    required this.searchKeywords,
+    required this.isMandatory,
+    required this.isCompleted,
+    required this.completedAt,
+    required this.publishedAt,
+  });
+
+  final String id;
+  final String title;
+  final String description;
+  final String videoUrl;
+  final String searchKeywords;
+  final bool isMandatory;
+  final bool isCompleted;
+  final DateTime? completedAt;
+  final DateTime? publishedAt;
+
+  bool get hasVideo => videoUrl.trim().isNotEmpty;
+
+  String get searchableText =>
+      '$title $description $searchKeywords'.toLowerCase();
+
+  factory TrainingLesson.fromJson(Map<String, dynamic> json) {
+    return TrainingLesson(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      videoUrl: json['video_url']?.toString() ?? '',
+      searchKeywords: json['search_keywords']?.toString() ?? '',
+      isMandatory: json['is_mandatory'] == true,
+      isCompleted: json['is_completed'] == true,
+      completedAt: json['completed_at'] == null
+          ? null
+          : DateTime.tryParse(json['completed_at'].toString())?.toLocal(),
+      publishedAt: json['published_at'] == null
+          ? null
+          : DateTime.tryParse(json['published_at'].toString())?.toLocal(),
+    );
+  }
+}
+
+class LearningCenterPayload {
+  const LearningCenterPayload({required this.summary, required this.lessons});
+
+  final LearningSummary summary;
+  final List<TrainingLesson> lessons;
+
+  factory LearningCenterPayload.fromJson(Map<String, dynamic> json) {
+    final summary = json['summary'];
+    final lessons = json['lessons'];
+    return LearningCenterPayload(
+      summary: LearningSummary.fromJson(
+        summary is Map<String, dynamic> ? summary : const {},
+      ),
+      lessons: lessons is List
+          ? lessons
+                .whereType<Map<String, dynamic>>()
+                .map(TrainingLesson.fromJson)
+                .toList()
+          : const [],
+    );
+  }
+}
+
 class ApiException implements Exception {
-  const ApiException(this.message, {this.statusCode});
+  const ApiException(this.message, {this.statusCode, this.code});
 
   final String message;
   final int? statusCode;
+  final String? code;
 }

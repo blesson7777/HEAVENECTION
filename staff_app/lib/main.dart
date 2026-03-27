@@ -2,8 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:call_log/call_log.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_phone_direct_caller/flutter_phone_direct_caller.dart';
+import 'package:video_player/video_player.dart';
 
 import 'api_client.dart';
 import 'app_models.dart';
@@ -103,16 +106,23 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   StaffUser? _user;
   DailySummary _summary = DailySummary.empty();
+  LearningSummary _learningSummary = LearningSummary.empty();
   List<LeadItem> _leads = const [];
+  List<TrainingLesson> _lessons = const [];
 
   bool _isBootstrapping = true;
   bool _isLoggingIn = false;
   bool _isLoadingData = false;
   bool _isSessionBusy = false;
-  bool _isStartWorkPromptVisible = false;
+  bool _isTrainingPromptVisible = false;
+  bool _isNetworkErrorVisible = false;
   int _tab = 0;
+  int _lastLoadedTab = 0;
   int _leadIndex = 0;
   String _callStatus = 'Call Back';
+  String _learningQuery = '';
+  String? _loginErrorText;
+  String _networkErrorMessage = 'Network connection lost.';
   String? _activeCallId;
   String? _activeCallLeadId;
   PendingDialerCall? _pendingDialerCall;
@@ -120,6 +130,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   Timer? _callTimer;
   Timer? _heartbeatTimer;
   Timer? _idleMonitorTimer;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   DateTime? _lastInteractionAt;
   DateTime? _backgroundedAt;
@@ -133,6 +144,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _updatePreferredOrientations();
+    _watchConnectivity();
     _bootstrap();
   }
 
@@ -144,6 +157,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _callTimer?.cancel();
     _heartbeatTimer?.cancel();
     _idleMonitorTimer?.cancel();
+    _connectivitySubscription?.cancel();
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     super.dispose();
   }
 
@@ -152,15 +167,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _lifecycleState = state;
 
     if (_user == null) {
-      if (state == AppLifecycleState.resumed) {
-        _maybePromptStartWork();
-      }
       return;
     }
 
     if (!_summary.workingNow) {
       if (state == AppLifecycleState.resumed) {
-        unawaited(_loadDashboardData(showLoader: false, promptStartWork: true));
+        unawaited(
+          _loadDashboardData(showLoader: false, promptTrainingGate: true),
+        );
       }
       return;
     }
@@ -181,13 +195,133 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     return _leadIndex.clamp(0, _leads.length - 1);
   }
 
+  List<TrainingLesson> get _pendingMandatoryLessons => _lessons
+      .where((lesson) => lesson.isMandatory && !lesson.isCompleted)
+      .toList();
+
+  bool get _hasPendingMandatoryTraining =>
+      _pendingMandatoryLessons.isNotEmpty ||
+      _learningSummary.hasPendingMandatory ||
+      _summary.trainingRequired;
+
+  List<TrainingLesson> get _filteredLessons {
+    final query = _learningQuery.trim().toLowerCase();
+    if (query.isEmpty) {
+      return _lessons;
+    }
+    return _lessons
+        .where((lesson) => lesson.searchableText.contains(query))
+        .toList();
+  }
+
+  void _applyLearningPayload(LearningCenterPayload payload) {
+    _learningSummary = payload.summary;
+    _lessons = payload.lessons;
+  }
+
+  void _updatePreferredOrientations() {
+    if (_user == null) {
+      SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.portraitUp,
+      ]);
+      return;
+    }
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+  }
+
+  void _watchConnectivity() {
+    final connectivity = Connectivity();
+    _connectivitySubscription = connectivity.onConnectivityChanged.listen((
+      results,
+    ) {
+      final hasConnection = results.any(
+        (result) => result != ConnectivityResult.none,
+      );
+      if (!hasConnection) {
+        _showNetworkError(
+          'You are offline. Check mobile data, Wi-Fi, or your server connection.',
+        );
+        return;
+      }
+      if (_isNetworkErrorVisible) {
+        unawaited(_recoverFromNetworkError());
+      }
+    });
+  }
+
+  void _showNetworkError(String message) {
+    if (!mounted) {
+      return;
+    }
+    try {
+      Navigator.of(
+        context,
+        rootNavigator: true,
+      ).popUntil((route) => route.isFirst);
+    } catch (_) {
+      // Ignore navigator state issues while surfacing the offline view.
+    }
+    setState(() {
+      _networkErrorMessage = message;
+      _isNetworkErrorVisible = true;
+      _lastLoadedTab = _tab;
+    });
+  }
+
+  Future<void> _recoverFromNetworkError() async {
+    try {
+      if (mounted) {
+        setState(() => _isNetworkErrorVisible = false);
+      }
+      if (_user == null) {
+        await _apiClient.loadStoredSession();
+        final restoredUser = await _apiClient.restoreSession();
+        if (restoredUser != null) {
+          _user = restoredUser;
+          _updatePreferredOrientations();
+          await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+        }
+      } else {
+        await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+      }
+
+      if (!mounted) {
+        return;
+      }
+      if (_isNetworkErrorVisible) {
+        return;
+      }
+      setState(() {
+        _isNetworkErrorVisible = false;
+        _tab = _lastLoadedTab < 0
+            ? 0
+            : (_lastLoadedTab > 2 ? 2 : _lastLoadedTab);
+      });
+    } on ApiException catch (error) {
+      if (error.code != 'network_error') {
+        _showMessage(error.message, isError: true);
+      } else {
+        _showNetworkError(
+          'Still unable to reconnect. Check internet, Wi-Fi, or server access.',
+        );
+      }
+    }
+  }
+
   Future<void> _bootstrap() async {
     try {
       await _apiClient.loadStoredSession();
       final restoredUser = await _apiClient.restoreSession();
       if (restoredUser != null) {
         _user = restoredUser;
-        await _loadDashboardData(showLoader: false, promptStartWork: true);
+        _updatePreferredOrientations();
+        await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+      }
+    } on ApiException catch (error) {
+      if (error.code == 'network_error') {
+        _showNetworkError('Unable to reach the server. Reconnect to continue.');
+      } else {
+        await _apiClient.clearSession();
       }
     } catch (_) {
       await _apiClient.clearSession();
@@ -200,7 +334,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   Future<void> _loadDashboardData({
     bool showLoader = true,
-    bool promptStartWork = false,
+    bool promptTrainingGate = false,
   }) async {
     if (showLoader && mounted) {
       setState(() => _isLoadingData = true);
@@ -210,6 +344,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       final results = await Future.wait<dynamic>([
         _apiClient.fetchTodaySummary(),
         _apiClient.fetchAssignedLeads(),
+        _apiClient.fetchLearningCenter(),
       ]);
       if (!mounted) {
         return;
@@ -217,6 +352,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       setState(() {
         _summary = results[0] as DailySummary;
         _leads = results[1] as List<LeadItem>;
+        _applyLearningPayload(results[2] as LearningCenterPayload);
+        _isNetworkErrorVisible = false;
         if (_leadIndex >= _leads.length) {
           _leadIndex = _leads.isEmpty ? 0 : _leads.length - 1;
         }
@@ -225,12 +362,18 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       if (_summary.currentState == 'warning' && !_isIdleWarningVisible) {
         unawaited(_showIdleWarning());
       }
-      if (promptStartWork) {
-        _maybePromptStartWork();
+      if (promptTrainingGate) {
+        _maybePromptMandatoryTraining();
       }
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
         await _handleForcedLogout();
+        return;
+      }
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Unable to refresh the app. Reconnect and the last page will return automatically.',
+        );
         return;
       }
       _showMessage(error.message, isError: true);
@@ -243,8 +386,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   Future<void> _handleLogin() async {
     FocusScope.of(context).unfocus();
+    setState(() => _loginErrorText = null);
     if (phone.text.trim().isEmpty || password.text.isEmpty) {
-      _showMessage('Enter phone number and password.', isError: true);
+      setState(() => _loginErrorText = 'Enter phone number and password.');
       return;
     }
 
@@ -263,9 +407,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         return;
       }
       _user = user;
-      await _loadDashboardData(showLoader: false, promptStartWork: true);
+      _updatePreferredOrientations();
+      await _loadDashboardData(showLoader: false, promptTrainingGate: true);
     } on ApiException catch (error) {
-      _showMessage(error.message, isError: true);
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Unable to reach the server. Reconnect and the app will restore automatically.',
+        );
+      } else if (mounted) {
+        setState(() => _loginErrorText = error.message);
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoggingIn = false);
@@ -285,14 +436,19 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     setState(() {
       _user = null;
       _summary = DailySummary.empty();
+      _learningSummary = LearningSummary.empty();
       _leads = const [];
-      _isStartWorkPromptVisible = false;
+      _lessons = const [];
+      _isTrainingPromptVisible = false;
       _tab = 0;
       _leadIndex = 0;
+      _learningQuery = '';
+      _loginErrorText = null;
       _lastInteractionAt = null;
       _backgroundedAt = null;
       _warningShownAt = null;
     });
+    _updatePreferredOrientations();
     _showMessage('Session expired. Please sign in again.', isError: true);
   }
 
@@ -313,18 +469,31 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     setState(() {
       _user = null;
       _summary = DailySummary.empty();
+      _learningSummary = LearningSummary.empty();
       _leads = const [];
-      _isStartWorkPromptVisible = false;
+      _lessons = const [];
+      _isTrainingPromptVisible = false;
       _tab = 0;
       _leadIndex = 0;
+      _learningQuery = '';
+      _loginErrorText = null;
       _lastInteractionAt = null;
       _backgroundedAt = null;
       _warningShownAt = null;
     });
+    _updatePreferredOrientations();
   }
 
-  Future<void> _startWork() async {
+  Future<void> _startWork({bool fromTraining = false}) async {
     if (_isSessionBusy) {
+      return;
+    }
+    if (_hasPendingMandatoryTraining) {
+      _showMessage(
+        'Complete the required training before starting work.',
+        isError: true,
+      );
+      _maybePromptMandatoryTraining(force: true);
       return;
     }
     _registerInteraction(syncServer: false);
@@ -341,15 +510,28 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _warningShownAt = null;
       });
       _syncPresenceMonitoring();
-      _isStartWorkPromptVisible = false;
-      _showMessage('Work session started.');
+      _isTrainingPromptVisible = false;
+      _showMessage(
+        fromTraining
+            ? 'Training completed. Work session started.'
+            : 'Work session started.',
+      );
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
         await _handleForcedLogout();
         return;
       }
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Unable to start work because the server is unreachable.',
+        );
+        return;
+      }
+      if (error.statusCode == 409 || error.code == 'training_required') {
+        await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+        return;
+      }
       _showMessage(error.message, isError: true);
-      _maybePromptStartWork();
     } finally {
       if (mounted) {
         setState(() => _isSessionBusy = false);
@@ -379,6 +561,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
         await _handleForcedLogout();
+        return;
+      }
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Unable to end work because the network is unavailable.',
+        );
         return;
       }
       _showMessage(error.message, isError: true);
@@ -421,8 +609,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         await _handleForcedLogout();
         return;
       }
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Connection lost while syncing activity. The app will restore when the network returns.',
+        );
+        return;
+      }
       if (error.statusCode == 409 || error.statusCode == 404) {
-        await _loadDashboardData(showLoader: false, promptStartWork: true);
+        await _loadDashboardData(showLoader: false, promptTrainingGate: true);
         return;
       }
       if (showErrors) {
@@ -524,6 +718,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         await _handleForcedLogout();
         return;
       }
+      if (error.code == 'network_error') {
+        _showNetworkError('Connection lost while preparing the call.');
+        return;
+      }
       _showMessage(error.message, isError: true);
     }
   }
@@ -535,15 +733,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    await _syncCallFromLog(
-      allowManualFallback: true,
-      showMissingMessage: true,
-    );
+    await _syncCallFromLog(allowManualFallback: true, showMissingMessage: true);
   }
 
   Future<bool> _ensureCallLogAccess() async {
     if (!Platform.isAndroid) {
-      _showMessage('Automatic call sync is available on Android only.', isError: true);
+      _showMessage(
+        'Automatic call sync is available on Android only.',
+        isError: true,
+      );
       return false;
     }
 
@@ -674,7 +872,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       if (lead != null) {
         await _placeCallForLead(lead);
       } else {
-        _showMessage('Lead was updated, but a new call could not be started.', isError: true);
+        _showMessage(
+          'Lead was updated, but a new call could not be started.',
+          isError: true,
+        );
       }
       return;
     }
@@ -682,7 +883,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (call.status == 'no_answer') {
       _showMessage('Call marked as No Answer.');
     } else {
-      _showMessage('Call duration was less than 5 seconds, so it was not counted.', isError: true);
+      _showMessage(
+        'Call duration was less than 5 seconds, so it was not counted.',
+        isError: true,
+      );
     }
   }
 
@@ -734,11 +938,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-      if (call.status == 'invalid_short') {
-      _showMessage('Call duration was less than 5 seconds, so it was not counted.', isError: true);
-      } else {
-        _showMessage('Call synced from phone log.');
-      }
+    if (call.status == 'invalid_short') {
+      _showMessage(
+        'Call duration was less than 5 seconds, so it was not counted.',
+        isError: true,
+      );
+    } else {
+      _showMessage('Call synced from phone log.');
+    }
   }
 
   Future<void> _completeCallManually({required String source}) async {
@@ -763,7 +970,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     if (call.status == 'invalid_short') {
-      _showMessage('Call duration was less than 5 seconds, so it was not counted.', isError: true);
+      _showMessage(
+        'Call duration was less than 5 seconds, so it was not counted.',
+        isError: true,
+      );
     } else {
       _showMessage('Call ended without phone log sync.', isError: true);
     }
@@ -814,13 +1024,22 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         await _handleForcedLogout();
         return false;
       }
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Connection lost while syncing the call. The app will return when the network is back.',
+        );
+        return false;
+      }
       _showMessage(error.message, isError: true);
       return false;
     } catch (_) {
       if (allowManualFallback) {
         await _completeCallManually(source: 'manual_call_log_error');
       } else if (showMissingMessage) {
-        _showMessage('Unable to read the phone call log right now.', isError: true);
+        _showMessage(
+          'Unable to read the phone call log right now.',
+          isError: true,
+        );
       }
       return false;
     } finally {
@@ -863,7 +1082,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final backgroundedAt = _backgroundedAt;
     _backgroundedAt = null;
 
-    await _loadDashboardData(showLoader: false, promptStartWork: true);
+    await _loadDashboardData(showLoader: false, promptTrainingGate: true);
     if (!_summary.workingNow) {
       if (backgroundedAt != null &&
           DateTime.now().difference(backgroundedAt) >=
@@ -877,11 +1096,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     _lastInteractionAt = DateTime.now();
-    await _sendHeartbeat(
-      'foreground',
-      interaction: true,
-      source: 'lifecycle',
-    );
+    await _sendHeartbeat('foreground', interaction: true, source: 'lifecycle');
     if (_pendingDialerCall != null) {
       await _syncCallFromLog(
         allowManualFallback: false,
@@ -925,13 +1140,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    if (_summary.currentState == 'offline' || _summary.currentState == 'warning') {
+    if (_summary.currentState == 'offline' ||
+        _summary.currentState == 'warning') {
       unawaited(
-        _sendHeartbeat(
-          'foreground',
-          interaction: true,
-          source: 'user_action',
-        ),
+        _sendHeartbeat('foreground', interaction: true, source: 'user_action'),
       );
     }
   }
@@ -1040,19 +1252,64 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
-  void _maybePromptStartWork() {
+  Future<void> _completeTrainingLesson(TrainingLesson lesson) async {
+    try {
+      final payload = await _apiClient.completeTrainingLesson(
+        lessonId: lesson.id,
+      );
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _applyLearningPayload(payload);
+      });
+
+      if (_hasPendingMandatoryTraining) {
+        _showMessage(
+          'Training saved. Complete the remaining required lessons.',
+        );
+        return;
+      }
+
+      if (!_summary.workingNow) {
+        setState(() => _tab = 0);
+        await _startWork(fromTraining: true);
+      }
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+        return;
+      }
+      _showMessage(error.message, isError: true);
+    }
+  }
+
+  void _openLearningCenterFromPrompt() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _tab = 2;
+      _lastLoadedTab = 2;
+    });
+  }
+
+  void _maybePromptMandatoryTraining({bool force = false}) {
     if (!mounted ||
         _user == null ||
         _summary.workingNow ||
         _isSessionBusy ||
-        _isStartWorkPromptVisible) {
+        _isTrainingPromptVisible ||
+        (!_hasPendingMandatoryTraining && !force) ||
+        _tab == 2) {
       return;
     }
 
-    _isStartWorkPromptVisible = true;
+    _isTrainingPromptVisible = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
-        _isStartWorkPromptVisible = false;
+        _isTrainingPromptVisible = false;
         return;
       }
 
@@ -1066,15 +1323,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
               ),
-              title: const Text('Start Work'),
-              content: const Text(
-                'Start your work session to continue to the dashboard.',
+              title: const Text('Training Required'),
+              content: Text(
+                _learningSummary.nextRequiredTitle.isEmpty
+                    ? 'Complete the required training lessons before starting work.'
+                    : 'Complete the required training lessons before starting work. Next lesson: ${_learningSummary.nextRequiredTitle}.',
               ),
               actions: [
                 TextButton(
                   onPressed: () async {
                     Navigator.of(dialogContext).pop();
-                    _isStartWorkPromptVisible = false;
+                    _isTrainingPromptVisible = false;
                     await _logout();
                   },
                   child: const Text('Logout'),
@@ -1082,17 +1341,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 ElevatedButton(
                   onPressed: () async {
                     Navigator.of(dialogContext).pop();
-                    _isStartWorkPromptVisible = false;
-                    await _startWork();
+                    _isTrainingPromptVisible = false;
+                    _openLearningCenterFromPrompt();
                   },
-                  child: const Text('Start Work'),
+                  child: const Text('Open Learning Center'),
                 ),
               ],
             ),
           );
         },
       ).then((_) {
-        _isStartWorkPromptVisible = false;
+        _isTrainingPromptVisible = false;
       });
     });
   }
@@ -1134,12 +1393,19 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    if (_isNetworkErrorVisible && _user == null) {
+      return Scaffold(
+        body: NetworkErrorView(
+          message: _networkErrorMessage,
+          onRetry: _recoverFromNetworkError,
+        ),
+      );
+    }
+
     if (_user == null) {
       return _login();
     }
-
-    final lead = _leads.isEmpty ? null : _leads[_safeLeadIndex];
-    final pages = [_dashboard(), _leadList(), _call(lead)];
+    final pages = [_dashboard(), _leadList(), _learningCenter()];
 
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -1158,7 +1424,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   ? null
                   : () {
                       _registerInteraction(syncServer: false);
-                      _loadDashboardData();
+                      _loadDashboardData(promptTrainingGate: false);
                     },
               icon: _isLoadingData
                   ? const SizedBox(
@@ -1177,11 +1443,19 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             ),
           ],
         ),
-        body: SafeArea(child: pages[_tab]),
+        body: SafeArea(
+          child: _isNetworkErrorVisible
+              ? NetworkErrorView(
+                  message: _networkErrorMessage,
+                  onRetry: _recoverFromNetworkError,
+                )
+              : pages[_tab],
+        ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _tab,
           onDestinationSelected: (value) {
             _registerInteraction(syncServer: false);
+            _lastLoadedTab = value;
             setState(() => _tab = value);
           },
           destinations: const [
@@ -1196,9 +1470,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               label: 'Leads',
             ),
             NavigationDestination(
-              icon: Icon(Icons.call_outlined),
-              selectedIcon: Icon(Icons.call),
-              label: 'Call',
+              icon: Icon(Icons.school_outlined),
+              selectedIcon: Icon(Icons.school),
+              label: 'Learn',
             ),
           ],
         ),
@@ -1241,6 +1515,32 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 24),
+                  if (_loginErrorText != null) ...[
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: kRed.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: kRed.withValues(alpha: 0.18)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: kRed),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _loginErrorText!,
+                              style: const TextStyle(
+                                color: kRed,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   TextField(
                     controller: phone,
                     keyboardType: TextInputType.phone,
@@ -1349,11 +1649,67 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             ),
           ),
           const SizedBox(height: 18),
+          if (_hasPendingMandatoryTraining) ...[
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: kOrange.withValues(alpha: 0.24)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.school, color: kOrange),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Training pending',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _learningSummary.nextRequiredTitle.isEmpty
+                        ? 'Complete the required training lessons to begin work.'
+                        : 'Complete ${_learningSummary.pendingMandatoryCount} required lesson(s). Next: ${_learningSummary.nextRequiredTitle}.',
+                    style: const TextStyle(
+                      fontSize: 15.5,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      _registerInteraction(syncServer: false);
+                      setState(() {
+                        _tab = 2;
+                        _lastLoadedTab = 2;
+                      });
+                    },
+                    icon: const Icon(Icons.play_lesson),
+                    label: const Text('Open Learning Center'),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+          ],
           Row(
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: (_summary.workingNow || _isSessionBusy)
+                  onPressed:
+                      (_summary.workingNow ||
+                          _isSessionBusy ||
+                          _hasPendingMandatoryTraining)
                       ? null
                       : () => _startWork(),
                   icon: const Icon(Icons.play_circle_fill),
@@ -1420,10 +1776,25 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           ElevatedButton.icon(
             onPressed: () {
               _registerInteraction(syncServer: false);
-              setState(() => _tab = 1);
+              setState(() {
+                _tab = 1;
+                _lastLoadedTab = 1;
+              });
             },
             icon: const Icon(Icons.people),
             label: const Text('Open Lead List'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: () {
+              _registerInteraction(syncServer: false);
+              setState(() {
+                _tab = 2;
+                _lastLoadedTab = 2;
+              });
+            },
+            icon: const Icon(Icons.school),
+            label: const Text('Open Learning Center'),
           ),
         ],
       ),
@@ -1514,16 +1885,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     ],
                     const SizedBox(height: 14),
                     ElevatedButton.icon(
-                      onPressed: () {
-                        _registerInteraction(syncServer: false);
-                        setState(() {
-                          _leadIndex = i;
-                          _callStatus = _leads[i].statusLabel == 'Interested'
-                              ? 'Interested'
-                              : 'Call Back';
-                          _tab = 2;
-                        });
-                      },
+                      onPressed: () => _openCallScreenForLead(i),
                       icon: const Icon(Icons.call),
                       label: const Text('Open Call Screen'),
                     ),
@@ -1532,6 +1894,28 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _openCallScreenForLead(int index) async {
+    if (index < 0 || index >= _leads.length) {
+      return;
+    }
+    _registerInteraction(syncServer: false);
+    setState(() {
+      _leadIndex = index;
+      _callStatus = _leads[index].statusLabel == 'Interested'
+          ? 'Interested'
+          : 'Call Back';
+    });
+
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Call')),
+          body: SafeArea(child: _call(_leads[index])),
+        ),
       ),
     );
   }
@@ -1632,7 +2016,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: _summary.workingNow ? () => _startCall() : null,
+                        onPressed: _summary.workingNow
+                            ? () => _startCall()
+                            : null,
                         icon: const Icon(Icons.phone_forwarded),
                         label: const Text('Call'),
                       ),
@@ -1640,7 +2026,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: hasActiveCallForLead ? () => _endCall() : null,
+                        onPressed: hasActiveCallForLead
+                            ? () => _endCall()
+                            : null,
                         style: ElevatedButton.styleFrom(backgroundColor: kRed),
                         icon: const Icon(Icons.sync),
                         label: const Text('Sync Call'),
@@ -1692,6 +2080,694 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       ],
     );
   }
+
+  Widget _learningCenter() {
+    final lessons = _filteredLessons;
+
+    return RefreshIndicator(
+      onRefresh: () {
+        _registerInteraction(syncServer: false);
+        return _loadDashboardData();
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          const Text(
+            'Learning Center',
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _learningSummary.totalLessons == 0
+                ? 'Training lessons published from the admin panel will appear here.'
+                : '${_learningSummary.completedCount} of ${_learningSummary.totalLessons} lessons completed.',
+            style: const TextStyle(fontSize: 16.5, color: Colors.black54),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: InfoCard(
+                        title: 'Pending',
+                        value: _learningSummary.pendingMandatoryCount
+                            .toString(),
+                        color: kOrange,
+                        icon: Icons.pending_actions,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: InfoCard(
+                        title: 'Completed',
+                        value: _learningSummary.completedCount.toString(),
+                        color: kGreen,
+                        icon: Icons.task_alt,
+                      ),
+                    ),
+                  ],
+                ),
+                if (_hasPendingMandatoryTraining &&
+                    _learningSummary.nextRequiredTitle.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: kSoft,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text(
+                      'Next required lesson: ${_learningSummary.nextRequiredTitle}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: kPrimaryDark,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            onChanged: (value) {
+              setState(() => _learningQuery = value);
+            },
+            decoration: const InputDecoration(
+              hintText: 'Search lessons, topics, or tags',
+              prefixIcon: Icon(Icons.search),
+            ),
+          ),
+          const SizedBox(height: 18),
+          if (_lessons.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: const Text(
+                'No training lessons are available right now.',
+                style: TextStyle(fontSize: 16),
+              ),
+            )
+          else if (lessons.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: const Text(
+                'No lessons matched your search.',
+                style: TextStyle(fontSize: 16),
+              ),
+            )
+          else
+            for (final lesson in lessons)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: _TrainingLessonCard(
+                  lesson: lesson,
+                  onOpen: () async {
+                    _registerInteraction(syncServer: false);
+                    await Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => TrainingLessonPage(
+                          lesson: lesson,
+                          onComplete: () => _completeTrainingLesson(lesson),
+                        ),
+                      ),
+                    );
+                    if (mounted) {
+                      setState(() {});
+                    }
+                  },
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrainingLessonCard extends StatelessWidget {
+  const _TrainingLessonCard({required this.lesson, required this.onOpen});
+
+  final TrainingLesson lesson;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final statusColor = lesson.isCompleted
+        ? kGreen
+        : (lesson.isMandatory ? kOrange : kPrimary);
+    final statusLabel = lesson.isCompleted
+        ? 'Completed'
+        : (lesson.isMandatory ? 'Mandatory' : 'Optional');
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(
+                  lesson.hasVideo ? Icons.ondemand_video : Icons.menu_book,
+                  color: statusColor,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      lesson.title,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      lesson.description.isEmpty
+                          ? 'Open the lesson to review the training content.'
+                          : lesson.description,
+                      style: const TextStyle(
+                        fontSize: 15.5,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              StatusPill(label: statusLabel),
+              if (lesson.searchKeywords.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: kSoft,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    lesson.searchKeywords,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: kPrimaryDark,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            onPressed: onOpen,
+            icon: Icon(
+              lesson.isCompleted ? Icons.replay : Icons.play_circle_fill,
+            ),
+            label: Text(lesson.isCompleted ? 'Open Again' : 'Open Lesson'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class TrainingLessonPage extends StatefulWidget {
+  const TrainingLessonPage({
+    super.key,
+    required this.lesson,
+    required this.onComplete,
+  });
+
+  final TrainingLesson lesson;
+  final Future<void> Function() onComplete;
+
+  @override
+  State<TrainingLessonPage> createState() => _TrainingLessonPageState();
+}
+
+class _TrainingLessonPageState extends State<TrainingLessonPage> {
+  VideoPlayerController? _controller;
+  Future<void>? _videoFuture;
+  bool _canComplete = false;
+  bool _isCompleting = false;
+  String? _videoError;
+
+  @override
+  void initState() {
+    super.initState();
+    _canComplete = widget.lesson.isCompleted || !widget.lesson.hasVideo;
+    if (widget.lesson.hasVideo) {
+      _initialiseVideo();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  void _initialiseVideo() {
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(widget.lesson.videoUrl),
+    );
+    controller.addListener(_handleVideoProgress);
+    _controller = controller;
+    _videoFuture = controller
+        .initialize()
+        .catchError((_) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _videoError =
+                'Video could not be loaded. Review the lesson notes and complete it manually.';
+            _canComplete = true;
+          });
+        })
+        .then((_) {
+          if (!mounted || !controller.value.isInitialized) {
+            return;
+          }
+          controller.play();
+          setState(() {});
+        });
+  }
+
+  void _handleVideoProgress() {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized || _canComplete) {
+      return;
+    }
+
+    final duration = controller.value.duration;
+    final position = controller.value.position;
+    if (duration > Duration.zero &&
+        position >= duration - const Duration(seconds: 2)) {
+      setState(() => _canComplete = true);
+    }
+  }
+
+  Future<void> _completeLesson() async {
+    if (_isCompleting || widget.lesson.isCompleted || !_canComplete) {
+      return;
+    }
+    setState(() => _isCompleting = true);
+    try {
+      await widget.onComplete();
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isCompleting = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final videoWidget = widget.lesson.hasVideo
+        ? FutureBuilder<void>(
+            future: _videoFuture,
+            builder: (context, snapshot) {
+              if (_videoError != null) {
+                return _TrainingVideoError(message: _videoError!);
+              }
+              final controller = _controller;
+              if (controller == null ||
+                  snapshot.connectionState != ConnectionState.done ||
+                  !controller.value.isInitialized) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AspectRatio(
+                    aspectRatio: controller.value.aspectRatio == 0
+                        ? 16 / 9
+                        : controller.value.aspectRatio,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(22),
+                      child: VideoPlayer(controller),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      IconButton.filled(
+                        onPressed: () {
+                          if (controller.value.isPlaying) {
+                            controller.pause();
+                          } else {
+                            controller.play();
+                          }
+                          setState(() {});
+                        },
+                        icon: Icon(
+                          controller.value.isPlaying
+                              ? Icons.pause
+                              : Icons.play_arrow,
+                        ),
+                      ),
+                      Expanded(
+                        child: VideoProgressIndicator(
+                          controller,
+                          allowScrubbing: true,
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          colors: const VideoProgressColors(
+                            playedColor: kPrimary,
+                            bufferedColor: kSoft,
+                            backgroundColor: Color(0xFFD9DFEF),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          )
+        : const _TrainingVideoError(
+            message:
+                'No video is attached to this lesson. Review the lesson notes and complete it when finished.',
+          );
+
+    return Scaffold(
+      appBar: AppBar(title: Text(widget.lesson.title)),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            Text(
+              widget.lesson.title,
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                StatusPill(
+                  label: widget.lesson.isCompleted
+                      ? 'Completed'
+                      : (widget.lesson.isMandatory ? 'Mandatory' : 'Optional'),
+                ),
+                if (widget.lesson.searchKeywords.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: kSoft,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      widget.lesson.searchKeywords,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: kPrimaryDark,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Lesson overview',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.lesson.description.isEmpty
+                        ? 'Review the training content and complete the lesson when you are done.'
+                        : widget.lesson.description,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      height: 1.5,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(26),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Training video',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 12),
+                  videoWidget,
+                  if (!widget.lesson.isCompleted &&
+                      widget.lesson.hasVideo &&
+                      !_canComplete) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Watch the lesson until the end to unlock completion.',
+                      style: TextStyle(
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed:
+                  widget.lesson.isCompleted || _isCompleting || !_canComplete
+                  ? null
+                  : _completeLesson,
+              icon: _isCompleting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.check_circle),
+              label: Text(
+                widget.lesson.isCompleted
+                    ? 'Already Completed'
+                    : _isCompleting
+                    ? 'Saving...'
+                    : 'Complete Training',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TrainingVideoError extends StatelessWidget {
+  const _TrainingVideoError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: kSoft,
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Text(
+        message,
+        style: const TextStyle(fontSize: 15.5, color: Colors.black54),
+      ),
+    );
+  }
+}
+
+class NetworkErrorView extends StatelessWidget {
+  const NetworkErrorView({
+    super.key,
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final Future<void> Function() onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 460),
+            child: Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: kPrimaryDark.withValues(alpha: 0.08),
+                    blurRadius: 28,
+                    offset: const Offset(0, 18),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0.92, end: 1),
+                    duration: const Duration(milliseconds: 1200),
+                    curve: Curves.easeInOut,
+                    builder: (context, value, child) {
+                      return Transform.scale(scale: value, child: child);
+                    },
+                    onEnd: () {},
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        const SizedBox(
+                          width: 92,
+                          height: 92,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            valueColor: AlwaysStoppedAnimation<Color>(kPrimary),
+                          ),
+                        ),
+                        Container(
+                          width: 88,
+                          height: 88,
+                          decoration: BoxDecoration(
+                            color: kSoft,
+                            borderRadius: BorderRadius.circular(28),
+                          ),
+                          child: const Icon(
+                            Icons.cloud_off_rounded,
+                            size: 42,
+                            color: kPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'Connection Problem',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      height: 1.5,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: kSoft,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    child: const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Troubleshooting',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            color: kPrimaryDark,
+                          ),
+                        ),
+                        SizedBox(height: 10),
+                        Text('1. Check mobile data or Wi-Fi on the device.'),
+                        SizedBox(height: 6),
+                        Text('2. Confirm the local or live server is running.'),
+                        SizedBox(height: 6),
+                        Text(
+                          '3. Wait a moment. The app will restore automatically when the connection returns.',
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  ElevatedButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry Now'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class PendingDialerCall {
@@ -1708,10 +2784,7 @@ class PendingDialerCall {
   final DateTime startedAt;
 }
 
-enum NoAnswerDecision {
-  markNoAnswer,
-  callAgain,
-}
+enum NoAnswerDecision { markNoAnswer, callAgain }
 
 class InfoCard extends StatelessWidget {
   const InfoCard({
@@ -1842,6 +2915,9 @@ class StatusPill extends StatelessWidget {
       'No Answer' => kRed,
       'Converted' => kGreen,
       'Not Interested' => kRed,
+      'Completed' => kGreen,
+      'Mandatory' => kOrange,
+      'Optional' => kPrimary,
       _ => kPrimary,
     };
     return Container(

@@ -23,6 +23,23 @@
     <link rel="stylesheet" href="{% static 'css/heavenection-calltrack.css' %}">
 </head>
 <body class="mf-theme-admin hc-admin-web">
+<div class="hc-network-overlay" id="heavenectionNetworkOverlay" hidden>
+    <div class="hc-network-card">
+        <div class="hc-network-animation">
+            <span class="hc-network-ring"></span>
+            <span class="hc-network-icon"><i class="bi bi-cloud-slash"></i></span>
+        </div>
+        <h2>Connection Problem</h2>
+        <p id="heavenectionNetworkMessage">Connection lost. Check your internet or server and wait for automatic recovery.</p>
+        <div class="hc-network-help">
+            <h3>Troubleshooting</h3>
+            <p>1. Check Wi-Fi, mobile hotspot, or ethernet.</p>
+            <p>2. Confirm the HEAVENECTION server is running.</p>
+            <p>3. Stay on this page. It will recover automatically when the connection returns.</p>
+        </div>
+        <button type="button" class="btn btn-primary" id="heavenectionNetworkRetry">Retry Now</button>
+    </div>
+</div>
 <div class="mf-shell">
     <div class="mf-overlay" id="mfOverlay"></div>
     <aside class="mf-sidebar" id="mfSidebar">
@@ -70,24 +87,24 @@
                 </div>
             </div>
 
-            <div class="hc-sidebar-section{% if active_page == 'staff' or active_page == 'leads' %} is-expanded{% endif %}">
+            <div class="hc-sidebar-section{% if active_page == 'staff' or active_page == 'leads' or active_page == 'learning' %} is-expanded{% endif %}">
                 <button
                     type="button"
                     class="hc-sidebar-toggle"
                     data-bs-toggle="collapse"
                     data-bs-target="#hcSidebarOperations"
-                    aria-expanded="{% if active_page == 'staff' or active_page == 'leads' %}true{% else %}false{% endif %}"
+                    aria-expanded="{% if active_page == 'staff' or active_page == 'leads' or active_page == 'learning' %}true{% else %}false{% endif %}"
                     aria-controls="hcSidebarOperations"
                 >
                     <span class="hc-sidebar-toggle-icon"><i class="bi bi-diagram-3-fill"></i></span>
                     <span class="hc-sidebar-toggle-copy">
                         <strong>Operations</strong>
-                        <small>Staff setup and lead handling</small>
+                        <small>Staff setup, leads, and training</small>
                     </span>
-                    <span class="hc-sidebar-toggle-badge">2</span>
+                    <span class="hc-sidebar-toggle-badge">3</span>
                     <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
                 </button>
-                <div class="collapse{% if active_page == 'staff' or active_page == 'leads' %} show{% endif %}" id="hcSidebarOperations" data-bs-parent="#hcSidebarNav">
+                <div class="collapse{% if active_page == 'staff' or active_page == 'leads' or active_page == 'learning' %} show{% endif %}" id="hcSidebarOperations" data-bs-parent="#hcSidebarNav">
                     <div class="hc-sidebar-links">
                         <a href="{% url 'staff-page' %}" class="hc-sidebar-link{% if active_page == 'staff' %} active{% endif %}">
                             <i class="bi bi-people-fill"></i>
@@ -96,6 +113,10 @@
                         <a href="{% url 'leads-page' %}" class="hc-sidebar-link{% if active_page == 'leads' %} active{% endif %}">
                             <i class="bi bi-person-lines-fill"></i>
                             <span>Lead Management</span>
+                        </a>
+                        <a href="{% url 'learning-page' %}" class="hc-sidebar-link{% if active_page == 'learning' %} active{% endif %}">
+                            <i class="bi bi-journal-play"></i>
+                            <span>Learning Center</span>
                         </a>
                     </div>
                 </div>
@@ -230,10 +251,12 @@
 
 <script>
 window.heavenectionPwa = { serviceWorkerUrl: "{% url 'pwa-service-worker' %}" };
+window.heavenectionNetwork = { offlinePath: "{% url 'offline-page' %}" };
 window.heavenectionAdmin = {
     csrfToken: "{{ csrf_token }}",
     teamMembersUrl: "{% url 'api-team-members' %}",
     leadsUrl: "{% url 'api-leads' %}",
+    trainingUrl: "{% url 'api-training-lessons' %}",
     callsUrl: "{% url 'api-calls' %}",
     workingHoursUrl: "{% url 'api-working-hours' %}",
     salarySummaryUrl: "{% url 'api-salary-summary' %}",
@@ -242,6 +265,7 @@ window.heavenectionAdmin = {
 </script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="{% static 'js/heavenection-network.js' %}"></script>
 <script src="{% static 'js/dashboard-ux.js' %}"></script>
 <script src="{% static 'js/heavenection-calltrack.js' %}"></script>
 <script src="{% static 'js/heavenection-pwa.js' %}"></script>

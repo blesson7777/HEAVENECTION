@@ -7,7 +7,17 @@ from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 
-from backend.apps.telecalling.models import Call, CompanyProfile, Lead, Salary, Session, Staff, StaffAction
+from backend.apps.telecalling.models import (
+    Call,
+    CompanyProfile,
+    Lead,
+    Salary,
+    Session,
+    Staff,
+    StaffAction,
+    TrainingCompletion,
+    TrainingLesson,
+)
 
 
 ONLINE_WINDOW_SECONDS = 90
@@ -17,6 +27,12 @@ IDLE_WARNING_AFTER_SECONDS = 5 * 60
 IDLE_WARNING_GRACE_SECONDS = 5 * 60
 IDLE_OFFLINE_AFTER_SECONDS = IDLE_WARNING_AFTER_SECONDS + IDLE_WARNING_GRACE_SECONDS
 TWOPLACES = Decimal("0.01")
+
+
+class TrainingRequiredError(Exception):
+    def __init__(self, payload):
+        super().__init__("Complete mandatory training before starting work.")
+        self.payload = payload
 
 
 def get_company_profile():
@@ -394,6 +410,157 @@ def _staff_online_label(session, active_cutoff):
 
 def _staff_queryset():
     return Staff.objects.filter(role=Staff.Role.STAFF).order_by("name")
+
+
+def _training_lessons_queryset():
+    return TrainingLesson.objects.order_by("sort_order", "-published_at", "title")
+
+
+def _active_training_lessons_queryset():
+    return _training_lessons_queryset().filter(is_active=True)
+
+
+def _completion_map_for_staff(staff):
+    return {
+        completion.lesson_id: completion
+        for completion in TrainingCompletion.objects.filter(staff=staff).select_related("lesson")
+    }
+
+
+def get_pending_mandatory_lessons(staff):
+    completed_lesson_ids = TrainingCompletion.objects.filter(staff=staff).values_list("lesson_id", flat=True)
+    return _active_training_lessons_queryset().filter(is_mandatory=True).exclude(id__in=completed_lesson_ids)
+
+
+def build_staff_learning_payload(staff):
+    lessons = list(_active_training_lessons_queryset())
+    completion_map = _completion_map_for_staff(staff)
+    pending_mandatory_count = 0
+    next_required_title = ""
+    completed_count = 0
+    lesson_rows = []
+
+    for lesson in lessons:
+        completion = completion_map.get(lesson.id)
+        is_completed = completion is not None
+        if is_completed:
+            completed_count += 1
+        if lesson.is_mandatory and not is_completed:
+            pending_mandatory_count += 1
+            if not next_required_title:
+                next_required_title = lesson.title
+
+        lesson_rows.append(
+            {
+                "id": str(lesson.id),
+                "title": lesson.title,
+                "description": lesson.description,
+                "video_url": lesson.video_url,
+                "search_keywords": lesson.search_keywords,
+                "is_active": lesson.is_active,
+                "is_mandatory": lesson.is_mandatory,
+                "is_completed": is_completed,
+                "completed_at": completion.completed_at.isoformat() if completion else None,
+                "published_at": lesson.published_at.isoformat() if lesson.published_at else None,
+                "published_at_label": _format_datetime(lesson.published_at),
+            }
+        )
+
+    return {
+        "summary": {
+            "total_lessons": len(lesson_rows),
+            "completed_count": completed_count,
+            "pending_mandatory_count": pending_mandatory_count,
+            "has_pending_mandatory": pending_mandatory_count > 0,
+            "next_required_title": next_required_title,
+        },
+        "lessons": lesson_rows,
+    }
+
+
+def build_learning_management_payload():
+    today = timezone.localdate()
+    active_staff_count = _staff_queryset().filter(is_active=True).count()
+    completion_counts = {
+        row["lesson_id"]: row["count"]
+        for row in TrainingCompletion.objects.values("lesson_id").annotate(count=Count("id"))
+    }
+    lesson_rows = []
+    active_count = 0
+    mandatory_count = 0
+    total_completions = TrainingCompletion.objects.count()
+
+    for lesson in _training_lessons_queryset():
+        completed_staff_count = completion_counts.get(lesson.id, 0)
+        pending_staff_count = max(active_staff_count - completed_staff_count, 0)
+        if lesson.is_active:
+            active_count += 1
+        if lesson.is_active and lesson.is_mandatory:
+            mandatory_count += 1
+
+        if not lesson.is_active:
+            status_filter = "inactive"
+            status_label = "Inactive"
+        elif lesson.is_mandatory:
+            status_filter = "mandatory"
+            status_label = "Mandatory"
+        else:
+            status_filter = "optional"
+            status_label = "Optional"
+
+        lesson_rows.append(
+            {
+                "id": str(lesson.id),
+                "title": lesson.title,
+                "description": lesson.description,
+                "video_url": lesson.video_url,
+                "search_keywords": lesson.search_keywords,
+                "is_active": lesson.is_active,
+                "is_mandatory": lesson.is_mandatory,
+                "sort_order": lesson.sort_order,
+                "published_at": lesson.published_at,
+                "published_at_label": _format_datetime(lesson.published_at),
+                "completed_staff_count": completed_staff_count,
+                "pending_staff_count": pending_staff_count,
+                "status_filter": status_filter,
+                "status_label": status_label,
+            }
+        )
+
+    return {
+        "today_label": today.strftime("%A, %d %b %Y"),
+        "summary": {
+            "active_count": active_count,
+            "mandatory_count": mandatory_count,
+            "active_staff_count": active_staff_count,
+            "total_completions": total_completions,
+        },
+        "lesson_rows": lesson_rows,
+    }
+
+
+def complete_training_lesson(staff, lesson):
+    now = timezone.now()
+    completion, created = TrainingCompletion.objects.get_or_create(
+        staff=staff,
+        lesson=lesson,
+        defaults={"completed_at": now},
+    )
+    if not created and not completion.completed_at:
+        completion.completed_at = now
+        completion.save(update_fields=["completed_at"])
+
+    mark_staff_seen(staff, now)
+    _log_staff_action(
+        staff,
+        StaffAction.ActionType.TRAINING_COMPLETED,
+        metadata={
+            "lesson_id": str(lesson.id),
+            "lesson_title": lesson.title,
+            "created": created,
+        },
+    )
+    return completion
 
 
 def _open_sessions_by_staff():
@@ -1011,6 +1178,19 @@ def start_staff_session(staff):
         _touch_session_interaction(session, now, metadata={"source": "start_work_reuse"})
         return session, False
 
+    pending_lessons = list(get_pending_mandatory_lessons(staff)[:20])
+    if pending_lessons:
+        pending_payload = build_staff_learning_payload(staff)
+        _log_staff_action(
+            staff,
+            StaffAction.ActionType.TRAINING_REQUIRED_BLOCKED,
+            metadata={
+                "pending_mandatory_count": pending_payload["summary"]["pending_mandatory_count"],
+                "next_required_title": pending_payload["summary"]["next_required_title"],
+            },
+        )
+        raise TrainingRequiredError(pending_payload)
+
     session = Session.objects.create(
         staff=staff,
         login_time=now,
@@ -1123,6 +1303,7 @@ def build_staff_today_payload(staff):
     assigned_leads = Lead.objects.filter(assigned_to=staff)
     open_session = get_open_session(staff, reconcile=True)
     latest_session = sessions_today.order_by("-login_time").first()
+    learning_payload = build_staff_learning_payload(staff)
 
     active_seconds = sessions_today.aggregate(total=Sum("active_seconds")).get("total") or 0
     calls_count = qualifying_calls.count()
@@ -1142,6 +1323,9 @@ def build_staff_today_payload(staff):
             "current_state": open_session.last_known_state if open_session else "stopped",
             "status_label": _session_status_label(open_session, latest_session=latest_session),
             "close_reason": latest_session.close_reason if latest_session else "",
+            "pending_training_count": learning_payload["summary"]["pending_mandatory_count"],
+            "training_required": learning_payload["summary"]["has_pending_mandatory"],
+            "next_training_title": learning_payload["summary"]["next_required_title"],
         },
         "session": {
             "id": str(open_session.id),

@@ -64,16 +64,24 @@
     }
 
     async function requestJson(url, options) {
-        const response = await fetch(url, {
-            credentials: "same-origin",
-            headers: {
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-                "X-CSRFToken": getCsrfToken(),
-                ...(options?.headers || {}),
-            },
-            ...options,
-        });
+        let response;
+        try {
+            response = await fetch(url, {
+                credentials: "same-origin",
+                headers: {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCsrfToken(),
+                    ...(options?.headers || {}),
+                },
+                ...options,
+            });
+        } catch (error) {
+            window.heavenectionNetworkState?.show(
+                "Connection lost. Check your internet or server and wait for recovery.",
+            );
+            throw new Error("Network connection lost.");
+        }
 
         let payload = null;
         try {
@@ -112,6 +120,7 @@
             { inputId: "leadSearchInput", tableBodyId: "leadTableBody" },
             { inputId: "callSearchInput", tableBodyId: "callTableBody" },
             { inputId: "staffSearchInput", tableBodyId: "staffTableBody" },
+            { inputId: "learningSearchInput", tableBodyId: "learningTableBody" },
             { inputId: "hoursSearchInput", tableBodyId: "hoursSummaryBody" },
             { inputId: "salarySearchInput", tableBodyId: "salaryTableBody" },
             { inputId: "salaryControlSearchInput", tableBodyId: "salaryControlBody" },
@@ -480,6 +489,117 @@
         });
     }
 
+    function bindTrainingCrud() {
+        const config = window.heavenectionAdmin;
+        const modalNode = document.getElementById("trainingModal");
+        const form = document.getElementById("trainingForm");
+        if (!config?.trainingUrl || !modalNode || !form) {
+            return;
+        }
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalNode);
+        const titleNode = document.getElementById("trainingModalTitle");
+        const idInput = document.getElementById("trainingFormId");
+        const lessonTitleInput = document.getElementById("trainingTitle");
+        const descriptionInput = document.getElementById("trainingDescription");
+        const videoUrlInput = document.getElementById("trainingVideoUrl");
+        const keywordsInput = document.getElementById("trainingKeywords");
+        const sortOrderInput = document.getElementById("trainingSortOrder");
+        const mandatoryInput = document.getElementById("trainingIsMandatory");
+        const activeInput = document.getElementById("trainingIsActive");
+        const feedback = document.getElementById("trainingFormFeedback");
+        const submitButton = document.getElementById("trainingSubmitButton");
+
+        function showFeedback(message, isError) {
+            feedback.textContent = message;
+            feedback.classList.remove("d-none", "is-success", "is-error");
+            feedback.classList.add(isError ? "is-error" : "is-success");
+        }
+
+        function clearFeedback() {
+            feedback.textContent = "";
+            feedback.classList.add("d-none");
+            feedback.classList.remove("is-success", "is-error");
+        }
+
+        function resetForm() {
+            form.reset();
+            idInput.value = "";
+            sortOrderInput.value = "0";
+            mandatoryInput.checked = true;
+            activeInput.checked = true;
+            titleNode.textContent = "Add Lesson";
+            clearFeedback();
+        }
+
+        document.getElementById("openCreateTrainingModal")?.addEventListener("click", resetForm);
+        modalNode.addEventListener("hidden.bs.modal", clearFeedback);
+
+        document.querySelectorAll(".js-edit-training").forEach((button) => {
+            button.addEventListener("click", () => {
+                clearFeedback();
+                idInput.value = button.dataset.lessonId || "";
+                lessonTitleInput.value = button.dataset.title || "";
+                descriptionInput.value = button.dataset.description || "";
+                videoUrlInput.value = button.dataset.videoUrl || "";
+                keywordsInput.value = button.dataset.searchKeywords || "";
+                sortOrderInput.value = button.dataset.sortOrder || "0";
+                mandatoryInput.checked = button.dataset.isMandatory === "true";
+                activeInput.checked = button.dataset.isActive === "true";
+                titleNode.textContent = "Edit Lesson";
+                modal.show();
+            });
+        });
+
+        document.querySelectorAll(".js-delete-training").forEach((button) => {
+            button.addEventListener("click", async () => {
+                const lessonId = button.dataset.lessonId;
+                const lessonTitle = button.dataset.title || "this lesson";
+                if (!lessonId || !window.confirm(`Delete ${lessonTitle}?`)) {
+                    return;
+                }
+                try {
+                    await requestJson(`${config.trainingUrl}${lessonId}/`, { method: "DELETE" });
+                    window.location.reload();
+                } catch (error) {
+                    window.alert(error.message);
+                }
+            });
+        });
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            clearFeedback();
+            submitButton.disabled = true;
+
+            const lessonId = idInput.value.trim();
+            const payload = {
+                title: lessonTitleInput.value.trim(),
+                description: descriptionInput.value.trim(),
+                video_url: videoUrlInput.value.trim(),
+                search_keywords: keywordsInput.value.trim(),
+                sort_order: Number(sortOrderInput.value || "0"),
+                is_mandatory: mandatoryInput.checked,
+                is_active: activeInput.checked,
+            };
+
+            try {
+                const url = lessonId ? `${config.trainingUrl}${lessonId}/` : config.trainingUrl;
+                const method = lessonId ? "PATCH" : "POST";
+                await requestJson(url, {
+                    method,
+                    body: JSON.stringify(payload),
+                });
+                showFeedback("Lesson saved successfully.", false);
+                window.setTimeout(() => window.location.reload(), 500);
+            } catch (error) {
+                showFeedback(error.message, true);
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+    }
+
     function bindSalaryControlCrud() {
         const config = window.heavenectionAdmin;
         const modalNode = document.getElementById("salaryControlModal");
@@ -618,6 +738,7 @@
     renderCharts();
     bindStaffCrud();
     bindLeadCrud();
+    bindTrainingCrud();
     bindSalaryControlCrud();
     bindSidebarSections();
 })();

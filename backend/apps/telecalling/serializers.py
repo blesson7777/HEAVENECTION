@@ -1,6 +1,15 @@
 from rest_framework import serializers
 
-from backend.apps.telecalling.models import Call, CompanyProfile, Lead, Salary, Session, Staff, StaffAction
+from backend.apps.telecalling.models import (
+    Call,
+    CompanyProfile,
+    Lead,
+    Salary,
+    Session,
+    Staff,
+    StaffAction,
+    TrainingLesson,
+)
 
 
 class LoginSerializer(serializers.Serializer):
@@ -451,4 +460,56 @@ class SalarySerializer(serializers.ModelSerializer):
             "converted_leads",
             "incentives",
             "final_salary",
+        )
+
+
+class TrainingLessonSerializer(serializers.ModelSerializer):
+    completed_staff_count = serializers.IntegerField(read_only=True)
+    pending_staff_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = TrainingLesson
+        fields = (
+            "id",
+            "title",
+            "description",
+            "video_url",
+            "search_keywords",
+            "is_active",
+            "is_mandatory",
+            "sort_order",
+            "published_at",
+            "completed_staff_count",
+            "pending_staff_count",
+        )
+
+
+class CreateTrainingLessonSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TrainingLesson
+        fields = (
+            "id",
+            "title",
+            "description",
+            "video_url",
+            "search_keywords",
+            "is_active",
+            "is_mandatory",
+            "sort_order",
+            "published_at",
+        )
+
+
+class UpdateTrainingLessonSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TrainingLesson
+        fields = (
+            "title",
+            "description",
+            "video_url",
+            "search_keywords",
+            "is_active",
+            "is_mandatory",
+            "sort_order",
+            "published_at",
         )
