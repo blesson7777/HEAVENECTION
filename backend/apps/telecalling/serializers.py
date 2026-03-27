@@ -263,6 +263,7 @@ class CreateStaffSerializer(serializers.Serializer):
 class UpdateStaffSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=150, required=False)
     phone = serializers.CharField(max_length=20, required=False)
+    email = serializers.EmailField(required=False, allow_blank=True)
     password = serializers.CharField(min_length=6, write_only=True, required=False, allow_blank=False)
     compensation_type = serializers.ChoiceField(choices=Staff.CompensationType.choices, required=False)
     hourly_rate = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
@@ -276,6 +277,13 @@ class UpdateStaffSerializer(serializers.Serializer):
         decimal_places=2,
         required=False,
     )
+    bank_account_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    bank_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    bank_account_number = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    bank_ifsc_code = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    aadhar_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    aadhar_photo = serializers.FileField(required=False, allow_null=True)
+    remove_aadhar_photo = serializers.BooleanField(required=False, default=False, write_only=True)
     is_active = serializers.BooleanField(required=False)
 
     def validate_phone(self, value):
@@ -291,13 +299,40 @@ class UpdateStaffSerializer(serializers.Serializer):
     def validate(self, attrs):
         return attrs
 
+    def validate_aadhar_number(self, value):
+        normalized = "".join(char for char in value if char.isdigit())
+        if normalized and len(normalized) != 12:
+            raise serializers.ValidationError("Enter a valid 12-digit Aadhaar number.")
+        return normalized
+
+    def validate_aadhar_photo(self, value):
+        if not value:
+            return value
+        content_type = getattr(value, "content_type", "")
+        if content_type and not content_type.startswith("image/"):
+            raise serializers.ValidationError("Upload an image file for the Aadhaar photo.")
+        if getattr(value, "size", 0) > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Aadhaar photo size must be 5 MB or smaller.")
+        return value
+
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
+        remove_aadhar_photo = validated_data.pop("remove_aadhar_photo", False)
+        new_photo = validated_data.pop("aadhar_photo", None)
+        previous_photo = instance.aadhar_photo if instance.aadhar_photo else None
         for field, value in validated_data.items():
             setattr(instance, field, value)
+        if remove_aadhar_photo:
+            instance.aadhar_photo = None
+        elif new_photo is not None:
+            instance.aadhar_photo = new_photo
         if password:
             instance.set_password(password)
         instance.save()
+        if remove_aadhar_photo and previous_photo:
+            previous_photo.delete(save=False)
+        elif new_photo is not None and previous_photo and previous_photo.name != instance.aadhar_photo.name:
+            previous_photo.delete(save=False)
         return instance
 
 

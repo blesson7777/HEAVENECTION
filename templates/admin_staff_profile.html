@@ -73,6 +73,56 @@
                     </form>
                 </div>
             </div>
+
+            <div class="hc-summary-card mt-4">
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                    <div>
+                        <span class="mf-db2-kicker">Identity And Payout</span>
+                        <h5 class="mb-1">Email, bank, and Aadhaar details</h5>
+                        <p class="text-muted mb-0">Admin-visible records submitted from the staff app.</p>
+                    </div>
+                </div>
+                <div class="hc-profile-meta-grid">
+                    <div class="hc-profile-meta-card hc-profile-meta-card-wide">
+                        <span class="hc-profile-meta-label">Email</span>
+                        <strong>{{ identity_details.email }}</strong>
+                    </div>
+                    <div class="hc-profile-meta-card">
+                        <span class="hc-profile-meta-label">Account Holder</span>
+                        <strong>{{ identity_details.bank_account_name }}</strong>
+                    </div>
+                    <div class="hc-profile-meta-card">
+                        <span class="hc-profile-meta-label">Bank Name</span>
+                        <strong>{{ identity_details.bank_name }}</strong>
+                    </div>
+                    <div class="hc-profile-meta-card">
+                        <span class="hc-profile-meta-label">Account Number</span>
+                        <strong>{{ identity_details.bank_account_number }}</strong>
+                    </div>
+                    <div class="hc-profile-meta-card">
+                        <span class="hc-profile-meta-label">IFSC Code</span>
+                        <strong>{{ identity_details.bank_ifsc_code }}</strong>
+                    </div>
+                    <div class="hc-profile-meta-card hc-profile-meta-card-wide">
+                        <span class="hc-profile-meta-label">Aadhaar Number</span>
+                        <strong>{{ identity_details.aadhar_number }}</strong>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <span class="hc-profile-meta-label">Aadhaar Photo</span>
+                    {% if identity_details.aadhar_photo_url %}
+                    <a href="{{ identity_details.aadhar_photo_url }}" target="_blank" rel="noopener" class="hc-inline-link d-inline-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                        <span>Open full image</span>
+                    </a>
+                    <div class="hc-document-preview">
+                        <img src="{{ identity_details.aadhar_photo_url }}" alt="{{ staff_member.name }} Aadhaar" class="hc-document-preview-image">
+                    </div>
+                    {% else %}
+                    <div class="hc-document-empty">No Aadhaar image uploaded yet.</div>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
 
@@ -86,7 +136,7 @@
                 <span class="hc-sync-pill"><i class="bi bi-clock-history"></i> {{ summary.last_seen }}</span>
             </div>
 
-            <form method="post" action="{% url 'staff-profile-page' staff_member.id %}" novalidate>
+            <form method="post" action="{% url 'staff-profile-page' staff_member.id %}" enctype="multipart/form-data" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="staff_action" value="save_profile">
                 <div class="row g-3">
@@ -99,6 +149,11 @@
                         <label class="form-label fw-semibold" for="staffProfilePhone">Phone Number</label>
                         <input type="text" class="form-control{% if staff_errors.phone %} is-invalid{% endif %}" id="staffProfilePhone" name="phone" value="{{ staff_form_data.phone }}" required>
                         {% if staff_errors.phone %}<div class="invalid-feedback">{{ staff_errors.phone }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="staffProfileEmail">Email</label>
+                        <input type="email" class="form-control{% if staff_errors.email %} is-invalid{% endif %}" id="staffProfileEmail" name="email" value="{{ staff_form_data.email }}">
+                        {% if staff_errors.email %}<div class="invalid-feedback">{{ staff_errors.email }}</div>{% endif %}
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold" for="staffProfileHourlyRate">Hourly Rate</label>
@@ -124,6 +179,40 @@
                         <div class="form-check mb-2">
                             <input class="form-check-input" type="checkbox" id="staffProfileActive" name="is_active" {% if staff_form_data.is_active %}checked{% endif %}>
                             <label class="form-check-label" for="staffProfileActive">Active account</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="staffProfileBankAccountName">Account Holder Name</label>
+                        <input type="text" class="form-control{% if staff_errors.bank_account_name %} is-invalid{% endif %}" id="staffProfileBankAccountName" name="bank_account_name" value="{{ staff_form_data.bank_account_name }}">
+                        {% if staff_errors.bank_account_name %}<div class="invalid-feedback">{{ staff_errors.bank_account_name }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="staffProfileBankName">Bank Name</label>
+                        <input type="text" class="form-control{% if staff_errors.bank_name %} is-invalid{% endif %}" id="staffProfileBankName" name="bank_name" value="{{ staff_form_data.bank_name }}">
+                        {% if staff_errors.bank_name %}<div class="invalid-feedback">{{ staff_errors.bank_name }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="staffProfileBankAccountNumber">Account Number</label>
+                        <input type="text" class="form-control{% if staff_errors.bank_account_number %} is-invalid{% endif %}" id="staffProfileBankAccountNumber" name="bank_account_number" value="{{ staff_form_data.bank_account_number }}">
+                        {% if staff_errors.bank_account_number %}<div class="invalid-feedback">{{ staff_errors.bank_account_number }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="staffProfileBankIfsc">IFSC Code</label>
+                        <input type="text" class="form-control{% if staff_errors.bank_ifsc_code %} is-invalid{% endif %}" id="staffProfileBankIfsc" name="bank_ifsc_code" value="{{ staff_form_data.bank_ifsc_code }}">
+                        {% if staff_errors.bank_ifsc_code %}<div class="invalid-feedback">{{ staff_errors.bank_ifsc_code }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="staffProfileAadharNumber">Aadhaar Number</label>
+                        <input type="text" class="form-control{% if staff_errors.aadhar_number %} is-invalid{% endif %}" id="staffProfileAadharNumber" name="aadhar_number" value="{{ staff_form_data.aadhar_number }}">
+                        {% if staff_errors.aadhar_number %}<div class="invalid-feedback">{{ staff_errors.aadhar_number }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="staffProfileAadharPhoto">Aadhaar Photo</label>
+                        <input type="file" class="form-control{% if staff_errors.aadhar_photo %} is-invalid{% endif %}" id="staffProfileAadharPhoto" name="aadhar_photo" accept="image/*">
+                        {% if staff_errors.aadhar_photo %}<div class="invalid-feedback">{{ staff_errors.aadhar_photo }}</div>{% endif %}
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="staffProfileRemoveAadharPhoto" name="remove_aadhar_photo" {% if staff_form_data.remove_aadhar_photo %}checked{% endif %}>
+                            <label class="form-check-label" for="staffProfileRemoveAadharPhoto">Remove current Aadhaar photo</label>
                         </div>
                     </div>
                 </div>

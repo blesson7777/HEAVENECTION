@@ -340,10 +340,17 @@ def staff_profile_page(request, staff_id):
     staff_form_data = {
         "name": staff.name,
         "phone": staff.phone,
+        "email": staff.email,
         "password": "",
         "hourly_rate": staff.hourly_rate,
         "call_rate": staff.call_rate,
         "bonus_per_conversion": staff.bonus_per_conversion,
+        "bank_account_name": staff.bank_account_name,
+        "bank_name": staff.bank_name,
+        "bank_account_number": staff.bank_account_number,
+        "bank_ifsc_code": staff.bank_ifsc_code,
+        "aadhar_number": staff.aadhar_number,
+        "remove_aadhar_photo": False,
         "is_active": staff.is_active,
     }
     staff_errors = {}
@@ -373,22 +380,38 @@ def staff_profile_page(request, staff_id):
             staff_form_data = {
                 "name": request.POST.get("name", "").strip(),
                 "phone": request.POST.get("phone", "").strip(),
+                "email": request.POST.get("email", "").strip(),
                 "password": password_value,
                 "hourly_rate": request.POST.get("hourly_rate", "").strip(),
                 "call_rate": request.POST.get("call_rate", "").strip(),
                 "bonus_per_conversion": request.POST.get("bonus_per_conversion", "").strip(),
+                "bank_account_name": request.POST.get("bank_account_name", "").strip(),
+                "bank_name": request.POST.get("bank_name", "").strip(),
+                "bank_account_number": request.POST.get("bank_account_number", "").strip(),
+                "bank_ifsc_code": request.POST.get("bank_ifsc_code", "").strip(),
+                "aadhar_number": request.POST.get("aadhar_number", "").strip(),
+                "remove_aadhar_photo": request.POST.get("remove_aadhar_photo") == "on",
                 "is_active": request.POST.get("is_active") == "on",
             }
             staff_data = {
                 "name": staff_form_data["name"],
                 "phone": staff_form_data["phone"],
+                "email": staff_form_data["email"],
                 "hourly_rate": staff_form_data["hourly_rate"] or "0",
                 "call_rate": staff_form_data["call_rate"] or "0",
                 "bonus_per_conversion": staff_form_data["bonus_per_conversion"] or "0",
+                "bank_account_name": staff_form_data["bank_account_name"],
+                "bank_name": staff_form_data["bank_name"],
+                "bank_account_number": staff_form_data["bank_account_number"],
+                "bank_ifsc_code": staff_form_data["bank_ifsc_code"],
+                "aadhar_number": staff_form_data["aadhar_number"],
+                "remove_aadhar_photo": staff_form_data["remove_aadhar_photo"],
                 "is_active": staff_form_data["is_active"],
             }
             if password_value.strip():
                 staff_data["password"] = password_value.strip()
+            if request.FILES.get("aadhar_photo"):
+                staff_data["aadhar_photo"] = request.FILES["aadhar_photo"]
 
             serializer = UpdateStaffSerializer(staff, data=staff_data, partial=True)
             if serializer.is_valid():
