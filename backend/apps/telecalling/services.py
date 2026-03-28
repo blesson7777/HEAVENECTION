@@ -1980,6 +1980,7 @@ def build_staff_profile_payload(staff):
             "bank_ifsc_code": staff.bank_ifsc_code or "--",
             "aadhar_number": staff.aadhar_number or "--",
             "aadhar_photo_url": staff.aadhar_photo.url if staff.aadhar_photo else "",
+            "passbook_photo_url": staff.passbook_photo.url if staff.passbook_photo else "",
         },
         "assigned_lead_rows": assigned_lead_rows,
         "recent_call_rows": recent_call_rows,

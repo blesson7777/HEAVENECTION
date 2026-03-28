@@ -175,7 +175,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   String _currentVersionName = '';
   AppUpdateInfo? _pendingAppUpdate;
   File? _selectedAadharPhoto;
+  File? _selectedPassbookPhoto;
   bool _removeAadharPhoto = false;
+  bool _removePassbookPhoto = false;
 
   @override
   void initState() {
@@ -294,7 +296,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _newPasswordController.clear();
     _confirmPasswordController.clear();
     _selectedAadharPhoto = null;
+    _selectedPassbookPhoto = null;
     _removeAadharPhoto = false;
+    _removePassbookPhoto = false;
   }
 
   void _applyLearningPayload(LearningCenterPayload payload) {
@@ -1093,7 +1097,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _backgroundedAt = null;
       _clearPendingCallStatus();
       _selectedAadharPhoto = null;
+      _selectedPassbookPhoto = null;
       _removeAadharPhoto = false;
+      _removePassbookPhoto = false;
       _pendingAppUpdate = null;
       _currentVersionCode = 0;
       _currentVersionName = '';
@@ -1137,7 +1143,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _backgroundedAt = null;
       _clearPendingCallStatus();
       _selectedAadharPhoto = null;
+      _selectedPassbookPhoto = null;
       _removeAadharPhoto = false;
+      _removePassbookPhoto = false;
       _pendingAppUpdate = null;
       _currentVersionCode = 0;
       _currentVersionName = '';
@@ -1148,11 +1156,82 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _updatePreferredOrientations();
   }
 
-  Future<void> _pickAadharPhoto() async {
+  Future<ImageSource?> _showDocumentSourcePicker(String documentLabel) async {
+    return showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (sheetContext) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 26),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Add $documentLabel',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Choose how you want to add the document image.',
+                  style: TextStyle(fontSize: 14.5, color: Colors.black54),
+                ),
+                const SizedBox(height: 18),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const CircleAvatar(
+                    backgroundColor: kSoft,
+                    child: Icon(Icons.camera_alt_outlined, color: kPrimaryDark),
+                  ),
+                  title: const Text(
+                    'Use Camera',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text('Take a fresh photo now'),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop(ImageSource.camera);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const CircleAvatar(
+                    backgroundColor: kSoft,
+                    child: Icon(Icons.photo_library_outlined, color: kPrimaryDark),
+                  ),
+                  title: const Text(
+                    'Choose From Gallery',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: const Text('Select an existing image'),
+                  onTap: () {
+                    Navigator.of(sheetContext).pop(ImageSource.gallery);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _pickDocumentPhoto(_ProfileDocument document) async {
     _registerInteraction(syncServer: false);
     try {
+      final source = await _showDocumentSourcePicker(
+        document == _ProfileDocument.aadhar ? 'Aadhaar' : 'Passbook',
+      );
+      if (source == null) {
+        return;
+      }
       final image = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+        source: source,
         imageQuality: 85,
         maxWidth: 1600,
       );
@@ -1160,13 +1239,22 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         return;
       }
       setState(() {
-        _selectedAadharPhoto = File(image.path);
-        _removeAadharPhoto = false;
+        if (document == _ProfileDocument.aadhar) {
+          _selectedAadharPhoto = File(image.path);
+          _removeAadharPhoto = false;
+        } else {
+          _selectedPassbookPhoto = File(image.path);
+          _removePassbookPhoto = false;
+        }
       });
     } catch (_) {
-      _showMessage('Could not open the photo picker.', isError: true);
+      _showMessage('Could not open the document picker.', isError: true);
     }
   }
+
+  Future<void> _pickAadharPhoto() => _pickDocumentPhoto(_ProfileDocument.aadhar);
+
+  Future<void> _pickPassbookPhoto() => _pickDocumentPhoto(_ProfileDocument.passbook);
 
   Future<void> _saveProfile() async {
     FocusScope.of(context).unfocus();
@@ -1203,6 +1291,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         bankAccountNumber: _bankAccountNumberController.text.trim(),
         bankIfscCode: _bankIfscController.text.trim(),
         aadharNumber: _aadharNumberController.text.trim(),
+        passbookPhoto: _selectedPassbookPhoto,
         currentPassword: _currentPasswordController.text.trim().isEmpty
             ? null
             : _currentPasswordController.text,
@@ -1211,6 +1300,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             : _newPasswordController.text,
         aadharPhoto: _selectedAadharPhoto,
         removeAadharPhoto: _removeAadharPhoto,
+        removePassbookPhoto: _removePassbookPhoto,
       );
       if (!mounted) {
         return;
@@ -3375,69 +3465,99 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     );
   }
 
-  Widget _staffProfilePage() {
-    final profile = _profile;
-    final salarySummary = profile?.salarySummary;
-    final salaryHistory = profile?.salaryHistory ?? const <SalaryHistoryItem>[];
-    final imageWidget = _selectedAadharPhoto != null
-        ? ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Image.file(
-              _selectedAadharPhoto!,
-              width: double.infinity,
-              height: 190,
-              fit: BoxFit.cover,
+  Widget _buildDocumentPreview({
+    required File? selectedFile,
+    required bool removeDocument,
+    required String existingUrl,
+    required String emptyLabel,
+    required IconData icon,
+    required String networkErrorLabel,
+  }) {
+    if (selectedFile != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Image.file(
+          selectedFile,
+          width: double.infinity,
+          height: 190,
+          fit: BoxFit.cover,
+        ),
+      );
+    }
+
+    if (removeDocument || existingUrl.isEmpty) {
+      return Container(
+        width: double.infinity,
+        height: 190,
+        decoration: BoxDecoration(
+          color: kSoft,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 42, color: kPrimaryDark),
+            const SizedBox(height: 10),
+            Text(
+              emptyLabel,
+              style: const TextStyle(
+                fontSize: 15.5,
+                color: Colors.black54,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          )
-        : (_removeAadharPhoto || profile == null || !profile.hasAadharPhoto)
-        ? Container(
+          ],
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Image.network(
+        existingUrl,
+        width: double.infinity,
+        height: 190,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
             width: double.infinity,
             height: 190,
             decoration: BoxDecoration(
               color: kSoft,
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.badge_outlined, size: 42, color: kPrimaryDark),
-                SizedBox(height: 10),
-                Text(
-                  'No Aadhaar photo added',
-                  style: TextStyle(
-                    fontSize: 15.5,
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          )
-        : ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: Image.network(
-              profile.aadharPhotoUrl,
-              width: double.infinity,
-              height: 190,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  width: double.infinity,
-                  height: 190,
-                  decoration: BoxDecoration(
-                    color: kSoft,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'Could not load the saved Aadhaar photo.',
-                      style: TextStyle(color: Colors.black54),
-                    ),
-                  ),
-                );
-              },
+            child: Center(
+              child: Text(
+                networkErrorLabel,
+                style: const TextStyle(color: Colors.black54),
+              ),
             ),
           );
+        },
+      ),
+    );
+  }
+
+  Widget _staffProfilePage() {
+    final profile = _profile;
+    final salarySummary = profile?.salarySummary;
+    final salaryHistory = profile?.salaryHistory ?? const <SalaryHistoryItem>[];
+    final aadharWidget = _buildDocumentPreview(
+      selectedFile: _selectedAadharPhoto,
+      removeDocument: _removeAadharPhoto,
+      existingUrl: profile?.aadharPhotoUrl ?? '',
+      emptyLabel: 'No Aadhaar photo added',
+      icon: Icons.badge_outlined,
+      networkErrorLabel: 'Could not load the saved Aadhaar photo.',
+    );
+    final passbookWidget = _buildDocumentPreview(
+      selectedFile: _selectedPassbookPhoto,
+      removeDocument: _removePassbookPhoto,
+      existingUrl: profile?.passbookPhotoUrl ?? '',
+      emptyLabel: 'No passbook photo added',
+      icon: Icons.menu_book_outlined,
+      networkErrorLabel: 'Could not load the saved passbook photo.',
+    );
 
     return RefreshIndicator(
       onRefresh: () {
@@ -3723,8 +3843,13 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Aadhaar details',
+                    'Identity documents',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Add clear document images for Aadhaar and passbook from the camera or your gallery.',
+                    style: TextStyle(fontSize: 14.5, color: Colors.black54),
                   ),
                   const SizedBox(height: 14),
                   TextField(
@@ -3736,7 +3861,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     ),
                   ),
                   const SizedBox(height: 14),
-                  imageWidget,
+                  aadharWidget,
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 12,
@@ -3744,8 +3869,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     children: [
                       ElevatedButton.icon(
                         onPressed: _pickAadharPhoto,
-                        icon: const Icon(Icons.photo_library_outlined),
-                        label: const Text('Choose Photo'),
+                        icon: const Icon(Icons.document_scanner_outlined),
+                        label: const Text('Add Aadhaar'),
                       ),
                       if (_selectedAadharPhoto != null ||
                           (profile?.hasAadharPhoto == true && !_removeAadharPhoto))
@@ -3758,6 +3883,38 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                           },
                           icon: const Icon(Icons.delete_outline),
                           label: const Text('Remove Photo'),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 22),
+                  const Text(
+                    'Passbook image',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 12),
+                  passbookWidget,
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      ElevatedButton.icon(
+                        onPressed: _pickPassbookPhoto,
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        label: const Text('Add Passbook'),
+                      ),
+                      if (_selectedPassbookPhoto != null ||
+                          (profile?.hasPassbookPhoto == true &&
+                              !_removePassbookPhoto))
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _selectedPassbookPhoto = null;
+                              _removePassbookPhoto = true;
+                            });
+                          },
+                          icon: const Icon(Icons.delete_outline),
+                          label: const Text('Remove Passbook'),
                         ),
                     ],
                   ),
@@ -4791,6 +4948,8 @@ enum ShortCallDecision { markNoResponse, markRejected, callAgain }
 enum _PendingCallAction { markStatus, callRecent, cancel }
 
 enum _AppUpdateAction { download, later }
+
+enum _ProfileDocument { aadhar, passbook }
 
 class InfoCard extends StatelessWidget {
   const InfoCard({

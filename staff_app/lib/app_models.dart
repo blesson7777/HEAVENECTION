@@ -127,6 +127,7 @@ class StaffProfile {
     required this.bankIfscCode,
     required this.aadharNumber,
     required this.aadharPhotoUrl,
+    required this.passbookPhotoUrl,
     required this.lastSeenAt,
     required this.salarySummary,
     required this.salaryHistory,
@@ -145,11 +146,13 @@ class StaffProfile {
   final String bankIfscCode;
   final String aadharNumber;
   final String aadharPhotoUrl;
+  final String passbookPhotoUrl;
   final DateTime? lastSeenAt;
   final SalarySummary salarySummary;
   final List<SalaryHistoryItem> salaryHistory;
 
   bool get hasAadharPhoto => aadharPhotoUrl.trim().isNotEmpty;
+  bool get hasPassbookPhoto => passbookPhotoUrl.trim().isNotEmpty;
 
   factory StaffProfile.fromJson(Map<String, dynamic> json) {
     return StaffProfile(
@@ -166,6 +169,7 @@ class StaffProfile {
       bankIfscCode: json['bank_ifsc_code']?.toString() ?? '',
       aadharNumber: json['aadhar_number']?.toString() ?? '',
       aadharPhotoUrl: json['aadhar_photo_url']?.toString() ?? '',
+      passbookPhotoUrl: json['passbook_photo_url']?.toString() ?? '',
       lastSeenAt: json['last_seen_at'] == null
           ? null
           : DateTime.tryParse(json['last_seen_at'].toString())?.toLocal(),

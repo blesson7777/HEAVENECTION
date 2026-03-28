@@ -112,6 +112,7 @@ class StaffSerializer(serializers.ModelSerializer):
 class StaffProfileSerializer(serializers.ModelSerializer):
     role_label = serializers.CharField(source="get_role_display", read_only=True)
     aadhar_photo_url = serializers.SerializerMethodField()
+    passbook_photo_url = serializers.SerializerMethodField()
     salary_summary = serializers.SerializerMethodField()
     salary_history = serializers.SerializerMethodField()
 
@@ -131,6 +132,7 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             "bank_ifsc_code",
             "aadhar_number",
             "aadhar_photo_url",
+            "passbook_photo_url",
             "last_seen_at",
             "salary_summary",
             "salary_history",
@@ -143,6 +145,14 @@ class StaffProfileSerializer(serializers.ModelSerializer):
         if request:
             return request.build_absolute_uri(obj.aadhar_photo.url)
         return obj.aadhar_photo.url
+
+    def get_passbook_photo_url(self, obj):
+        request = self.context.get("request")
+        if not obj.passbook_photo:
+            return ""
+        if request:
+            return request.build_absolute_uri(obj.passbook_photo.url)
+        return obj.passbook_photo.url
 
     def get_salary_history(self, obj):
         records = obj.salary_records.filter(is_paid=True).order_by("-paid_at", "-period_end")[:20]
@@ -183,6 +193,8 @@ class StaffProfileUpdateSerializer(serializers.Serializer):
     aadhar_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
     aadhar_photo = serializers.FileField(required=False, allow_null=True)
     remove_aadhar_photo = serializers.BooleanField(required=False, default=False, write_only=True)
+    passbook_photo = serializers.FileField(required=False, allow_null=True)
+    remove_passbook_photo = serializers.BooleanField(required=False, default=False, write_only=True)
     current_password = serializers.CharField(required=False, allow_blank=False, write_only=True)
     new_password = serializers.CharField(min_length=6, required=False, allow_blank=False, write_only=True)
 
@@ -212,6 +224,16 @@ class StaffProfileUpdateSerializer(serializers.Serializer):
             raise serializers.ValidationError("Aadhaar photo size must be 5 MB or smaller.")
         return value
 
+    def validate_passbook_photo(self, value):
+        if not value:
+            return value
+        content_type = getattr(value, "content_type", "")
+        if content_type and not content_type.startswith("image/"):
+            raise serializers.ValidationError("Upload an image file for the passbook.")
+        if getattr(value, "size", 0) > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Passbook image size must be 5 MB or smaller.")
+        return value
+
     def validate(self, attrs):
         current_password = attrs.get("current_password")
         new_password = attrs.get("new_password")
@@ -230,9 +252,12 @@ class StaffProfileUpdateSerializer(serializers.Serializer):
     def update(self, instance, validated_data):
         remove_aadhar_photo = validated_data.pop("remove_aadhar_photo", False)
         new_photo = validated_data.pop("aadhar_photo", None)
+        remove_passbook_photo = validated_data.pop("remove_passbook_photo", False)
+        new_passbook_photo = validated_data.pop("passbook_photo", None)
         validated_data.pop("current_password", None)
         new_password = validated_data.pop("new_password", None)
         previous_photo = instance.aadhar_photo if instance.aadhar_photo else None
+        previous_passbook_photo = instance.passbook_photo if instance.passbook_photo else None
 
         for field, value in validated_data.items():
             setattr(instance, field, value)
@@ -241,6 +266,11 @@ class StaffProfileUpdateSerializer(serializers.Serializer):
             instance.aadhar_photo = None
         elif new_photo is not None:
             instance.aadhar_photo = new_photo
+
+        if remove_passbook_photo:
+            instance.passbook_photo = None
+        elif new_passbook_photo is not None:
+            instance.passbook_photo = new_passbook_photo
 
         if new_password:
             instance.set_password(new_password)
@@ -251,6 +281,15 @@ class StaffProfileUpdateSerializer(serializers.Serializer):
             previous_photo.delete(save=False)
         elif new_photo is not None and previous_photo and previous_photo.name != instance.aadhar_photo.name:
             previous_photo.delete(save=False)
+
+        if remove_passbook_photo and previous_passbook_photo:
+            previous_passbook_photo.delete(save=False)
+        elif (
+            new_passbook_photo is not None
+            and previous_passbook_photo
+            and previous_passbook_photo.name != instance.passbook_photo.name
+        ):
+            previous_passbook_photo.delete(save=False)
         return instance
 
 
@@ -318,6 +357,8 @@ class UpdateStaffSerializer(serializers.Serializer):
     aadhar_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
     aadhar_photo = serializers.FileField(required=False, allow_null=True)
     remove_aadhar_photo = serializers.BooleanField(required=False, default=False, write_only=True)
+    passbook_photo = serializers.FileField(required=False, allow_null=True)
+    remove_passbook_photo = serializers.BooleanField(required=False, default=False, write_only=True)
     is_active = serializers.BooleanField(required=False)
 
     def validate_phone(self, value):
@@ -349,17 +390,34 @@ class UpdateStaffSerializer(serializers.Serializer):
             raise serializers.ValidationError("Aadhaar photo size must be 5 MB or smaller.")
         return value
 
+    def validate_passbook_photo(self, value):
+        if not value:
+            return value
+        content_type = getattr(value, "content_type", "")
+        if content_type and not content_type.startswith("image/"):
+            raise serializers.ValidationError("Upload an image file for the passbook.")
+        if getattr(value, "size", 0) > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Passbook image size must be 5 MB or smaller.")
+        return value
+
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
         remove_aadhar_photo = validated_data.pop("remove_aadhar_photo", False)
         new_photo = validated_data.pop("aadhar_photo", None)
+        remove_passbook_photo = validated_data.pop("remove_passbook_photo", False)
+        new_passbook_photo = validated_data.pop("passbook_photo", None)
         previous_photo = instance.aadhar_photo if instance.aadhar_photo else None
+        previous_passbook_photo = instance.passbook_photo if instance.passbook_photo else None
         for field, value in validated_data.items():
             setattr(instance, field, value)
         if remove_aadhar_photo:
             instance.aadhar_photo = None
         elif new_photo is not None:
             instance.aadhar_photo = new_photo
+        if remove_passbook_photo:
+            instance.passbook_photo = None
+        elif new_passbook_photo is not None:
+            instance.passbook_photo = new_passbook_photo
         if password:
             instance.set_password(password)
         instance.save()
@@ -367,6 +425,14 @@ class UpdateStaffSerializer(serializers.Serializer):
             previous_photo.delete(save=False)
         elif new_photo is not None and previous_photo and previous_photo.name != instance.aadhar_photo.name:
             previous_photo.delete(save=False)
+        if remove_passbook_photo and previous_passbook_photo:
+            previous_passbook_photo.delete(save=False)
+        elif (
+            new_passbook_photo is not None
+            and previous_passbook_photo
+            and previous_passbook_photo.name != instance.passbook_photo.name
+        ):
+            previous_passbook_photo.delete(save=False)
         return instance
 
 

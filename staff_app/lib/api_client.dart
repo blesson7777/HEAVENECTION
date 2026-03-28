@@ -107,10 +107,12 @@ class ApiClient {
     required String bankAccountNumber,
     required String bankIfscCode,
     required String aadharNumber,
+    File? passbookPhoto,
     String? currentPassword,
     String? newPassword,
     File? aadharPhoto,
     bool removeAadharPhoto = false,
+    bool removePassbookPhoto = false,
   }) async {
     final response = await _sendMultipart(
       'PATCH',
@@ -125,13 +127,16 @@ class ApiClient {
         'bank_ifsc_code': bankIfscCode,
         'aadhar_number': aadharNumber,
         'remove_aadhar_photo': removeAadharPhoto ? 'true' : 'false',
+        'remove_passbook_photo': removePassbookPhoto ? 'true' : 'false',
         if (currentPassword != null && currentPassword.isNotEmpty)
           'current_password': currentPassword,
         if (newPassword != null && newPassword.isNotEmpty)
           'new_password': newPassword,
       },
-      fileFieldName: aadharPhoto != null ? 'aadhar_photo' : null,
-      filePath: aadharPhoto?.path,
+      filePaths: {
+        if (aadharPhoto != null) 'aadhar_photo': aadharPhoto.path,
+        if (passbookPhoto != null) 'passbook_photo': passbookPhoto.path,
+      },
     );
     return StaffProfile.fromJson(_decodeMap(response.body));
   }
@@ -356,8 +361,7 @@ class ApiClient {
     String method,
     String path, {
     required Map<String, String> fields,
-    String? fileFieldName,
-    String? filePath,
+    Map<String, String>? filePaths,
     bool requiresAuth = true,
     bool retryOnAuthFailure = true,
   }) async {
@@ -368,8 +372,15 @@ class ApiClient {
       request.headers['Authorization'] = 'Bearer $_accessToken';
     }
     request.fields.addAll(fields);
-    if (fileFieldName != null && filePath != null && filePath.isNotEmpty) {
-      request.files.add(await http.MultipartFile.fromPath(fileFieldName, filePath));
+    if (filePaths != null) {
+      for (final entry in filePaths.entries) {
+        if (entry.value.isEmpty) {
+          continue;
+        }
+        request.files.add(
+          await http.MultipartFile.fromPath(entry.key, entry.value),
+        );
+      }
     }
 
     late http.Response response;
@@ -396,8 +407,7 @@ class ApiClient {
         method,
         path,
         fields: fields,
-        fileFieldName: fileFieldName,
-        filePath: filePath,
+        filePaths: filePaths,
         requiresAuth: requiresAuth,
         retryOnAuthFailure: false,
       );

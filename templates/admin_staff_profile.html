@@ -78,7 +78,7 @@
                 <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
                     <div>
                         <span class="mf-db2-kicker">Identity And Payout</span>
-                        <h5 class="mb-1">Email, bank, and Aadhaar details</h5>
+                        <h5 class="mb-1">Email, bank, Aadhaar, and passbook details</h5>
                         <p class="text-muted mb-0">Admin-visible records submitted from the staff app.</p>
                     </div>
                 </div>
@@ -120,6 +120,20 @@
                     </div>
                     {% else %}
                     <div class="hc-document-empty">No Aadhaar image uploaded yet.</div>
+                    {% endif %}
+                </div>
+                <div class="mt-3">
+                    <span class="hc-profile-meta-label">Passbook Photo</span>
+                    {% if identity_details.passbook_photo_url %}
+                    <a href="{{ identity_details.passbook_photo_url }}" target="_blank" rel="noopener" class="hc-inline-link d-inline-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-box-arrow-up-right"></i>
+                        <span>Open full image</span>
+                    </a>
+                    <div class="hc-document-preview">
+                        <img src="{{ identity_details.passbook_photo_url }}" alt="{{ staff_member.name }} Passbook" class="hc-document-preview-image">
+                    </div>
+                    {% else %}
+                    <div class="hc-document-empty">No passbook image uploaded yet.</div>
                     {% endif %}
                 </div>
             </div>
@@ -213,6 +227,15 @@
                         <div class="form-check mt-2">
                             <input class="form-check-input" type="checkbox" id="staffProfileRemoveAadharPhoto" name="remove_aadhar_photo" {% if staff_form_data.remove_aadhar_photo %}checked{% endif %}>
                             <label class="form-check-label" for="staffProfileRemoveAadharPhoto">Remove current Aadhaar photo</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold" for="staffProfilePassbookPhoto">Passbook Photo</label>
+                        <input type="file" class="form-control{% if staff_errors.passbook_photo %} is-invalid{% endif %}" id="staffProfilePassbookPhoto" name="passbook_photo" accept="image/*">
+                        {% if staff_errors.passbook_photo %}<div class="invalid-feedback">{{ staff_errors.passbook_photo }}</div>{% endif %}
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="staffProfileRemovePassbookPhoto" name="remove_passbook_photo" {% if staff_form_data.remove_passbook_photo %}checked{% endif %}>
+                            <label class="form-check-label" for="staffProfileRemovePassbookPhoto">Remove current passbook photo</label>
                         </div>
                     </div>
                 </div>

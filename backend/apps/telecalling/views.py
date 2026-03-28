@@ -478,6 +478,7 @@ def staff_profile_page(request, staff_id):
         "bank_ifsc_code": staff.bank_ifsc_code,
         "aadhar_number": staff.aadhar_number,
         "remove_aadhar_photo": False,
+        "remove_passbook_photo": False,
         "is_active": staff.is_active,
     }
     staff_errors = {}
@@ -518,6 +519,7 @@ def staff_profile_page(request, staff_id):
                 "bank_ifsc_code": request.POST.get("bank_ifsc_code", "").strip(),
                 "aadhar_number": request.POST.get("aadhar_number", "").strip(),
                 "remove_aadhar_photo": request.POST.get("remove_aadhar_photo") == "on",
+                "remove_passbook_photo": request.POST.get("remove_passbook_photo") == "on",
                 "is_active": request.POST.get("is_active") == "on",
             }
             staff_data = {
@@ -533,12 +535,15 @@ def staff_profile_page(request, staff_id):
                 "bank_ifsc_code": staff_form_data["bank_ifsc_code"],
                 "aadhar_number": staff_form_data["aadhar_number"],
                 "remove_aadhar_photo": staff_form_data["remove_aadhar_photo"],
+                "remove_passbook_photo": staff_form_data["remove_passbook_photo"],
                 "is_active": staff_form_data["is_active"],
             }
             if password_value.strip():
                 staff_data["password"] = password_value.strip()
             if request.FILES.get("aadhar_photo"):
                 staff_data["aadhar_photo"] = request.FILES["aadhar_photo"]
+            if request.FILES.get("passbook_photo"):
+                staff_data["passbook_photo"] = request.FILES["passbook_photo"]
 
             serializer = UpdateStaffSerializer(staff, data=staff_data, partial=True)
             if serializer.is_valid():
