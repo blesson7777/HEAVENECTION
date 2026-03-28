@@ -31,6 +31,7 @@ from backend.apps.telecalling.serializers import (
     SalarySettingsSerializer,
     SessionSerializer,
     StaffActionSerializer,
+    StaffLeadRecoverySerializer,
     StaffSerializer,
     StartCallSerializer,
     StaffProfileSerializer,
@@ -78,11 +79,13 @@ from backend.apps.telecalling.services import (
     set_active_app_release,
     retry_pending_staff_call,
     send_salary_payment_acknowledgement,
+    search_staff_customer_history,
     start_staff_call,
     start_staff_session,
     TrainingRequiredError,
     update_staff_call_status,
     update_followups_from_upload,
+    recover_staff_customer_lead,
 )
 
 
@@ -1282,6 +1285,40 @@ def assigned_leads_api(request):
     if status_value and status_value != "all":
         queryset = queryset.filter(status=status_value)
     return Response(LeadSerializer(queryset[:100], many=True).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsCallingStaff])
+def staff_customer_history_api(request):
+    search_query = request.query_params.get("q", "").strip()
+    queryset = search_staff_customer_history(request.user, query=search_query)
+    return Response(LeadSerializer(queryset, many=True).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsCallingStaff])
+def recover_staff_lead_api(request, lead_id):
+    serializer = StaffLeadRecoverySerializer(data=request.data or {})
+    serializer.is_valid(raise_exception=True)
+
+    try:
+        lead = Lead.objects.select_related("assigned_to").get(id=lead_id)
+    except Lead.DoesNotExist:
+        return Response({"detail": "Lead not found."}, status=404)
+
+    try:
+        lead = recover_staff_customer_lead(
+            request.user,
+            lead,
+            status=serializer.validated_data["status"],
+            callback_window=serializer.validated_data.get("callback_window", ""),
+        )
+    except PermissionError as error:
+        return Response({"detail": str(error)}, status=403)
+    except ValueError as error:
+        return Response({"detail": str(error)}, status=409)
+
+    return Response(LeadSerializer(lead).data)
 
 
 @api_view(["GET"])

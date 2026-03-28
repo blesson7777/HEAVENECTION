@@ -12,7 +12,6 @@ double _asDouble(dynamic value) {
   return double.tryParse(value?.toString() ?? '') ?? 0;
 }
 
-
 class AppUpdateInfo {
   const AppUpdateInfo({
     required this.updateAvailable,
@@ -178,7 +177,8 @@ class StaffProfile {
             ? json['salary_summary'] as Map<String, dynamic>
             : const {},
       ),
-      salaryHistory: (json['salary_history'] as List?)
+      salaryHistory:
+          (json['salary_history'] as List?)
               ?.whereType<Map<String, dynamic>>()
               .map(SalaryHistoryItem.fromJson)
               .toList() ??
@@ -290,6 +290,9 @@ class LeadItem {
     required this.callbackWindow,
     required this.callbackWindowLabel,
     required this.notes,
+    this.assignedToName = '',
+    this.lastContactedAt,
+    this.updatedAt,
   });
 
   final String id;
@@ -300,6 +303,12 @@ class LeadItem {
   final String callbackWindow;
   final String callbackWindowLabel;
   final String notes;
+  final String assignedToName;
+  final DateTime? lastContactedAt;
+  final DateTime? updatedAt;
+
+  bool get isRecoveryLead =>
+      status == 'no_answer' || status == 'not_interested';
 
   factory LeadItem.fromJson(Map<String, dynamic> json) {
     return LeadItem(
@@ -311,6 +320,13 @@ class LeadItem {
       callbackWindow: json['callback_window']?.toString() ?? '',
       callbackWindowLabel: json['callback_window_label']?.toString() ?? '',
       notes: json['notes']?.toString() ?? '',
+      assignedToName: json['assigned_to_name']?.toString() ?? '',
+      lastContactedAt: json['last_contacted_at'] == null
+          ? null
+          : DateTime.tryParse(json['last_contacted_at'].toString())?.toLocal(),
+      updatedAt: json['updated_at'] == null
+          ? null
+          : DateTime.tryParse(json['updated_at'].toString())?.toLocal(),
     );
   }
 }

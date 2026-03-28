@@ -2826,6 +2826,74 @@ def get_assigned_leads(staff):
     )
 
 
+def search_staff_customer_history(staff, *, query="", limit=25):
+    called_lead_ids = Call.objects.filter(staff=staff).values_list("lead_id", flat=True)
+    queryset = Lead.objects.filter(Q(assigned_to=staff) | Q(id__in=called_lead_ids)).select_related("assigned_to")
+
+    trimmed_query = (query or "").strip()
+    if trimmed_query:
+        normalized_phone = re.sub(r"\D+", "", trimmed_query)
+        filters = Q(name__icontains=trimmed_query) | Q(phone__icontains=trimmed_query)
+        if normalized_phone and normalized_phone != trimmed_query:
+            filters |= Q(phone__icontains=normalized_phone)
+        queryset = queryset.filter(filters).annotate(
+            exact_match_priority=Case(
+                When(phone__iexact=trimmed_query, then=Value(0)),
+                When(name__iexact=trimmed_query, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            )
+        ).order_by("exact_match_priority", "-last_contacted_at", "-updated_at", "-created_at")
+    else:
+        queryset = queryset.order_by("-last_contacted_at", "-updated_at", "-created_at")
+
+    return queryset.distinct()[:limit]
+
+
+def recover_staff_customer_lead(staff, lead, *, status, callback_window=""):
+    has_staff_history = lead.assigned_to_id == staff.id or Call.objects.filter(staff=staff, lead=lead).exists()
+    if not has_staff_history:
+        raise PermissionError("This customer is not in your calling history.")
+
+    if lead.status == Lead.Status.CONVERTED:
+        raise ValueError("This customer is already marked as converted.")
+
+    if lead.assigned_to_id and lead.assigned_to_id != staff.id and _is_active_queue_status(lead.status):
+        raise ValueError("This customer is already active in another staff queue.")
+
+    now = timezone.now()
+    session = get_open_session(staff, reconcile=True)
+    if session:
+        _touch_session_interaction(session, now, metadata={"source": "customer_recovery"})
+
+    resolved_callback_window = callback_window if status == Lead.Status.CALL_BACK else ""
+    previous_owner = lead.assigned_to.name if lead.assigned_to and lead.assigned_to_id != staff.id else ""
+
+    lead.assigned_to = staff
+    lead.status = status
+    lead.callback_window = resolved_callback_window
+    lead.last_contacted_at = now
+    lead.save(update_fields=["assigned_to", "status", "callback_window", "last_contacted_at", "updated_at"])
+
+    mark_staff_seen(staff, now)
+    _log_staff_action(
+        staff,
+        StaffAction.ActionType.CALL_STATUS_UPDATED,
+        session=session,
+        lead=lead,
+        app_state=session.last_known_state if session else None,
+        metadata={
+            "source": "customer_recovery",
+            "status": status,
+            "callback_window": resolved_callback_window,
+            "previous_owner": previous_owner,
+        },
+    )
+
+    auto_allocate_leads(target_staff=staff, prioritized_lead_ids=[lead.id])
+    return lead
+
+
 def start_staff_call(staff, lead):
     now = timezone.now()
     _reconcile_open_calls(staff=staff, now=now)

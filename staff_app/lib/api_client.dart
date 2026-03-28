@@ -162,6 +162,39 @@ class ApiClient {
         .toList();
   }
 
+  Future<List<LeadItem>> searchCustomerHistory({String query = ''}) async {
+    final encodedQuery = Uri.encodeQueryComponent(query.trim());
+    final path = query.trim().isEmpty
+        ? '/api/staff/customers/'
+        : '/api/staff/customers/?q=$encodedQuery';
+    final response = await _send('GET', path);
+    final payload = jsonDecode(response.body);
+    if (payload is! List) {
+      return const [];
+    }
+    return payload
+        .whereType<Map<String, dynamic>>()
+        .map(LeadItem.fromJson)
+        .toList();
+  }
+
+  Future<LeadItem> recoverCustomerLead({
+    required String leadId,
+    required String status,
+    String? callbackWindow,
+  }) async {
+    final body = <String, dynamic>{'status': status};
+    if (callbackWindow != null && callbackWindow.isNotEmpty) {
+      body['callback_window'] = callbackWindow;
+    }
+    final response = await _send(
+      'POST',
+      '/api/staff/customers/$leadId/recover/',
+      body: body,
+    );
+    return LeadItem.fromJson(_decodeMap(response.body));
+  }
+
   Future<LearningCenterPayload> fetchLearningCenter() async {
     final response = await _send('GET', '/api/staff/learning/');
     return LearningCenterPayload.fromJson(_decodeMap(response.body));
@@ -240,10 +273,7 @@ class ApiClient {
   }
 
   Future<CallRecord> retryPendingCall({required String callId}) async {
-    final response = await _send(
-      'POST',
-      '/api/staff/calls/$callId/retry/',
-    );
+    final response = await _send('POST', '/api/staff/calls/$callId/retry/');
     return CallRecord.fromJson(_decodeMap(response.body));
   }
 
@@ -462,7 +492,10 @@ class ApiClient {
       return value;
     }
     if (value is List) {
-      return value.map(_flattenErrorValue).where((item) => item.isNotEmpty).join(' ');
+      return value
+          .map(_flattenErrorValue)
+          .where((item) => item.isNotEmpty)
+          .join(' ');
     }
     if (value is Map) {
       for (final entry in value.entries) {

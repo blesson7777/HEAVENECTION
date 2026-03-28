@@ -307,7 +307,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   }
 
   void _syncPendingCallStatusFromSummary() {
-    if (_summary.pendingCallStatusRequired && _summary.pendingCallId.isNotEmpty) {
+    if (_summary.pendingCallStatusRequired &&
+        _summary.pendingCallId.isNotEmpty) {
       _pendingStatusCallId = _summary.pendingCallId;
       _pendingStatusLeadId = _summary.pendingCallLeadId;
       _pendingStatusLeadName = _summary.pendingCallLeadName;
@@ -384,7 +385,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           endedAt: dialStartedAt,
           source: 'retry_direct_call_failed',
         );
-        _showMessage('Unable to place the recent customer call.', isError: true);
+        _showMessage(
+          'Unable to place the recent customer call.',
+          isError: true,
+        );
         return;
       }
 
@@ -416,7 +420,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         return;
       }
       if (error.code == 'network_error') {
-        _showNetworkError('Connection lost while retrying the recent customer.');
+        _showNetworkError(
+          'Connection lost while retrying the recent customer.',
+        );
         return;
       }
       _showMessage(error.message, isError: true);
@@ -516,7 +522,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
-  Future<bool> _ensurePendingCallStatusResolved([LeadItem? attemptedLead]) async {
+  Future<bool> _ensurePendingCallStatusResolved([
+    LeadItem? attemptedLead,
+  ]) async {
     if (!_hasPendingCallStatus) {
       return true;
     }
@@ -698,8 +706,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
-
-
   Future<void> _handleEntryPrompts() async {
     final update = await _checkForAvailableUpdate();
     if (!mounted) {
@@ -716,7 +722,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   Future<AppVersionInfo> _readCurrentVersionInfo() async {
     try {
-      final payload = await _updaterChannel.invokeMapMethod<String, dynamic>(
+      final payload =
+          await _updaterChannel.invokeMapMethod<String, dynamic>(
             'getVersionInfo',
           ) ??
           const <String, dynamic>{};
@@ -769,7 +776,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       if (error.statusCode == 401) {
         await _handleForcedLogout();
       } else if (error.code != 'network_error') {
-        _showMessage('Could not check for app updates right now.', isError: true);
+        _showMessage(
+          'Could not check for app updates right now.',
+          isError: true,
+        );
       }
       return _pendingAppUpdate;
     } finally {
@@ -784,8 +794,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   }
 
   Future<void> _openAvailableAppUpdatePrompt() async {
-    final update = _pendingAppUpdate ??
-        await _checkForAvailableUpdate(force: true);
+    final update =
+        _pendingAppUpdate ?? await _checkForAvailableUpdate(force: true);
     if (update == null) {
       _showMessage('This device is already on the latest version.');
       return;
@@ -953,7 +963,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _registerInteraction(syncServer: false);
     _isDownloadingUpdate = true;
     try {
-      final response = await _updaterChannel.invokeMapMethod<String, dynamic>(
+      final response =
+          await _updaterChannel.invokeMapMethod<String, dynamic>(
             'downloadAppUpdate',
             <String, dynamic>{
               'url': update.downloadUrl,
@@ -964,7 +975,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           ) ??
           const <String, dynamic>{};
       final status = response['status']?.toString() ?? 'error';
-      final message = response['message']?.toString() ??
+      final message =
+          response['message']?.toString() ??
           'Android will install the update after the download completes.';
       if (status == 'started') {
         _showMessage(message);
@@ -1027,6 +1039,91 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         setState(() {});
       }
     }
+  }
+
+  Future<List<LeadItem>> _searchCustomerHistory(String query) async {
+    try {
+      return await _apiClient.searchCustomerHistory(query: query);
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+        return const [];
+      }
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Unable to search previous customers right now. Reconnect and try again.',
+        );
+        return const [];
+      }
+      _showMessage(error.message, isError: true);
+      return const [];
+    }
+  }
+
+  Future<RecoveredLeadResult?> _recoverCustomerLead(
+    LeadItem lead, {
+    required String statusLabel,
+    String callbackWindow = '',
+    String callbackWindowLabel = '',
+  }) async {
+    try {
+      final updatedLead = await _apiClient.recoverCustomerLead(
+        leadId: lead.id,
+        status: _statusValue(statusLabel),
+        callbackWindow: callbackWindow,
+      );
+      return RecoveredLeadResult(
+        leadId: updatedLead.id,
+        leadName: updatedLead.name.isNotEmpty ? updatedLead.name : lead.name,
+        statusLabel: statusLabel,
+        callbackWindowLabel: callbackWindowLabel,
+      );
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+        return null;
+      }
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Unable to restore this customer right now. Reconnect and try again.',
+        );
+        return null;
+      }
+      _showMessage(error.message, isError: true);
+      return null;
+    }
+  }
+
+  Future<void> _openCustomerRecoveryPage() async {
+    _registerInteraction(syncServer: false);
+    final result = await Navigator.of(context).push<RecoveredLeadResult>(
+      MaterialPageRoute(
+        builder: (_) => CustomerRecoveryPage(
+          staffName: _user?.name ?? '',
+          onSearch: _searchCustomerHistory,
+          onRecover: _recoverCustomerLead,
+        ),
+      ),
+    );
+
+    if (!mounted || result == null) {
+      return;
+    }
+
+    await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+    if (!mounted) {
+      return;
+    }
+
+    if (result.statusLabel == 'Call Back' &&
+        result.callbackWindowLabel.isNotEmpty) {
+      _showMessage(
+        '${result.leadName} moved back to your list for ${result.callbackWindowLabel}.',
+      );
+      return;
+    }
+
+    _showMessage('${result.leadName} added back to your follow-up list.');
   }
 
   Future<void> _handleLogin() async {
@@ -1202,7 +1299,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   contentPadding: EdgeInsets.zero,
                   leading: const CircleAvatar(
                     backgroundColor: kSoft,
-                    child: Icon(Icons.photo_library_outlined, color: kPrimaryDark),
+                    child: Icon(
+                      Icons.photo_library_outlined,
+                      color: kPrimaryDark,
+                    ),
                   ),
                   title: const Text(
                     'Choose From Gallery',
@@ -1252,9 +1352,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
-  Future<void> _pickAadharPhoto() => _pickDocumentPhoto(_ProfileDocument.aadhar);
+  Future<void> _pickAadharPhoto() =>
+      _pickDocumentPhoto(_ProfileDocument.aadhar);
 
-  Future<void> _pickPassbookPhoto() => _pickDocumentPhoto(_ProfileDocument.passbook);
+  Future<void> _pickPassbookPhoto() =>
+      _pickDocumentPhoto(_ProfileDocument.passbook);
 
   Future<void> _saveProfile() async {
     FocusScope.of(context).unfocus();
@@ -1268,7 +1370,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
     if (_newPasswordController.text.isNotEmpty &&
         _confirmPasswordController.text != _newPasswordController.text) {
-      _showMessage('New password and confirm password must match.', isError: true);
+      _showMessage(
+        'New password and confirm password must match.',
+        isError: true,
+      );
       return;
     }
     if (_newPasswordController.text.isNotEmpty &&
@@ -1680,7 +1785,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           actions: [
             TextButton(
               onPressed: () {
-                Navigator.of(dialogContext).pop(ShortCallDecision.markNoResponse);
+                Navigator.of(
+                  dialogContext,
+                ).pop(ShortCallDecision.markNoResponse);
               },
               child: const Text('Mark No Response'),
             ),
@@ -1738,7 +1845,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     if (decision == ShortCallDecision.callAgain) {
-      _showMessage('Short call detected. Marked as No Response and calling again.');
+      _showMessage(
+        'Short call detected. Marked as No Response and calling again.',
+      );
       final lead = _leadById(pendingCall.leadId);
       if (lead != null) {
         await _placeCallForLead(lead);
@@ -2302,16 +2411,13 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    const choices = [
-      'Rejected',
-      'Follow Up',
-      'Call Back',
-      'No Response',
-    ];
+    const choices = ['Rejected', 'Follow Up', 'Call Back', 'No Response'];
     const callbackChoices = ['Noon', 'Evening', 'Night'];
 
     _isCallStatusPromptVisible = true;
-    var selectedStatus = choices.contains(_callStatus) ? _callStatus : 'Follow Up';
+    var selectedStatus = choices.contains(_callStatus)
+        ? _callStatus
+        : 'Follow Up';
     var selectedCallbackWindow = '';
 
     await showDialog<void>(
@@ -2440,7 +2546,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 ),
                 actions: [
                   ElevatedButton(
-                    onPressed: isSaving ||
+                    onPressed:
+                        isSaving ||
                             (selectedStatus == 'Call Back' &&
                                 selectedCallbackWindow.isEmpty)
                         ? null
@@ -3040,6 +3147,45 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             style: const TextStyle(fontSize: 16.5, color: Colors.black54),
           ),
           const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.manage_search, color: kPrimary),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Previous customers',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'If a customer calls you back after being marked No Response, search them here and bring them back into your follow-up list.',
+                  style: TextStyle(fontSize: 15.5, color: Colors.black54),
+                ),
+                const SizedBox(height: 14),
+                ElevatedButton.icon(
+                  onPressed: _openCustomerRecoveryPage,
+                  icon: const Icon(Icons.person_search),
+                  label: const Text('Find Previous Customer'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
           if (_hasPendingCallStatus) ...[
             _buildPendingCallStatusBanner(),
             const SizedBox(height: 16),
@@ -3613,7 +3759,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                       Expanded(
                         child: InfoCard(
                           title: 'Status',
-                          value: profile?.isActive == true ? 'Active' : 'Inactive',
+                          value: profile?.isActive == true
+                              ? 'Active'
+                              : 'Inactive',
                           color: profile?.isActive == true ? kGreen : kRed,
                           icon: Icons.verified_user,
                         ),
@@ -3669,7 +3817,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                         width: 150,
                         child: InfoCard(
                           title: 'Hours',
-                          value: salarySummary?.totalWorkingHoursLabel ?? '0.0h',
+                          value:
+                              salarySummary?.totalWorkingHoursLabel ?? '0.0h',
                           color: kPrimary,
                           icon: Icons.timer_outlined,
                         ),
@@ -3678,7 +3827,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                         width: 150,
                         child: InfoCard(
                           title: 'Earned',
-                          value: salarySummary?.totalEarnedAmountLabel ?? 'Rs. 0.00',
+                          value:
+                              salarySummary?.totalEarnedAmountLabel ??
+                              'Rs. 0.00',
                           color: kGreen,
                           icon: Icons.account_balance_wallet_outlined,
                         ),
@@ -3687,7 +3838,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                         width: 150,
                         child: InfoCard(
                           title: 'Paid',
-                          value: salarySummary?.totalPaidAmountLabel ?? 'Rs. 0.00',
+                          value:
+                              salarySummary?.totalPaidAmountLabel ?? 'Rs. 0.00',
                           color: kOrange,
                           icon: Icons.payments_outlined,
                         ),
@@ -3873,7 +4025,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                         label: const Text('Add Aadhaar'),
                       ),
                       if (_selectedAadharPhoto != null ||
-                          (profile?.hasAadharPhoto == true && !_removeAadharPhoto))
+                          (profile?.hasAadharPhoto == true &&
+                              !_removeAadharPhoto))
                         OutlinedButton.icon(
                           onPressed: () {
                             setState(() {
@@ -4037,7 +4190,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                       ),
                                       decoration: BoxDecoration(
                                         color: kPrimary.withValues(alpha: 0.10),
-                                        borderRadius: BorderRadius.circular(999),
+                                        borderRadius: BorderRadius.circular(
+                                          999,
+                                        ),
                                       ),
                                       child: Text(
                                         salary.payoutCycleLabel,
@@ -4431,9 +4586,7 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('This lesson link is not valid yet.'),
-        ),
+        const SnackBar(content: Text('This lesson link is not valid yet.')),
       );
       return;
     }
@@ -4739,10 +4892,7 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(22),
-          child: YoutubePlayer(
-            controller: controller,
-            aspectRatio: 16 / 9,
-          ),
+          child: YoutubePlayer(controller: controller, aspectRatio: 16 / 9),
         ),
         const SizedBox(height: 12),
         Align(
@@ -4927,6 +5077,449 @@ class NetworkErrorView extends StatelessWidget {
       ),
     );
   }
+}
+
+class RecoveredLeadResult {
+  const RecoveredLeadResult({
+    required this.leadId,
+    required this.leadName,
+    required this.statusLabel,
+    this.callbackWindowLabel = '',
+  });
+
+  final String leadId;
+  final String leadName;
+  final String statusLabel;
+  final String callbackWindowLabel;
+}
+
+class CustomerRecoveryPage extends StatefulWidget {
+  const CustomerRecoveryPage({
+    super.key,
+    required this.staffName,
+    required this.onSearch,
+    required this.onRecover,
+  });
+
+  final String staffName;
+  final Future<List<LeadItem>> Function(String query) onSearch;
+  final Future<RecoveredLeadResult?> Function(
+    LeadItem lead, {
+    required String statusLabel,
+    String callbackWindow,
+    String callbackWindowLabel,
+  })
+  onRecover;
+
+  @override
+  State<CustomerRecoveryPage> createState() => _CustomerRecoveryPageState();
+}
+
+class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
+  final TextEditingController _searchController = TextEditingController();
+  List<LeadItem> _results = const [];
+  bool _isLoading = true;
+  String? _recoveringLeadId;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadResults());
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadResults({String? query}) async {
+    setState(() => _isLoading = true);
+    final results = await widget.onSearch(
+      (query ?? _searchController.text).trim(),
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _results = results;
+      _isLoading = false;
+    });
+  }
+
+  String _formatDateTime(DateTime? value) {
+    if (value == null) {
+      return 'Not contacted yet';
+    }
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+    final minute = value.minute.toString().padLeft(2, '0');
+    final meridiem = value.hour >= 12 ? 'PM' : 'AM';
+    return '$day/$month/${value.year} $hour:$minute $meridiem';
+  }
+
+  String _callbackWindowValue(String label) {
+    return switch (label) {
+      'Noon' => 'noon',
+      'Evening' => 'evening',
+      'Night' => 'night',
+      _ => '',
+    };
+  }
+
+  Future<_RecoverySelection?> _pickRecoverySelection(LeadItem lead) async {
+    const callbackChoices = ['Noon', 'Evening', 'Night'];
+    var selectedStatus = lead.status == 'call_back' ? 'Call Back' : 'Follow Up';
+    var selectedCallbackWindow = lead.callbackWindowLabel;
+
+    return showDialog<_RecoverySelection>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: const Text('Bring Customer Back'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${lead.name} can be moved back into your active lead list.',
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: ['Follow Up', 'Call Back']
+                        .map(
+                          (label) => ChoiceChip(
+                            selected: selectedStatus == label,
+                            onSelected: (_) {
+                              setDialogState(() {
+                                selectedStatus = label;
+                                if (label != 'Call Back') {
+                                  selectedCallbackWindow = '';
+                                }
+                              });
+                            },
+                            selectedColor: kPrimary,
+                            backgroundColor: Colors.white,
+                            label: Text(
+                              label,
+                              style: TextStyle(
+                                color: selectedStatus == label
+                                    ? Colors.white
+                                    : kPrimaryDark,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                  if (selectedStatus == 'Call Back') ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Choose the callback time window',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: callbackChoices
+                          .map(
+                            (label) => ChoiceChip(
+                              selected: selectedCallbackWindow == label,
+                              onSelected: (_) {
+                                setDialogState(() {
+                                  selectedCallbackWindow = label;
+                                });
+                              },
+                              selectedColor: kPrimary,
+                              backgroundColor: Colors.white,
+                              label: Text(
+                                label,
+                                style: TextStyle(
+                                  color: selectedCallbackWindow == label
+                                      ? Colors.white
+                                      : kPrimaryDark,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed:
+                      selectedStatus == 'Call Back' &&
+                          selectedCallbackWindow.isEmpty
+                      ? null
+                      : () {
+                          Navigator.of(dialogContext).pop(
+                            _RecoverySelection(
+                              statusLabel: selectedStatus,
+                              callbackWindow: _callbackWindowValue(
+                                selectedCallbackWindow,
+                              ),
+                              callbackWindowLabel: selectedCallbackWindow,
+                            ),
+                          );
+                        },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _handleRecoverLead(LeadItem lead) async {
+    final selection = await _pickRecoverySelection(lead);
+    if (!mounted || selection == null) {
+      return;
+    }
+
+    setState(() => _recoveringLeadId = lead.id);
+    final result = await widget.onRecover(
+      lead,
+      statusLabel: selection.statusLabel,
+      callbackWindow: selection.callbackWindow,
+      callbackWindowLabel: selection.callbackWindowLabel,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() => _recoveringLeadId = null);
+    if (result == null) {
+      return;
+    }
+    Navigator.of(context).pop(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final query = _searchController.text.trim();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Previous Customers')),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _loadResults,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            children: [
+              const Text(
+                'Find a customer you called earlier',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Use the customer name or phone number. If they called you back later, move them into Follow Up or schedule a Call Back here.',
+                style: TextStyle(fontSize: 16.5, color: Colors.black54),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      textInputAction: TextInputAction.search,
+                      onSubmitted: (value) => _loadResults(query: value),
+                      decoration: InputDecoration(
+                        labelText: 'Search by name or phone',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: _searchController.text.trim().isEmpty
+                            ? null
+                            : IconButton(
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _loadResults(query: '');
+                                  setState(() {});
+                                },
+                                icon: const Icon(Icons.close),
+                              ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton.icon(
+                    onPressed: _isLoading
+                        ? null
+                        : () => _loadResults(query: _searchController.text),
+                    icon: const Icon(Icons.manage_search),
+                    label: const Text('Search'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              if (_isLoading)
+                const Padding(
+                  padding: EdgeInsets.only(top: 28),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_results.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Text(
+                    query.isEmpty
+                        ? 'Recent customers you called will appear here.'
+                        : 'No previous customer matched your search.',
+                    style: const TextStyle(fontSize: 16, color: Colors.black54),
+                  ),
+                )
+              else
+                ..._results.map((lead) {
+                  final isConverted = lead.status == 'converted';
+                  final ownerIsSomeoneElse =
+                      lead.assignedToName.isNotEmpty &&
+                      lead.assignedToName != widget.staffName;
+                  final isRecovering = _recoveringLeadId == lead.id;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: kSoft,
+                                foregroundColor: kPrimary,
+                                child: Text(lead.name.characters.first),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      lead.name,
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    Text(
+                                      lead.phone,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.black54,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              StatusPill(label: lead.statusLabel),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Last contacted: ${_formatDateTime(lead.lastContactedAt)}',
+                            style: const TextStyle(
+                              color: Colors.black54,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (lead.callbackWindowLabel.isNotEmpty) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'Current callback slot: ${lead.callbackWindowLabel}',
+                              style: const TextStyle(
+                                color: kPrimaryDark,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                          if (ownerIsSomeoneElse) ...[
+                            const SizedBox(height: 6),
+                            Text(
+                              'Currently assigned to ${lead.assignedToName}.',
+                              style: const TextStyle(
+                                color: kOrange,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                          if (lead.notes.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              lead.notes,
+                              style: const TextStyle(fontSize: 15.5),
+                            ),
+                          ],
+                          const SizedBox(height: 14),
+                          ElevatedButton.icon(
+                            onPressed: isConverted || isRecovering
+                                ? null
+                                : () => _handleRecoverLead(lead),
+                            icon: isRecovering
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.refresh_rounded),
+                            label: Text(
+                              isConverted
+                                  ? 'Already Converted'
+                                  : (lead.isRecoveryLead
+                                        ? 'Add Follow Up'
+                                        : 'Update Follow Up'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RecoverySelection {
+  const _RecoverySelection({
+    required this.statusLabel,
+    this.callbackWindow = '',
+    this.callbackWindowLabel = '',
+  });
+
+  final String statusLabel;
+  final String callbackWindow;
+  final String callbackWindowLabel;
 }
 
 class PendingDialerCall {

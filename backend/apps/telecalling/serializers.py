@@ -85,6 +85,27 @@ class CallStatusSerializer(serializers.Serializer):
         return attrs
 
 
+class StaffLeadRecoverySerializer(serializers.Serializer):
+    status = serializers.ChoiceField(
+        choices=[
+            Lead.Status.INTERESTED,
+            Lead.Status.CALL_BACK,
+        ]
+    )
+    callback_window = serializers.ChoiceField(
+        choices=Lead.CallbackWindow.choices,
+        required=False,
+        allow_blank=False,
+    )
+
+    def validate(self, attrs):
+        if attrs.get("status") == Lead.Status.CALL_BACK and not attrs.get("callback_window"):
+            raise serializers.ValidationError(
+                {"callback_window": "Select Noon, Evening, or Night for a callback."}
+            )
+        return attrs
+
+
 class StaffSerializer(serializers.ModelSerializer):
     compensation_type_label = serializers.CharField(source="get_compensation_type_display", read_only=True)
 
