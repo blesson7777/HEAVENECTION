@@ -14,6 +14,7 @@ from django.db.models.functions import Coalesce, TruncDate
 from django.utils import timezone
 
 from backend.apps.telecalling.models import (
+    AppRelease,
     Call,
     CompanyProfile,
     Lead,
@@ -2199,6 +2200,83 @@ def build_salary_detail_payload(staff):
     }
 
 
+def get_latest_app_release():
+    return (
+        AppRelease.objects.filter(is_active=True, published_at__lte=timezone.now())
+        .select_related("created_by")
+        .order_by("-version_code", "-published_at")
+        .first()
+    )
+
+
+def publish_app_release(*, created_by, validated_data):
+    is_active = validated_data.get("is_active", True)
+    app_release = AppRelease.objects.create(created_by=created_by, **validated_data)
+    if is_active:
+        AppRelease.objects.exclude(id=app_release.id).update(is_active=False)
+    return app_release
+
+
+def set_active_app_release(app_release):
+    AppRelease.objects.exclude(id=app_release.id).update(is_active=False)
+    if not app_release.is_active:
+        app_release.is_active = True
+        app_release.save(update_fields=["is_active", "updated_at"])
+    return app_release
+
+
+def build_developer_release_payload():
+    releases = AppRelease.objects.select_related("created_by").order_by("-version_code", "-published_at")
+    latest_release = get_latest_app_release()
+    release_rows = [
+        {
+            "id": str(release.id),
+            "version_name": release.version_name,
+            "version_code": release.version_code,
+            "minimum_supported_version_code": release.minimum_supported_version_code,
+            "release_notes": release.release_notes or "No release notes added.",
+            "is_mandatory": release.is_mandatory,
+            "is_active": release.is_active,
+            "published_at": _format_datetime(release.published_at),
+            "created_by": release.created_by.name if release.created_by else "Developer",
+            "download_url": release.apk_file.url if release.apk_file else "",
+            "file_size_label": f"{round((release.file_size_bytes or 0) / (1024 * 1024), 2)} MB",
+        }
+        for release in releases
+    ]
+    return {
+        "latest_release": latest_release,
+        "release_rows": release_rows,
+    }
+
+
+def build_app_update_payload(request, *, current_version_code=0):
+    latest_release = get_latest_app_release()
+    if not latest_release or not latest_release.apk_file:
+        return {"update_available": False}
+
+    current_version_code = int(current_version_code or 0)
+    download_url = request.build_absolute_uri(latest_release.apk_file.url)
+    effective_mandatory = bool(
+        latest_release.is_mandatory
+        or (
+            latest_release.minimum_supported_version_code
+            and current_version_code < latest_release.minimum_supported_version_code
+        )
+    )
+    return {
+        "update_available": latest_release.version_code > current_version_code,
+        "version_name": latest_release.version_name,
+        "version_code": latest_release.version_code,
+        "minimum_supported_version_code": latest_release.minimum_supported_version_code,
+        "release_notes": latest_release.release_notes,
+        "is_mandatory": effective_mandatory,
+        "download_url": download_url,
+        "file_name": latest_release.apk_file.name.rsplit("/", 1)[-1],
+        "published_at": latest_release.published_at.isoformat(),
+        "file_size_bytes": latest_release.file_size_bytes,
+    }
+
 def build_settings_payload(current_user):
     company_profile = get_company_profile()
     company_details = [
@@ -2945,3 +3023,4 @@ def update_staff_call_status(call, status, callback_window=""):
 
 def read_root_file(filename):
     return (settings.BASE_DIR / filename).read_text(encoding="utf-8")
+

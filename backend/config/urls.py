@@ -8,6 +8,9 @@ from backend.apps.telecalling import views
 urlpatterns = [
     path("login/", views.web_login_page, name="web-login"),
     path("logout/", views.web_logout, name="web-logout"),
+    path("developer/login/", views.developer_login_page, name="developer-login"),
+    path("developer/logout/", views.developer_logout, name="developer-logout"),
+    path("developer/releases/", views.developer_releases_page, name="developer-releases-page"),
     path("offline/", views.offline_page, name="offline-page"),
     path("", views.dashboard_page, name="dashboard"),
     path("settings/", views.settings_page, name="settings-page"),
@@ -30,3 +33,4 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+

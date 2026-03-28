@@ -119,6 +119,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   final _confirmPasswordController = TextEditingController();
   final ImagePicker _imagePicker = ImagePicker();
   final ApiClient _apiClient = ApiClient(baseUrl: kApiBaseUrl);
+  static const MethodChannel _updaterChannel = MethodChannel(
+    'heavenection/updater',
+  );
 
   StaffUser? _user;
   StaffProfile? _profile;
@@ -164,6 +167,13 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _isHeartbeatRequestInFlight = false;
   bool _isSyncingCallLog = false;
   bool _isCallStatusPromptVisible = false;
+  bool _isCheckingForUpdate = false;
+  bool _isUpdateDialogVisible = false;
+  bool _isDownloadingUpdate = false;
+  bool _hasCheckedAppUpdate = false;
+  int _currentVersionCode = 0;
+  String _currentVersionName = '';
+  AppUpdateInfo? _pendingAppUpdate;
   File? _selectedAadharPhoto;
   bool _removeAadharPhoto = false;
 
@@ -663,7 +673,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         unawaited(_showIdleWarning());
       }
       if (promptTrainingGate) {
-        _maybePromptMandatoryTraining();
+        await _handleEntryPrompts();
       }
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
@@ -681,6 +691,297 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       if (mounted) {
         setState(() => _isLoadingData = false);
       }
+    }
+  }
+
+
+
+  Future<void> _handleEntryPrompts() async {
+    final update = await _checkForAvailableUpdate();
+    if (!mounted) {
+      return;
+    }
+    if (update != null) {
+      await _showAppUpdatePrompt(update);
+      if (!mounted || update.isMandatory) {
+        return;
+      }
+    }
+    _maybePromptMandatoryTraining();
+  }
+
+  Future<AppVersionInfo> _readCurrentVersionInfo() async {
+    try {
+      final payload = await _updaterChannel.invokeMapMethod<String, dynamic>(
+            'getVersionInfo',
+          ) ??
+          const <String, dynamic>{};
+      return AppVersionInfo.fromJson(Map<String, dynamic>.from(payload));
+    } on MissingPluginException {
+      return const AppVersionInfo(
+        versionName: '',
+        versionCode: 0,
+        packageName: '',
+        canInstallPackages: false,
+      );
+    } on PlatformException {
+      return const AppVersionInfo(
+        versionName: '',
+        versionCode: 0,
+        packageName: '',
+        canInstallPackages: false,
+      );
+    }
+  }
+
+  Future<AppUpdateInfo?> _checkForAvailableUpdate({bool force = false}) async {
+    if (_user == null) {
+      return null;
+    }
+    if (_isCheckingForUpdate) {
+      return _pendingAppUpdate;
+    }
+    if (_hasCheckedAppUpdate && !force) {
+      return _pendingAppUpdate;
+    }
+
+    _isCheckingForUpdate = true;
+    var success = false;
+    try {
+      final versionInfo = await _readCurrentVersionInfo();
+      _currentVersionCode = versionInfo.versionCode;
+      _currentVersionName = versionInfo.versionName;
+      final update = await _apiClient.fetchAppUpdate(
+        versionCode: versionInfo.versionCode,
+      );
+      success = true;
+      if (mounted) {
+        setState(() => _pendingAppUpdate = update);
+      } else {
+        _pendingAppUpdate = update;
+      }
+      return update;
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+      } else if (error.code != 'network_error') {
+        _showMessage('Could not check for app updates right now.', isError: true);
+      }
+      return _pendingAppUpdate;
+    } finally {
+      _isCheckingForUpdate = false;
+      if (success) {
+        _hasCheckedAppUpdate = true;
+      }
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
+  Future<void> _openAvailableAppUpdatePrompt() async {
+    final update = _pendingAppUpdate ??
+        await _checkForAvailableUpdate(force: true);
+    if (update == null) {
+      _showMessage('This device is already on the latest version.');
+      return;
+    }
+    await _showAppUpdatePrompt(update);
+  }
+
+  Future<void> _showAppUpdatePrompt(AppUpdateInfo update) async {
+    if (!mounted || _isUpdateDialogVisible) {
+      return;
+    }
+
+    _isUpdateDialogVisible = true;
+    final action = await showDialog<_AppUpdateAction>(
+      context: context,
+      barrierDismissible: !update.isMandatory,
+      builder: (dialogContext) {
+        return PopScope(
+          canPop: !update.isMandatory,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            title: Text(
+              update.isMandatory ? 'Update Required' : 'App Update Available',
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Version ${update.versionName} is ready for HEAVENECTION.',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      StatusPill(
+                        label: update.isMandatory ? 'Mandatory' : 'Optional',
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: kSoft,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          update.fileSizeLabel,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: kPrimaryDark,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    _currentVersionName.isEmpty
+                        ? 'Current build: ${_currentVersionCode == 0 ? '--' : _currentVersionCode}'
+                        : 'Current build: $_currentVersionName ($_currentVersionCode)',
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'New build code: ${update.versionCode}',
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                  if (update.minimumSupportedVersionCode > 0) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Minimum supported build: ${update.minimumSupportedVersionCode}',
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Release notes',
+                    style: TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: kSoft,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text(
+                      update.releaseNotes.trim().isEmpty
+                          ? 'A new HEAVENECTION update is ready to install.'
+                          : update.releaseNotes,
+                      style: const TextStyle(
+                        fontSize: 15.5,
+                        height: 1.5,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    update.isMandatory
+                        ? 'Download and install this update before continuing in the app.'
+                        : 'Download the new APK now, or continue and install it later.',
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              if (!update.isMandatory)
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(dialogContext).pop(_AppUpdateAction.later);
+                  },
+                  child: const Text('Later'),
+                ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop(_AppUpdateAction.download);
+                },
+                icon: const Icon(Icons.download_rounded),
+                label: const Text('Download Update'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    _isUpdateDialogVisible = false;
+
+    if (!mounted) {
+      return;
+    }
+
+    if (action == _AppUpdateAction.download) {
+      final started = await _downloadAppUpdate(update);
+      if (!started && update.isMandatory) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            unawaited(_showAppUpdatePrompt(update));
+          }
+        });
+      }
+    }
+  }
+
+  Future<bool> _downloadAppUpdate(AppUpdateInfo update) async {
+    if (_isDownloadingUpdate) {
+      return true;
+    }
+
+    _registerInteraction(syncServer: false);
+    _isDownloadingUpdate = true;
+    try {
+      final response = await _updaterChannel.invokeMapMethod<String, dynamic>(
+            'downloadAppUpdate',
+            <String, dynamic>{
+              'url': update.downloadUrl,
+              'fileName': update.fileName,
+              'title': 'HEAVENECTION ${update.versionName}',
+              'description': 'Downloading the latest HEAVENECTION update.',
+            },
+          ) ??
+          const <String, dynamic>{};
+      final status = response['status']?.toString() ?? 'error';
+      final message = response['message']?.toString() ??
+          'Android will install the update after the download completes.';
+      if (status == 'started') {
+        _showMessage(message);
+        return true;
+      }
+      _showMessage(message, isError: true);
+      return false;
+    } on MissingPluginException {
+      _showMessage(
+        'This device cannot start the in-app updater right now.',
+        isError: true,
+      );
+      return false;
+    } on PlatformException catch (error) {
+      _showMessage(
+        error.message ?? 'Could not start the update download.',
+        isError: true,
+      );
+      return false;
+    } finally {
+      _isDownloadingUpdate = false;
     }
   }
 
@@ -793,6 +1094,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _clearPendingCallStatus();
       _selectedAadharPhoto = null;
       _removeAadharPhoto = false;
+      _pendingAppUpdate = null;
+      _currentVersionCode = 0;
+      _currentVersionName = '';
+      _hasCheckedAppUpdate = false;
+      _isDownloadingUpdate = false;
+      _isUpdateDialogVisible = false;
     });
     _updatePreferredOrientations();
     _showMessage('Session expired. Please sign in again.', isError: true);
@@ -831,6 +1138,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _clearPendingCallStatus();
       _selectedAadharPhoto = null;
       _removeAadharPhoto = false;
+      _pendingAppUpdate = null;
+      _currentVersionCode = 0;
+      _currentVersionName = '';
+      _hasCheckedAppUpdate = false;
+      _isDownloadingUpdate = false;
+      _isUpdateDialogVisible = false;
     });
     _updatePreferredOrientations();
   }
@@ -2217,6 +2530,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             markSize: 36,
           ),
           actions: [
+            if (_pendingAppUpdate != null)
+              IconButton(
+                onPressed: _openAvailableAppUpdatePrompt,
+                icon: const Icon(Icons.system_update_alt),
+                tooltip: 'App update',
+              ),
             if (_hasPendingCallStatus)
               IconButton(
                 onPressed: _recoverPendingCallStatusPrompt,
@@ -4470,6 +4789,8 @@ class PendingDialerCall {
 enum ShortCallDecision { markNoResponse, markRejected, callAgain }
 
 enum _PendingCallAction { markStatus, callRecent, cancel }
+
+enum _AppUpdateAction { download, later }
 
 class InfoCard extends StatelessWidget {
   const InfoCard({

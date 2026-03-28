@@ -3,6 +3,7 @@ from rest_framework import serializers
 from django.utils import timezone
 
 from backend.apps.telecalling.models import (
+    AppRelease,
     Call,
     CompanyProfile,
     Lead,
@@ -804,6 +805,71 @@ class SalaryPaymentSerializer(serializers.Serializer):
         return attrs
 
 
+class CreateAppReleaseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AppRelease
+        fields = (
+            "version_name",
+            "version_code",
+            "minimum_supported_version_code",
+            "release_notes",
+            "apk_file",
+            "is_mandatory",
+            "is_active",
+            "published_at",
+        )
+
+    def validate_apk_file(self, value):
+        file_name = getattr(value, "name", "").lower()
+        if not file_name.endswith(".apk"):
+            raise serializers.ValidationError("Upload a valid Android APK file.")
+        if getattr(value, "size", 0) <= 0:
+            raise serializers.ValidationError("The uploaded APK file is empty.")
+        return value
+
+    def validate(self, attrs):
+        version_code = attrs.get("version_code")
+        min_supported = attrs.get("minimum_supported_version_code", 0)
+        if version_code is not None and min_supported and min_supported > version_code:
+            raise serializers.ValidationError(
+                {"minimum_supported_version_code": "Minimum supported version cannot be higher than the uploaded version."}
+            )
+        return attrs
+
+
+class AppReleaseSerializer(serializers.ModelSerializer):
+    download_url = serializers.SerializerMethodField()
+    file_size_mb = serializers.SerializerMethodField()
+    created_by_name = serializers.CharField(source="created_by.name", read_only=True)
+
+    class Meta:
+        model = AppRelease
+        fields = (
+            "id",
+            "version_name",
+            "version_code",
+            "minimum_supported_version_code",
+            "release_notes",
+            "download_url",
+            "file_size_bytes",
+            "file_size_mb",
+            "is_mandatory",
+            "is_active",
+            "published_at",
+            "created_by_name",
+        )
+
+    def get_download_url(self, obj):
+        request = self.context.get("request")
+        if not obj.apk_file:
+            return ""
+        if request:
+            return request.build_absolute_uri(obj.apk_file.url)
+        return obj.apk_file.url
+
+    def get_file_size_mb(self, obj):
+        return round((obj.file_size_bytes or 0) / (1024 * 1024), 2)
+
 class TrainingLessonSerializer(serializers.ModelSerializer):
     completed_staff_count = serializers.IntegerField(read_only=True)
     pending_staff_count = serializers.IntegerField(read_only=True)
@@ -854,3 +920,4 @@ class UpdateTrainingLessonSerializer(serializers.ModelSerializer):
             "sort_order",
             "published_at",
         )
+

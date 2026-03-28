@@ -1,8 +1,92 @@
+int _asInt(dynamic value) {
+  if (value is num) {
+    return value.toInt();
+  }
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
 double _asDouble(dynamic value) {
   if (value is num) {
     return value.toDouble();
   }
   return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+
+class AppUpdateInfo {
+  const AppUpdateInfo({
+    required this.updateAvailable,
+    required this.versionName,
+    required this.versionCode,
+    required this.minimumSupportedVersionCode,
+    required this.releaseNotes,
+    required this.isMandatory,
+    required this.downloadUrl,
+    required this.fileName,
+    required this.publishedAt,
+    required this.fileSizeBytes,
+  });
+
+  final bool updateAvailable;
+  final String versionName;
+  final int versionCode;
+  final int minimumSupportedVersionCode;
+  final String releaseNotes;
+  final bool isMandatory;
+  final String downloadUrl;
+  final String fileName;
+  final DateTime? publishedAt;
+  final int fileSizeBytes;
+
+  String get fileSizeLabel {
+    if (fileSizeBytes <= 0) {
+      return '--';
+    }
+    final mb = fileSizeBytes / (1024 * 1024);
+    return '${mb.toStringAsFixed(mb >= 10 ? 0 : 1)} MB';
+  }
+
+  factory AppUpdateInfo.fromJson(Map<String, dynamic> json) {
+    return AppUpdateInfo(
+      updateAvailable: json['update_available'] == true,
+      versionName: json['version_name']?.toString() ?? '',
+      versionCode: _asInt(json['version_code']),
+      minimumSupportedVersionCode: _asInt(
+        json['minimum_supported_version_code'],
+      ),
+      releaseNotes: json['release_notes']?.toString() ?? '',
+      isMandatory: json['is_mandatory'] == true,
+      downloadUrl: json['download_url']?.toString() ?? '',
+      fileName: json['file_name']?.toString() ?? 'heavenection-update.apk',
+      publishedAt: json['published_at'] == null
+          ? null
+          : DateTime.tryParse(json['published_at'].toString())?.toLocal(),
+      fileSizeBytes: _asInt(json['file_size_bytes']),
+    );
+  }
+}
+
+class AppVersionInfo {
+  const AppVersionInfo({
+    required this.versionName,
+    required this.versionCode,
+    required this.packageName,
+    required this.canInstallPackages,
+  });
+
+  final String versionName;
+  final int versionCode;
+  final String packageName;
+  final bool canInstallPackages;
+
+  factory AppVersionInfo.fromJson(Map<String, dynamic> json) {
+    return AppVersionInfo(
+      versionName: json['versionName']?.toString() ?? '',
+      versionCode: _asInt(json['versionCode']),
+      packageName: json['packageName']?.toString() ?? '',
+      canInstallPackages: json['canInstallPackages'] == true,
+    );
+  }
 }
 
 class StaffUser {

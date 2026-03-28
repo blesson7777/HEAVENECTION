@@ -86,6 +86,18 @@ class ApiClient {
     return StaffProfile.fromJson(_decodeMap(response.body));
   }
 
+  Future<AppUpdateInfo?> fetchAppUpdate({required int versionCode}) async {
+    final response = await _send(
+      'GET',
+      '/api/staff/app-update/?version_code=$versionCode',
+    );
+    final payload = _decodeMap(response.body);
+    if (payload['update_available'] != true) {
+      return null;
+    }
+    return AppUpdateInfo.fromJson(payload);
+  }
+
   Future<StaffProfile> updateStaffProfile({
     required String name,
     required String phone,

@@ -29,6 +29,7 @@ urlpatterns = [
     path("staff/today-summary/", views.staff_today_summary_api, name="api-staff-today-summary"),
     path("staff/leads/", views.assigned_leads_api, name="api-staff-leads"),
     path("staff/profile/", views.staff_profile_api, name="api-staff-profile"),
+    path("staff/app-update/", views.staff_app_update_api, name="api-staff-app-update"),
     path("staff/learning/", views.staff_learning_api, name="api-staff-learning"),
     path("staff/learning/<uuid:lesson_id>/complete/", views.complete_training_lesson_api, name="api-staff-learning-complete"),
     path("staff/session/start/", views.start_session_api, name="api-session-start"),
@@ -39,3 +40,4 @@ urlpatterns = [
     path("staff/calls/<uuid:call_id>/retry/", views.retry_call_api, name="api-call-retry"),
     path("staff/calls/<uuid:call_id>/status/", views.update_call_status_api, name="api-call-status"),
 ]
+

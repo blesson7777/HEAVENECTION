@@ -29,6 +29,7 @@ class StaffManager(BaseUserManager):
 class Staff(AbstractBaseUser, PermissionsMixin):
     class Role(models.TextChoices):
         ADMIN = "admin", "Admin"
+        DEVELOPER = "developer", "Developer"
         STAFF = "staff", "Staff"
 
     class CompensationType(models.TextChoices):
@@ -74,7 +75,7 @@ class Staff(AbstractBaseUser, PermissionsMixin):
         ordering = ("name",)
 
     def save(self, *args, **kwargs):
-        self.is_staff = self.role == self.Role.ADMIN or self.is_superuser
+        self.is_staff = self.role in {self.Role.ADMIN, self.Role.DEVELOPER} or self.is_superuser
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -322,6 +323,39 @@ class Salary(models.Model):
                 name="telecalling_unique_salary_period",
             )
         ]
+
+
+class AppRelease(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    version_name = models.CharField(max_length=40)
+    version_code = models.PositiveIntegerField(unique=True, db_index=True)
+    minimum_supported_version_code = models.PositiveIntegerField(default=0)
+    release_notes = models.TextField(blank=True)
+    apk_file = models.FileField(upload_to="app_releases/android/")
+    file_size_bytes = models.PositiveBigIntegerField(default=0)
+    is_mandatory = models.BooleanField(default=False, db_index=True)
+    is_active = models.BooleanField(default=True, db_index=True)
+    published_at = models.DateTimeField(default=timezone.now, db_index=True)
+    created_by = models.ForeignKey(
+        Staff,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="published_app_releases",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-version_code", "-published_at")
+
+    def save(self, *args, **kwargs):
+        if self.apk_file and getattr(self.apk_file, "size", None):
+            self.file_size_bytes = int(self.apk_file.size or 0)
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.version_name} ({self.version_code})"
 
 
 class TrainingLesson(models.Model):

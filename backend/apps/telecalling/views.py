@@ -8,7 +8,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from backend.apps.telecalling.auth import clear_auth_cookies, get_staff_from_request, issue_tokens_for_user, set_auth_cookies
-from backend.apps.telecalling.models import Call, Lead, Salary, Staff, StaffAction, TrainingLesson
+from backend.apps.telecalling.models import AppRelease, Call, Lead, Salary, Staff, StaffAction, TrainingLesson
 from backend.apps.telecalling.permissions import IsAdminStaff, IsCallingStaff
 from backend.apps.telecalling.serializers import (
     AdminProfileSerializer,
@@ -17,6 +17,7 @@ from backend.apps.telecalling.serializers import (
     CompanyProfileSerializer,
     CompanyProfileUpdateSerializer,
     CallStatusSerializer,
+    CreateAppReleaseSerializer,
     CreateLeadSerializer,
     CreateStaffSerializer,
     CreateTrainingLessonSerializer,
@@ -42,8 +43,10 @@ from backend.apps.telecalling.serializers import (
 from backend.apps.telecalling.services import (
     auto_allocate_leads,
     authenticate_staff,
+    build_app_update_payload,
     build_call_detail_payload,
     build_dashboard_payload,
+    build_developer_release_payload,
     build_followup_csv_response,
     build_followup_payload,
     build_learning_management_payload,
@@ -64,6 +67,7 @@ from backend.apps.telecalling.services import (
     get_assigned_leads,
     get_pending_status_call,
     get_company_profile,
+    publish_app_release,
     import_leads_from_upload,
     mark_staff_seen,
     read_root_file,
@@ -71,6 +75,7 @@ from backend.apps.telecalling.services import (
     record_session_heartbeat,
     release_staff_queue,
     reactivate_oldest_recovery_leads,
+    set_active_app_release,
     retry_pending_staff_call,
     send_salary_payment_acknowledgement,
     start_staff_call,
@@ -104,6 +109,16 @@ def _get_admin_user_or_redirect(request):
     return current_user
 
 
+def _get_developer_user_or_redirect(request):
+    current_user = get_staff_from_request(request)
+    if (
+        not current_user
+        or not current_user.is_active
+        or current_user.role not in {Staff.Role.ADMIN, Staff.Role.DEVELOPER}
+    ):
+        return None
+    return current_user
+
 def _normalize_errors(error_dict):
     normalized = {}
     for field, value in error_dict.items():
@@ -136,14 +151,14 @@ def web_login_page(request):
         return redirect("dashboard")
 
     if request.method == "GET":
-        return render(request, "admin_login.html")
+        return render(request, "admin_login.html", {"company_profile": get_company_profile()})
 
     serializer = LoginSerializer(data=request.POST)
     if not serializer.is_valid():
         return render(
             request,
             "admin_login.html",
-            {"submitted_phone": request.POST.get("phone", "").strip()},
+            {"submitted_phone": request.POST.get("phone", "").strip(), "company_profile": get_company_profile()},
             status=400,
         )
 
@@ -157,7 +172,7 @@ def web_login_page(request):
         return render(
             request,
             "admin_login.html",
-            {"submitted_phone": serializer.validated_data["phone"]},
+            {"submitted_phone": serializer.validated_data["phone"], "company_profile": get_company_profile()},
             status=400,
         )
 
@@ -174,6 +189,114 @@ def web_logout(request):
     clear_auth_cookies(response)
     return response
 
+
+@require_http_methods(["GET", "POST"])
+def developer_login_page(request):
+    current_user = get_staff_from_request(request)
+    if current_user and current_user.is_active and current_user.role in {Staff.Role.ADMIN, Staff.Role.DEVELOPER}:
+        return redirect("developer-releases-page")
+
+    if request.method == "GET":
+        return render(request, "developer_login.html", {"company_profile": get_company_profile()})
+
+    serializer = LoginSerializer(data=request.POST)
+    if not serializer.is_valid():
+        return render(
+            request,
+            "developer_login.html",
+            {"submitted_phone": request.POST.get("phone", "").strip(), "company_profile": get_company_profile()},
+            status=400,
+        )
+
+    staff = authenticate_staff(
+        serializer.validated_data["phone"],
+        serializer.validated_data["password"],
+    )
+    if not staff or staff.role not in {Staff.Role.ADMIN, Staff.Role.DEVELOPER}:
+        messages.error(request, "Invalid developer credentials.")
+        return render(
+            request,
+            "developer_login.html",
+            {"submitted_phone": serializer.validated_data["phone"], "company_profile": get_company_profile()},
+            status=400,
+        )
+
+    mark_staff_seen(staff)
+    tokens = issue_tokens_for_user(staff)
+    response = redirect("developer-releases-page")
+    set_auth_cookies(response, tokens["refresh_token"])
+    return response
+
+
+@require_http_methods(["POST"])
+def developer_logout(request):
+    response = redirect("developer-login")
+    clear_auth_cookies(response)
+    return response
+
+
+@require_http_methods(["GET", "POST"])
+def developer_releases_page(request):
+    current_user = _get_developer_user_or_redirect(request)
+    if not current_user:
+        return redirect("developer-login")
+
+    release_form_data = {
+        "version_name": "",
+        "version_code": "",
+        "minimum_supported_version_code": "0",
+        "release_notes": "",
+        "is_mandatory": False,
+        "is_active": True,
+        "published_at": "",
+    }
+    release_errors = {}
+
+    if request.method == "POST":
+        release_action = request.POST.get("release_action", "upload_release")
+        if release_action == "set_active_release":
+            release_id = request.POST.get("release_id", "").strip()
+            try:
+                release = AppRelease.objects.get(id=release_id)
+            except AppRelease.DoesNotExist:
+                messages.error(request, "Release not found.")
+            else:
+                set_active_app_release(release)
+                messages.success(request, f"{release.version_name} is now the active published release.")
+                return redirect("developer-releases-page")
+        else:
+            release_form_data = {
+                "version_name": request.POST.get("version_name", "").strip(),
+                "version_code": request.POST.get("version_code", "").strip(),
+                "minimum_supported_version_code": request.POST.get("minimum_supported_version_code", "0").strip(),
+                "release_notes": request.POST.get("release_notes", "").strip(),
+                "is_mandatory": request.POST.get("is_mandatory") == "on",
+                "is_active": request.POST.get("is_active") == "on",
+                "published_at": request.POST.get("published_at", "").strip(),
+            }
+            serializer = CreateAppReleaseSerializer(
+                data={
+                    **release_form_data,
+                    "apk_file": request.FILES.get("apk_file"),
+                }
+            )
+            if serializer.is_valid():
+                release = publish_app_release(created_by=current_user, validated_data=serializer.validated_data)
+                messages.success(request, f"App release {release.version_name} published successfully.")
+                return redirect("developer-releases-page")
+
+            release_errors = _normalize_errors(serializer.errors)
+            messages.error(request, "Please correct the app release details and upload the APK again.")
+
+    context = {
+        "developer_user": current_user,
+        "company_profile": get_company_profile(),
+        "page_title": "Developer Releases",
+        "release_form_data": release_form_data,
+        "release_errors": release_errors,
+        **build_developer_release_payload(),
+    }
+    return render(request, "developer_releases.html", context)
 
 @require_GET
 def dashboard_page(request):
@@ -862,6 +985,16 @@ def staff_profile_api(request):
     return Response(StaffProfileSerializer(staff, context={"request": request}).data)
 
 
+@api_view(["GET"])
+@permission_classes([IsCallingStaff])
+def staff_app_update_api(request):
+    raw_version_code = request.query_params.get("version_code", "0")
+    try:
+        current_version_code = int(raw_version_code)
+    except (TypeError, ValueError):
+        current_version_code = 0
+    return Response(build_app_update_payload(request, current_version_code=current_version_code))
+
 @api_view(["POST"])
 def logout_api(request):
     response = Response({"detail": "Logged out."})
@@ -1332,3 +1465,8 @@ def update_call_status_api(request, call_id):
         serializer.validated_data.get("callback_window", ""),
     )
     return Response(CallSerializer(call).data)
+
+
+
+
+

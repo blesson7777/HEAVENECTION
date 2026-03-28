@@ -1,0 +1,159 @@
+{% extends "developer_base.html" %}
+
+{% block page_actions %}
+{% if latest_release %}
+<a href="{{ latest_release.apk_file.url }}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Download Current APK</a>
+{% endif %}
+{% endblock %}
+
+{% block developer_content %}
+<section class="row g-4">
+    <div class="col-lg-4">
+        <div class="hc-surface-card h-100">
+            <span class="mf-db2-kicker">Active Release</span>
+            <h4 class="mt-2 mb-2">{% if latest_release %}{{ latest_release.version_name }}{% else %}No release yet{% endif %}</h4>
+            <p class="text-muted mb-3">{% if latest_release %}Version code {{ latest_release.version_code }}{% else %}Upload your first APK build from this portal.{% endif %}</p>
+            {% if latest_release %}
+            <div class="hc-profile-meta-grid">
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Mandatory</span>
+                    <strong>{% if latest_release.is_mandatory %}Yes{% else %}No{% endif %}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Min Supported</span>
+                    <strong>{{ latest_release.minimum_supported_version_code }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Published</span>
+                    <strong>{{ latest_release.published_at|date:"d M Y, h:i A" }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Size</span>
+                    <strong>{{ latest_release.file_size_bytes|filesizeformat }}</strong>
+                </div>
+            </div>
+            <div class="hc-document-empty mt-3">{{ latest_release.release_notes|default:"No release notes added." }}</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="hc-surface-card h-100">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Publish APK</span>
+                    <h5>Upload the next app update</h5>
+                </div>
+            </div>
+            <form method="post" action="{% url 'developer-releases-page' %}" enctype="multipart/form-data" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="release_action" value="upload_release">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Version Name</label>
+                        <input type="text" class="form-control{% if release_errors.version_name %} is-invalid{% endif %}" name="version_name" value="{{ release_form_data.version_name }}" placeholder="1.0.1" required>
+                        {% if release_errors.version_name %}<div class="invalid-feedback">{{ release_errors.version_name }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Version Code</label>
+                        <input type="number" min="1" class="form-control{% if release_errors.version_code %} is-invalid{% endif %}" name="version_code" value="{{ release_form_data.version_code }}" placeholder="2" required>
+                        {% if release_errors.version_code %}<div class="invalid-feedback">{{ release_errors.version_code }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Minimum Supported Version Code</label>
+                        <input type="number" min="0" class="form-control{% if release_errors.minimum_supported_version_code %} is-invalid{% endif %}" name="minimum_supported_version_code" value="{{ release_form_data.minimum_supported_version_code }}">
+                        {% if release_errors.minimum_supported_version_code %}<div class="invalid-feedback">{{ release_errors.minimum_supported_version_code }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Publish Time</label>
+                        <input type="datetime-local" class="form-control{% if release_errors.published_at %} is-invalid{% endif %}" name="published_at" value="{{ release_form_data.published_at }}">
+                        {% if release_errors.published_at %}<div class="invalid-feedback">{{ release_errors.published_at }}</div>{% endif %}
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Release Notes</label>
+                        <textarea class="form-control{% if release_errors.release_notes %} is-invalid{% endif %}" name="release_notes" rows="4" placeholder="What changed in this update?">{{ release_form_data.release_notes }}</textarea>
+                        {% if release_errors.release_notes %}<div class="invalid-feedback">{{ release_errors.release_notes }}</div>{% endif %}
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">APK File</label>
+                        <input type="file" class="form-control{% if release_errors.apk_file %} is-invalid{% endif %}" name="apk_file" accept=".apk" required>
+                        {% if release_errors.apk_file %}<div class="invalid-feedback">{{ release_errors.apk_file }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="developerMandatoryRelease" name="is_mandatory" {% if release_form_data.is_mandatory %}checked{% endif %}>
+                            <label class="form-check-label" for="developerMandatoryRelease">Force update for staff</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="developerActiveRelease" name="is_active" {% if release_form_data.is_active %}checked{% endif %}>
+                            <label class="form-check-label" for="developerActiveRelease">Publish as active release</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end mt-4">
+                    <button type="submit" class="btn btn-primary">Publish APK Release</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+<section class="hc-surface-card mt-4">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Release History</span>
+            <h5>Published Android builds</h5>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Release</th>
+                    <th>Scope</th>
+                    <th>Published</th>
+                    <th>File</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in release_rows %}
+                <tr>
+                    <td>
+                        <strong>{{ row.version_name }}</strong>
+                        <div class="text-muted small">Version code {{ row.version_code }} | By {{ row.created_by }}</div>
+                        <div class="text-muted small">{{ row.release_notes }}</div>
+                    </td>
+                    <td>
+                        <span class="hc-status {% if row.is_active %}hc-status-success{% else %}hc-status-muted{% endif %}">{% if row.is_active %}Active{% else %}Archived{% endif %}</span>
+                        <div class="text-muted small mt-1">Min support {{ row.minimum_supported_version_code }}</div>
+                        <div class="text-muted small">{% if row.is_mandatory %}Mandatory{% else %}Optional{% endif %}</div>
+                    </td>
+                    <td>{{ row.published_at }}</td>
+                    <td>
+                        <div>{{ row.file_size_label }}</div>
+                        <a href="{{ row.download_url }}" target="_blank" rel="noopener" class="hc-inline-link">Download</a>
+                    </td>
+                    <td>
+                        {% if not row.is_active %}
+                        <form method="post" action="{% url 'developer-releases-page' %}" class="m-0 d-inline-block">
+                            {% csrf_token %}
+                            <input type="hidden" name="release_action" value="set_active_release">
+                            <input type="hidden" name="release_id" value="{{ row.id }}">
+                            <button type="submit" class="btn btn-outline-primary btn-sm">Make Active</button>
+                        </form>
+                        {% else %}
+                        <span class="text-muted small">Live for staff devices</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center py-4">No APK releases uploaded yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
