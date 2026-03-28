@@ -3147,45 +3147,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             style: const TextStyle(fontSize: 16.5, color: Colors.black54),
           ),
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.manage_search, color: kPrimary),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Previous customers',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'If a customer calls you back after being marked No Response, search them here and bring them back into your follow-up list.',
-                  style: TextStyle(fontSize: 15.5, color: Colors.black54),
-                ),
-                const SizedBox(height: 14),
-                ElevatedButton.icon(
-                  onPressed: _openCustomerRecoveryPage,
-                  icon: const Icon(Icons.person_search),
-                  label: const Text('Find Previous Customer'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
           if (_hasPendingCallStatus) ...[
             _buildPendingCallStatusBanner(),
             const SizedBox(height: 16),
@@ -3275,6 +3236,45 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 ),
               ),
             ),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.manage_search, color: kPrimary),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Previous customers',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'If a customer calls back after being marked No Response, search and bring them back into your follow-up list here.',
+                  style: TextStyle(fontSize: 15.5, color: Colors.black54),
+                ),
+                const SizedBox(height: 14),
+                ElevatedButton.icon(
+                  onPressed: _openCustomerRecoveryPage,
+                  icon: const Icon(Icons.person_search),
+                  label: const Text('Find Previous Customer'),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -5118,14 +5118,9 @@ class CustomerRecoveryPage extends StatefulWidget {
 class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
   final TextEditingController _searchController = TextEditingController();
   List<LeadItem> _results = const [];
-  bool _isLoading = true;
+  bool _isLoading = false;
+  bool _hasSearched = false;
   String? _recoveringLeadId;
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_loadResults());
-  }
 
   @override
   void dispose() {
@@ -5134,16 +5129,28 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
   }
 
   Future<void> _loadResults({String? query}) async {
+    final searchText = (query ?? _searchController.text).trim();
+    if (searchText.isEmpty) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoading = false;
+        _hasSearched = false;
+        _results = const [];
+      });
+      return;
+    }
+
     setState(() => _isLoading = true);
-    final results = await widget.onSearch(
-      (query ?? _searchController.text).trim(),
-    );
+    final results = await widget.onSearch(searchText);
     if (!mounted) {
       return;
     }
     setState(() {
       _results = results;
       _isLoading = false;
+      _hasSearched = true;
     });
   }
 
@@ -5316,194 +5323,197 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
   @override
   Widget build(BuildContext context) {
     final query = _searchController.text.trim();
+    final canSearch = query.isNotEmpty && !_isLoading;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Previous Customers')),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadResults,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            children: [
-              const Text(
-                'Find a customer you called earlier',
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Use the customer name or phone number. If they called you back later, move them into Follow Up or schedule a Call Back here.',
-                style: TextStyle(fontSize: 16.5, color: Colors.black54),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      textInputAction: TextInputAction.search,
-                      onSubmitted: (value) => _loadResults(query: value),
-                      decoration: InputDecoration(
-                        labelText: 'Search by name or phone',
-                        prefixIcon: const Icon(Icons.search),
-                        suffixIcon: _searchController.text.trim().isEmpty
-                            ? null
-                            : IconButton(
-                                onPressed: () {
-                                  _searchController.clear();
-                                  _loadResults(query: '');
-                                  setState(() {});
-                                },
-                                icon: const Icon(Icons.close),
-                              ),
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            const Text(
+              'Find a customer you called earlier',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Search with the customer name or phone number. If they later called back and showed interest, you can move them back into Follow Up or schedule a Call Back here.',
+              style: TextStyle(fontSize: 16.5, color: Colors.black54),
+            ),
+            const SizedBox(height: 18),
+            TextField(
+              controller: _searchController,
+              textInputAction: TextInputAction.search,
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (value) => _loadResults(query: value),
+              decoration: InputDecoration(
+                labelText: 'Search by name or phone',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: query.isEmpty
+                    ? null
+                    : IconButton(
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {
+                            _hasSearched = false;
+                            _results = const [];
+                          });
+                        },
+                        icon: const Icon(Icons.close),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton.icon(
-                    onPressed: _isLoading
-                        ? null
-                        : () => _loadResults(query: _searchController.text),
-                    icon: const Icon(Icons.manage_search),
-                    label: const Text('Search'),
-                  ),
-                ],
               ),
-              const SizedBox(height: 18),
-              if (_isLoading)
-                const Padding(
-                  padding: EdgeInsets.only(top: 28),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_results.isEmpty)
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Text(
-                    query.isEmpty
-                        ? 'Recent customers you called will appear here.'
-                        : 'No previous customer matched your search.',
-                    style: const TextStyle(fontSize: 16, color: Colors.black54),
-                  ),
-                )
-              else
-                ..._results.map((lead) {
-                  final isConverted = lead.status == 'converted';
-                  final ownerIsSomeoneElse =
-                      lead.assignedToName.isNotEmpty &&
-                      lead.assignedToName != widget.staffName;
-                  final isRecovering = _recoveringLeadId == lead.id;
+            ),
+            const SizedBox(height: 14),
+            ElevatedButton.icon(
+              onPressed: canSearch ? () => _loadResults(query: query) : null,
+              icon: const Icon(Icons.manage_search),
+              label: const Text('Search Customer'),
+            ),
+            const SizedBox(height: 18),
+            if (_isLoading)
+              const Padding(
+                padding: EdgeInsets.only(top: 28),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (!_hasSearched)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Text(
+                  'Enter the customer phone number or name, then tap Search Customer.',
+                  style: TextStyle(fontSize: 16, color: Colors.black54),
+                ),
+              )
+            else if (_results.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Text(
+                  'No previous customer matched your search.',
+                  style: TextStyle(fontSize: 16, color: Colors.black54),
+                ),
+              )
+            else
+              ..._results.map((lead) {
+                final isConverted = lead.status == 'converted';
+                final ownerIsSomeoneElse =
+                    lead.assignedToName.isNotEmpty &&
+                    lead.assignedToName != widget.staffName;
+                final isRecovering = _recoveringLeadId == lead.id;
 
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: Container(
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              CircleAvatar(
-                                backgroundColor: kSoft,
-                                foregroundColor: kPrimary,
-                                child: Text(lead.name.characters.first),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      lead.name,
-                                      style: const TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.w800,
-                                      ),
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            CircleAvatar(
+                              backgroundColor: kSoft,
+                              foregroundColor: kPrimary,
+                              child: Text(lead.name.characters.first),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    lead.name,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800,
                                     ),
-                                    Text(
-                                      lead.phone,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        color: Colors.black54,
-                                      ),
+                                  ),
+                                  Text(
+                                    lead.phone,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.black54,
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
-                              StatusPill(label: lead.statusLabel),
-                            ],
+                            ),
+                            StatusPill(label: lead.statusLabel),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Last contacted: ${_formatDateTime(lead.lastContactedAt)}',
+                          style: const TextStyle(
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w600,
                           ),
-                          const SizedBox(height: 12),
+                        ),
+                        if (lead.callbackWindowLabel.isNotEmpty) ...[
+                          const SizedBox(height: 6),
                           Text(
-                            'Last contacted: ${_formatDateTime(lead.lastContactedAt)}',
+                            'Current callback slot: ${lead.callbackWindowLabel}',
                             style: const TextStyle(
-                              color: Colors.black54,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          if (lead.callbackWindowLabel.isNotEmpty) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              'Current callback slot: ${lead.callbackWindowLabel}',
-                              style: const TextStyle(
-                                color: kPrimaryDark,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                          if (ownerIsSomeoneElse) ...[
-                            const SizedBox(height: 6),
-                            Text(
-                              'Currently assigned to ${lead.assignedToName}.',
-                              style: const TextStyle(
-                                color: kOrange,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                          if (lead.notes.isNotEmpty) ...[
-                            const SizedBox(height: 10),
-                            Text(
-                              lead.notes,
-                              style: const TextStyle(fontSize: 15.5),
-                            ),
-                          ],
-                          const SizedBox(height: 14),
-                          ElevatedButton.icon(
-                            onPressed: isConverted || isRecovering
-                                ? null
-                                : () => _handleRecoverLead(lead),
-                            icon: isRecovering
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.refresh_rounded),
-                            label: Text(
-                              isConverted
-                                  ? 'Already Converted'
-                                  : (lead.isRecoveryLead
-                                        ? 'Add Follow Up'
-                                        : 'Update Follow Up'),
+                              color: kPrimaryDark,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ],
-                      ),
+                        if (ownerIsSomeoneElse) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            'Currently assigned to ${lead.assignedToName}.',
+                            style: const TextStyle(
+                              color: kOrange,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                        if (lead.notes.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            lead.notes,
+                            style: const TextStyle(fontSize: 15.5),
+                          ),
+                        ],
+                        const SizedBox(height: 14),
+                        ElevatedButton.icon(
+                          onPressed: isConverted || isRecovering
+                              ? null
+                              : () => _handleRecoverLead(lead),
+                          icon: isRecovering
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.refresh_rounded),
+                          label: Text(
+                            isConverted
+                                ? 'Already Converted'
+                                : (lead.isRecoveryLead
+                                      ? 'Add Follow Up'
+                                      : 'Update Follow Up'),
+                          ),
+                        ),
+                      ],
                     ),
-                  );
-                }),
-            ],
-          ),
+                  ),
+                );
+              }),
+          ],
         ),
       ),
     );
