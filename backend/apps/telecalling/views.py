@@ -70,6 +70,7 @@ from backend.apps.telecalling.services import (
     get_company_profile,
     publish_app_release,
     import_leads_from_upload,
+    is_staff_lead_visible_now,
     mark_staff_seen,
     read_root_file,
     record_staff_salary_payment,
@@ -1423,6 +1424,15 @@ def start_call_api(request):
         lead = Lead.objects.get(id=serializer.validated_data["lead_id"], assigned_to=request.user)
     except Lead.DoesNotExist:
         return Response({"detail": "Lead not found."}, status=404)
+
+    if not is_staff_lead_visible_now(lead):
+        return Response(
+            {
+                "detail": "This callback lead is only available during its requested time slot.",
+                "code": "callback_not_due",
+            },
+            status=409,
+        )
 
     try:
         call = start_staff_call(request.user, lead)

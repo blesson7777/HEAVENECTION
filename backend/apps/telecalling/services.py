@@ -910,6 +910,22 @@ def _ordered_lead_queryset(queryset, *, now=None, include_assignee=False, priori
     return ordered_queryset.order_by(*order_fields)
 
 
+def _visible_staff_lead_queryset(queryset, *, now=None):
+    current_slot = _current_callback_window(now)
+    if current_slot:
+        return queryset.filter(
+            Q(status__in=(Lead.Status.NEW, Lead.Status.INTERESTED))
+            | Q(status=Lead.Status.CALL_BACK, callback_window=current_slot)
+        )
+    return queryset.exclude(status=Lead.Status.CALL_BACK)
+
+
+def is_staff_lead_visible_now(lead, *, now=None):
+    if lead.status != Lead.Status.CALL_BACK:
+        return True
+    return bool(lead.callback_window and lead.callback_window == _current_callback_window(now))
+
+
 def _daily_completed_call_counts():
     _, start, end = _today_range()
     qualifying_statuses = [
@@ -2767,10 +2783,14 @@ def get_pending_status_call(staff):
 
 def build_staff_today_payload(staff):
     today, start, end = _today_range()
+    now = timezone.now()
     sessions_today = Session.objects.filter(staff=staff, login_time__range=(start, end))
     calls_today = Call.objects.filter(staff=staff, start_time__range=(start, end))
     qualifying_calls = calls_today.filter(is_qualifying=True)
-    assigned_leads = Lead.objects.filter(assigned_to=staff)
+    assigned_leads = _visible_staff_lead_queryset(
+        Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES),
+        now=now,
+    )
     open_session = get_open_session(staff, reconcile=True)
     latest_session = sessions_today.order_by("-login_time").first()
     learning_payload = build_staff_learning_payload(staff)
@@ -2819,10 +2839,14 @@ def build_staff_today_payload(staff):
 
 
 def get_assigned_leads(staff):
+    now = timezone.now()
     auto_allocate_leads(target_staff=staff)
     return _ordered_lead_queryset(
-        Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES).select_related("assigned_to"),
-        now=timezone.now(),
+        _visible_staff_lead_queryset(
+            Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES).select_related("assigned_to"),
+            now=now,
+        ),
+        now=now,
     )
 
 
