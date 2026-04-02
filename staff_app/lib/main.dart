@@ -2791,7 +2791,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         if (label == 'Call Back' && callbackWindowLabel.isNotEmpty) {
           _showMessage('Call Back scheduled for $callbackWindowLabel.');
         } else {
-          _showMessage('Call result saved as $label.');
+          _showMessage('Remark saved as $label.');
         }
       }
       return true;
@@ -2839,55 +2839,58 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(24),
                 ),
-                title: const Text('Mark Call Result'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Complete the previous call result before moving to another lead.',
-                    ),
-                    if (_pendingStatusLeadName.isNotEmpty ||
-                        _pendingStatusLeadPhone.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: kSoft,
-                          borderRadius: BorderRadius.circular(18),
+                title: const Text('Select Customer Remark'),
+                content: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Choose one simple remark before moving to the next customer.',
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (_pendingStatusLeadName.isNotEmpty)
-                              Text(
-                                _pendingStatusLeadName,
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            if (_pendingStatusLeadPhone.isNotEmpty)
-                              Text(
-                                _pendingStatusLeadPhone,
-                                style: const TextStyle(color: Colors.black54),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: choices
-                          .map(
-                            (item) => ChoiceChip(
-                              selected: selectedStatus == item,
-                              onSelected: isSaving
+                        if (_pendingStatusLeadName.isNotEmpty ||
+                            _pendingStatusLeadPhone.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: kSoft,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (_pendingStatusLeadName.isNotEmpty)
+                                  Text(
+                                    _pendingStatusLeadName,
+                                    style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                if (_pendingStatusLeadPhone.isNotEmpty)
+                                  Text(
+                                    _pendingStatusLeadPhone,
+                                    style: const TextStyle(color: Colors.black54),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        ...choices.map((item) {
+                          final isSelected = selectedStatus == item;
+                          final color = _remarkColor(item);
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(20),
+                              onTap: isSaving
                                   ? null
-                                  : (_) {
+                                  : () {
                                       setDialogState(() {
                                         selectedStatus = item;
                                         if (item != 'Call Back') {
@@ -2895,59 +2898,112 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                         }
                                       });
                                     },
-                              selectedColor: kPrimary,
-                              backgroundColor: Colors.white,
-                              label: Text(
-                                item,
-                                style: TextStyle(
-                                  color: selectedStatus == item
-                                      ? Colors.white
-                                      : kPrimaryDark,
-                                  fontWeight: FontWeight.w700,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? color.withValues(alpha: 0.12)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? color
+                                        : Colors.black12,
+                                    width: isSelected ? 1.6 : 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? color
+                                            : color.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: Icon(
+                                        _remarkIcon(item),
+                                        color: isSelected ? Colors.white : color,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            item,
+                                            style: TextStyle(
+                                              fontSize: 16.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: isSelected
+                                                  ? color
+                                                  : kPrimaryDark,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            _remarkDescription(item),
+                                            style: const TextStyle(
+                                              fontSize: 14.5,
+                                              color: Colors.black54,
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
-                          )
-                          .toList(),
-                    ),
-                    if (selectedStatus == 'Call Back') ...[
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Choose the callback time window',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
-                        children: callbackChoices
-                            .map(
-                              (item) => ChoiceChip(
-                                selected: selectedCallbackWindow == item,
-                                onSelected: isSaving
-                                    ? null
-                                    : (_) {
-                                        setDialogState(
-                                          () => selectedCallbackWindow = item,
-                                        );
-                                      },
-                                selectedColor: kPrimary,
-                                backgroundColor: Colors.white,
-                                label: Text(
-                                  item,
-                                  style: TextStyle(
-                                    color: selectedCallbackWindow == item
-                                        ? Colors.white
-                                        : kPrimaryDark,
-                                    fontWeight: FontWeight.w700,
+                          );
+                        }),
+                        if (selectedStatus == 'Call Back') ...[
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Choose the callback time requested by the customer',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: callbackChoices
+                                .map(
+                                  (item) => ChoiceChip(
+                                    selected: selectedCallbackWindow == item,
+                                    onSelected: isSaving
+                                        ? null
+                                        : (_) {
+                                            setDialogState(
+                                              () => selectedCallbackWindow = item,
+                                            );
+                                          },
+                                    selectedColor: kPrimary,
+                                    backgroundColor: Colors.white,
+                                    label: Text(
+                                      item,
+                                      style: TextStyle(
+                                        color: selectedCallbackWindow == item
+                                            ? Colors.white
+                                            : kPrimaryDark,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ],
-                  ],
+                                )
+                                .toList(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
                 actions: [
                   ElevatedButton(
@@ -2976,7 +3032,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                               setDialogState(() => isSaving = false);
                             }
                           },
-                    child: Text(isSaving ? 'Saving...' : 'Save Status'),
+                    child: Text(isSaving ? 'Saving...' : 'Save Remark'),
                   ),
                 ],
               ),
@@ -3078,6 +3134,36 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       'Call Back' => 'call_back',
       'Converted' => 'converted',
       _ => 'interested',
+    };
+  }
+
+  IconData _remarkIcon(String label) {
+    return switch (label) {
+      'Follow Up' => Icons.trending_up_rounded,
+      'Call Back' => Icons.schedule_rounded,
+      'Rejected' => Icons.block_rounded,
+      'No Response' => Icons.phone_missed_rounded,
+      _ => Icons.assignment_turned_in_rounded,
+    };
+  }
+
+  Color _remarkColor(String label) {
+    return switch (label) {
+      'Follow Up' => kGreen,
+      'Call Back' => kOrange,
+      'Rejected' => kRed,
+      'No Response' => kPrimaryDark,
+      _ => kPrimary,
+    };
+  }
+
+  String _remarkDescription(String label) {
+    return switch (label) {
+      'Follow Up' => 'Customer spoke and needs the next step from you.',
+      'Call Back' => 'Customer asked for a scheduled callback to discuss later.',
+      'Rejected' => 'Customer clearly said they are not interested.',
+      'No Response' => 'No useful discussion happened or the customer did not respond.',
+      _ => '',
     };
   }
 
@@ -3679,7 +3765,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'If a customer calls back after being marked No Response, search and bring them back into your follow-up list here.',
+                  'If a customer calls back later, search here and move them back to Follow Up or schedule a Call Back only when they ask for a timed discussion.',
                   style: TextStyle(fontSize: 15.5, color: Colors.black54),
                 ),
                 const SizedBox(height: 14),
@@ -3984,7 +4070,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               ),
               const SizedBox(height: 10),
               const Text(
-                'After the call ends, the app will ask you to mark the result and schedule any callback slot. The next lead stays blocked until that result is saved.',
+                'After the call ends, mark one simple remark. Choose Call Back only when the customer specifically asks for a scheduled callback. The next lead stays blocked until the remark is saved.',
                 style: TextStyle(fontSize: 15.5, color: Colors.black54),
               ),
               if (_hasPendingCallStatus) ...[
@@ -5730,7 +5816,7 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${lead.name} can be moved back into your active lead list.',
+                    '${lead.name} can be moved back into your active lead list. Choose Call Back only if the customer requested a timed callback.',
                     style: const TextStyle(color: Colors.black54),
                   ),
                   const SizedBox(height: 16),
