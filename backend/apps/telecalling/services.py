@@ -39,6 +39,13 @@ IDLE_WARNING_AFTER_SECONDS = 5 * 60
 IDLE_WARNING_GRACE_SECONDS = 5 * 60
 IDLE_OFFLINE_AFTER_SECONDS = IDLE_WARNING_AFTER_SECONDS + IDLE_WARNING_GRACE_SECONDS
 LIVE_CALL_STALE_SECONDS = 3 * 60 * 60
+VERIFIED_CALL_ACTIVITY_TIMEOUT_SECONDS = 5 * 60
+VERIFIED_CALL_TIME_SKEW_SECONDS = 2 * 60
+VERIFIED_CALL_SOURCES = {
+    "call_log",
+    "call_log_short_resolution",
+    "call_log_short_recall",
+}
 TWOPLACES = Decimal("0.01")
 DEFAULT_LEAD_QUEUE_LIMIT = 1
 CALLBACK_NOON_HOURS = range(12, 16)
@@ -494,15 +501,26 @@ def _log_staff_action(
     )
 
 
-def _active_elapsed_until(session, now):
+def _session_has_recent_verified_activity(session, now):
+    if not session or not session.last_verified_call_at:
+        return False
+    return (now - session.last_verified_call_at).total_seconds() < VERIFIED_CALL_ACTIVITY_TIMEOUT_SECONDS
+
+
+def _active_elapsed_until(session, now, *, has_live_customer_call=False):
     if session.last_known_state != Session.AppState.FOREGROUND:
         return 0
 
+    if not has_live_customer_call and not _session_has_recent_verified_activity(session, now):
+        return 0
+
     active_until = now
-    if session.last_interaction_at:
-        idle_cutoff = session.last_interaction_at + timedelta(seconds=IDLE_WARNING_AFTER_SECONDS)
-        if idle_cutoff < active_until:
-            active_until = idle_cutoff
+    if not has_live_customer_call and session.last_verified_call_at:
+        verified_cutoff = session.last_verified_call_at + timedelta(
+            seconds=VERIFIED_CALL_ACTIVITY_TIMEOUT_SECONDS
+        )
+        if verified_cutoff < active_until:
+            active_until = verified_cutoff
 
     return _bounded_elapsed_seconds(session.last_heartbeat_at, active_until)
 
@@ -550,25 +568,41 @@ def _mark_session_foreground(session, now, *, metadata=None):
     return session
 
 
-def _credit_call_duration_to_session(session, call_end_time, call_duration_seconds, *, metadata=None):
-    if not session or not session.is_open or not call_duration_seconds:
+def _credit_call_duration_to_session(
+    session,
+    call_end_time,
+    call_duration_seconds,
+    *,
+    metadata=None,
+    mark_verified=False,
+):
+    if not session or not session.is_open:
         return session
 
-    already_counted = _active_elapsed_until(session, call_end_time)
-    session = _touch_session_interaction(session, call_end_time, metadata=metadata)
-    additional_seconds = max(0, int(call_duration_seconds) - int(already_counted))
-    if additional_seconds:
-        session.active_seconds += additional_seconds
-        session.save(update_fields=_dedupe_fields(["active_seconds"]))
+    session = _mark_session_foreground(session, call_end_time, metadata=metadata)
+    update_fields = []
+    if call_duration_seconds:
+        session.active_seconds += max(0, int(call_duration_seconds))
+        update_fields.append("active_seconds")
+    if mark_verified and session.last_verified_call_at != call_end_time:
+        session.last_verified_call_at = call_end_time
+        update_fields.append("last_verified_call_at")
+    if update_fields:
+        session.save(update_fields=_dedupe_fields(update_fields))
     return session
 
 
-def _resolve_requested_state(session, requested_state, now, interaction):
+def _resolve_requested_state(session, requested_state, now, interaction, *, has_live_customer_call=False):
     if requested_state == Session.AppState.BACKGROUND:
         return Session.AppState.BACKGROUND
     if requested_state == Session.AppState.WARNING:
         return Session.AppState.WARNING
     if requested_state == Session.AppState.OFFLINE:
+        return Session.AppState.OFFLINE
+
+    if has_live_customer_call:
+        return Session.AppState.FOREGROUND
+    if not _session_has_recent_verified_activity(session, now):
         return Session.AppState.OFFLINE
 
     last_interaction_at = now if interaction else (session.last_interaction_at or now)
@@ -621,6 +655,29 @@ def reconcile_session(session, now=None):
     now = now or timezone.now()
     state_anchor = session.state_changed_at or session.last_heartbeat_at or session.login_time
     warning_anchor = session.warning_started_at or state_anchor
+    has_live_customer_call = session.staff_id in _reconcile_open_calls(staff=session.staff, now=now)
+
+    if (
+        session.last_known_state == Session.AppState.FOREGROUND
+        and not has_live_customer_call
+        and not _session_has_recent_verified_activity(session, now)
+    ):
+        session.last_known_state = Session.AppState.OFFLINE
+        session.state_changed_at = now
+        session.warning_started_at = None
+        session.save(
+            update_fields=_dedupe_fields(
+                ["last_known_state", "state_changed_at", "warning_started_at"]
+            )
+        )
+        _log_staff_action(
+            session.staff,
+            StaffAction.ActionType.MARKED_OFFLINE,
+            session=session,
+            app_state=Session.AppState.OFFLINE,
+            metadata={"reason": "verified_call_timeout"},
+        )
+        return session
 
     if (
         session.last_known_state == Session.AppState.BACKGROUND
@@ -692,13 +749,20 @@ def _touch_session_interaction(session, now, *, metadata=None):
     if not session or not session.is_open:
         return session
 
-    session.active_seconds += _active_elapsed_until(session, now)
+    has_live_customer_call = session.staff_id in _reconcile_open_calls(staff=session.staff, now=now)
+    session.active_seconds += _active_elapsed_until(
+        session,
+        now,
+        has_live_customer_call=has_live_customer_call,
+    )
     session.save(update_fields=_dedupe_fields(["active_seconds"]))
     return _mark_session_foreground(session, now, metadata=metadata)
 
 
 def _session_status_label(open_session, latest_session=None):
     if open_session:
+        if open_session.last_known_state == Session.AppState.OFFLINE and not open_session.last_verified_call_at:
+            return "Call a customer to begin time tracking"
         return {
             Session.AppState.FOREGROUND: "Working",
             Session.AppState.BACKGROUND: "Away from app",
@@ -733,15 +797,19 @@ def _close_unresolved_call(call, *, reason):
     call.end_time = call.start_time
     call.duration_seconds = 0
     call.is_qualifying = False
+    call.is_verified = False
     call.status = Call.Status.INVALID_SHORT
     call.callback_window = ""
+    call.verification_source = ""
     call.save(
         update_fields=[
             "end_time",
             "duration_seconds",
             "is_qualifying",
+            "is_verified",
             "status",
             "callback_window",
+            "verification_source",
             "updated_at",
         ]
     )
@@ -2670,7 +2738,7 @@ def start_staff_session(staff, *, source="manual_start"):
         last_heartbeat_at=now,
         last_interaction_at=now,
         state_changed_at=now,
-        last_known_state=Session.AppState.FOREGROUND,
+        last_known_state=Session.AppState.OFFLINE,
         is_open=True,
     )
     mark_staff_seen(staff, now)
@@ -2678,7 +2746,7 @@ def start_staff_session(staff, *, source="manual_start"):
         staff,
         StaffAction.ActionType.SESSION_STARTED,
         session=session,
-        app_state=Session.AppState.FOREGROUND,
+        app_state=Session.AppState.OFFLINE,
         metadata={"source": source},
     )
     return session, True
@@ -2694,15 +2762,26 @@ def record_session_heartbeat(staff, state, *, interaction=False, source="timer")
     if not session or not session.is_open:
         return None
 
+    has_live_customer_call = staff.id in _reconcile_open_calls(staff=staff, now=now)
     previous_state = session.last_known_state
-    session.active_seconds += _active_elapsed_until(session, now)
+    session.active_seconds += _active_elapsed_until(
+        session,
+        now,
+        has_live_customer_call=has_live_customer_call,
+    )
     session.last_heartbeat_at = now
     session.heartbeat_count += 1
 
     if interaction:
         session.last_interaction_at = now
 
-    requested_state = _resolve_requested_state(session, state, now, interaction)
+    requested_state = _resolve_requested_state(
+        session,
+        state,
+        now,
+        interaction,
+        has_live_customer_call=has_live_customer_call,
+    )
     update_fields = ["active_seconds", "last_heartbeat_at", "heartbeat_count"]
 
     if interaction:
@@ -2971,6 +3050,8 @@ def retry_pending_staff_call(call):
     call.duration_seconds = 0
     call.is_qualifying = False
     call.callback_window = ""
+    call.is_verified = False
+    call.verification_source = ""
     call.save(
         update_fields=[
             "start_time",
@@ -2978,6 +3059,8 @@ def retry_pending_staff_call(call):
             "duration_seconds",
             "is_qualifying",
             "callback_window",
+            "is_verified",
+            "verification_source",
             "updated_at",
         ]
     )
@@ -3003,26 +3086,34 @@ def end_staff_call(call, status=None, *, duration_seconds=None, ended_at=None, s
 
     now = timezone.now()
     session = get_open_session(call.staff, reconcile=True)
+    is_verified = (
+        duration_seconds is not None
+        and ended_at is not None
+        and source in VERIFIED_CALL_SOURCES
+    )
 
-    resolved_duration = None if duration_seconds is None else max(0, int(duration_seconds))
-    resolved_end_time = ended_at
-    if resolved_end_time is None and resolved_duration is not None:
-        resolved_end_time = call.start_time + timedelta(seconds=resolved_duration)
-    if resolved_end_time is None:
-        resolved_end_time = now
-    if resolved_end_time < call.start_time:
-        resolved_end_time = call.start_time + timedelta(seconds=resolved_duration or 0)
-
-    if resolved_duration is None:
-        resolved_duration = max(0, int((resolved_end_time - call.start_time).total_seconds()))
-
-    if duration_seconds is not None:
+    if is_verified:
+        resolved_end_time = min(ended_at, now + timedelta(seconds=VERIFIED_CALL_TIME_SKEW_SECONDS))
+        if resolved_end_time < call.start_time:
+            resolved_end_time = call.start_time
+        max_verified_duration = max(
+            0,
+            int((resolved_end_time - call.start_time).total_seconds()) + VERIFIED_CALL_TIME_SKEW_SECONDS,
+        )
+        resolved_duration = min(max(0, int(duration_seconds)), max_verified_duration)
         call.start_time = resolved_end_time - timedelta(seconds=resolved_duration)
+    else:
+        resolved_end_time = ended_at or now
+        if resolved_end_time < call.start_time:
+            resolved_end_time = call.start_time
+        resolved_duration = 0
 
     requested_status = status
     call.end_time = resolved_end_time
     call.duration_seconds = resolved_duration
     call.is_qualifying = call.duration_seconds >= SHORT_CALL_SECONDS
+    call.is_verified = is_verified
+    call.verification_source = source if is_verified else ""
     if session:
         _credit_call_duration_to_session(
             session,
@@ -3032,6 +3123,7 @@ def end_staff_call(call, status=None, *, duration_seconds=None, ended_at=None, s
                 "source": "call_end",
                 "duration_seconds": resolved_duration,
             },
+            mark_verified=is_verified,
         )
     if not call.is_qualifying and requested_status in {
         Call.Status.NO_ANSWER,
@@ -3048,6 +3140,8 @@ def end_staff_call(call, status=None, *, duration_seconds=None, ended_at=None, s
             "end_time",
             "duration_seconds",
             "is_qualifying",
+            "is_verified",
+            "verification_source",
             "status",
             "updated_at",
         ]
@@ -3066,6 +3160,7 @@ def end_staff_call(call, status=None, *, duration_seconds=None, ended_at=None, s
         metadata={
             "duration_seconds": call.duration_seconds,
             "is_qualifying": call.is_qualifying,
+            "is_verified": call.is_verified,
             "status": call.status,
             "source": source,
             "ended_at": call.end_time.isoformat(),

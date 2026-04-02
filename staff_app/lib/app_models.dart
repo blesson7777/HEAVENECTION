@@ -434,12 +434,14 @@ class CallRecord {
     required this.status,
     required this.callbackWindow,
     required this.durationSeconds,
+    required this.isVerified,
   });
 
   final String id;
   final String status;
   final String callbackWindow;
   final int durationSeconds;
+  final bool isVerified;
 
   factory CallRecord.fromJson(Map<String, dynamic> json) {
     return CallRecord(
@@ -447,6 +449,7 @@ class CallRecord {
       status: json['status']?.toString() ?? '',
       callbackWindow: json['callback_window']?.toString() ?? '',
       durationSeconds: (json['duration_seconds'] as num?)?.toInt() ?? 0,
+      isVerified: json['is_verified'] == true,
     );
   }
 }

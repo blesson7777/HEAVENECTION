@@ -1437,7 +1437,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
     if (_hasPendingMandatoryTraining) {
       _showMessage(
-        'Complete the required training before starting work.',
+        'Complete the required training before calling customers.',
         isError: true,
       );
       _maybePromptMandatoryTraining(force: true);
@@ -1460,8 +1460,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _isTrainingPromptVisible = false;
       _showMessage(
         fromTraining
-            ? 'Training completed. Work session started.'
-            : 'Work session started.',
+            ? 'Training completed. You can start calling customers now.'
+            : 'Call session started automatically.',
       );
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
@@ -1470,7 +1470,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       if (error.code == 'network_error') {
         _showNetworkError(
-          'Unable to start work because the server is unreachable.',
+          'Unable to start the call session because the server is unreachable.',
         );
         return;
       }
@@ -1977,9 +1977,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         isError: true,
       );
     } else if (call.status == 'started') {
+      _showMessage(
+        'Call result is still pending. No work hours were added because the phone log could not verify this call.',
+        isError: true,
+      );
       _schedulePendingCallStatusPrompt();
     } else {
-      _showMessage('Call ended without phone log sync.', isError: true);
+      _showMessage(
+        'Call ended without phone-log verification. No work hours were added.',
+        isError: true,
+      );
     }
   }
 
@@ -2271,11 +2278,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         );
         return;
       }
-
-      if (!_summary.workingNow) {
-        setState(() => _tab = 0);
-        await _startWork(fromTraining: true);
-      }
+      _showMessage('Training completed. You can start calling customers now.');
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
         await _handleForcedLogout();
@@ -2326,8 +2329,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               title: const Text('Training Required'),
               content: Text(
                 _learningSummary.nextRequiredTitle.isEmpty
-                    ? 'Complete the required training lessons before starting work.'
-                    : 'Complete the required training lessons before starting work. Next lesson: ${_learningSummary.nextRequiredTitle}.',
+                    ? 'Complete the required training lessons before calling customers.'
+                    : 'Complete the required training lessons before calling customers. Next lesson: ${_learningSummary.nextRequiredTitle}.',
               ),
               actions: [
                 TextButton(
@@ -3001,7 +3004,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   const SizedBox(height: 8),
                   Text(
                     _learningSummary.nextRequiredTitle.isEmpty
-                        ? 'Complete the required training lessons to begin work.'
+                        ? 'Complete the required training lessons to begin calling.'
                         : 'Complete ${_learningSummary.pendingMandatoryCount} required lesson(s). Next: ${_learningSummary.nextRequiredTitle}.',
                     style: const TextStyle(
                       fontSize: 15.5,
@@ -3029,33 +3032,33 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             _buildPendingCallStatusBanner(),
             const SizedBox(height: 18),
           ],
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed:
-                      (_summary.workingNow ||
-                          _isSessionBusy ||
-                          _hasPendingMandatoryTraining)
-                      ? null
-                      : () => _startWork(),
-                  icon: const Icon(Icons.play_circle_fill),
-                  label: const Text('Start Work'),
-                ),
+          if (_summary.workingNow)
+            ElevatedButton.icon(
+              onPressed: _isSessionBusy ? null : () => _endWork(),
+              style: ElevatedButton.styleFrom(backgroundColor: kRed),
+              icon: const Icon(Icons.stop_circle),
+              label: const Text('End Work'),
+            )
+          else
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: (!_summary.workingNow || _isSessionBusy)
-                      ? null
-                      : () => _endWork(),
-                  style: ElevatedButton.styleFrom(backgroundColor: kRed),
-                  icon: const Icon(Icons.stop_circle),
-                  label: const Text('End Work'),
-                ),
+              child: const Row(
+                children: [
+                  Icon(Icons.phone_in_talk, color: kPrimary),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Work tracking starts automatically when you place a customer call.',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
           const SizedBox(height: 18),
           const Text(
             'Today summary',
@@ -3406,9 +3409,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: _summary.workingNow
-                            ? () => _startCall()
-                            : null,
+                        onPressed: () => _startCall(),
                         icon: const Icon(Icons.phone_forwarded),
                         label: const Text('Call'),
                       ),

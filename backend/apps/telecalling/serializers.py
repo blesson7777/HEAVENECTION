@@ -115,6 +115,10 @@ class EndCallSerializer(serializers.Serializer):
             raise serializers.ValidationError(
                 {"callback_window": "Select Noon, Evening, or Night for a callback."}
             )
+        if ("duration_seconds" in attrs) != ("ended_at" in attrs):
+            raise serializers.ValidationError(
+                "Provide both duration and ended time for a verified call-log sync."
+            )
         return attrs
 
 
@@ -770,6 +774,7 @@ class SessionSerializer(serializers.ModelSerializer):
             "warning_started_at",
             "heartbeat_count",
             "last_known_state",
+            "last_verified_call_at",
             "close_reason",
             "is_open",
         )
@@ -823,6 +828,8 @@ class CallSerializer(serializers.ModelSerializer):
             "callback_window",
             "callback_window_label",
             "is_qualifying",
+            "is_verified",
+            "verification_source",
         )
 
 

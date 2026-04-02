@@ -178,6 +178,8 @@ class Call(models.Model):
         db_index=True,
     )
     is_qualifying = models.BooleanField(default=False, db_index=True)
+    is_verified = models.BooleanField(default=False, db_index=True)
+    verification_source = models.CharField(max_length=40, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -203,6 +205,7 @@ class Session(models.Model):
     warning_started_at = models.DateTimeField(null=True, blank=True, db_index=True)
     heartbeat_count = models.PositiveIntegerField(default=0)
     last_known_state = models.CharField(max_length=20, choices=AppState.choices, default=AppState.FOREGROUND)
+    last_verified_call_at = models.DateTimeField(null=True, blank=True, db_index=True)
     close_reason = models.CharField(max_length=40, blank=True, default="")
     is_open = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
