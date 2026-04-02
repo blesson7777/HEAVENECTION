@@ -3,6 +3,7 @@
 {% block page_actions %}
 <a href="{% url 'leads-page' %}" class="btn btn-outline-primary btn-sm">Lead Desk</a>
 <a href="{% url 'followups-page' %}?download=csv" class="btn btn-outline-primary btn-sm">Download CSV</a>
+<a href="{% url 'followups-page' %}?download=xlsx" class="btn btn-outline-primary btn-sm">Download Excel</a>
 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#followupUpdateModal">CSV Update</button>
 {% endblock %}
 
@@ -10,55 +11,42 @@
 <section class="hc-surface-card animate-on-scroll">
     <div class="mf-db2-panel-head mb-3">
         <div>
-            <span class="mf-db2-kicker">Follow-Up Desk</span>
-            <h5>Follow-up list and bulk CSV updates</h5>
+            <span class="mf-db2-kicker">Positive Lead Desk</span>
+            <h5>Positive leads found by staff</h5>
         </div>
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl-4 col-md-6">
             <div class="hc-summary-card h-100">
                 <span class="mf-db2-kicker">Total</span>
                 <h3 class="mb-1">{{ followup_summary.total_followups }}</h3>
-                <p class="mb-0 text-muted">Leads currently waiting for another touch.</p>
+                <p class="mb-0 text-muted">Positive leads ready to share with lending partners.</p>
             </div>
         </div>
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl-4 col-md-6">
             <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Follow Up</span>
-                <h3 class="mb-1">{{ followup_summary.follow_up_count }}</h3>
-                <p class="mb-0 text-muted">Interested leads that need the next call.</p>
+                <span class="mf-db2-kicker">Assigned Staff</span>
+                <h3 class="mb-1">{{ followup_summary.assigned_count }}</h3>
+                <p class="mb-0 text-muted">Positive leads already tied to the staff member who found them.</p>
             </div>
         </div>
-        <div class="col-xl-3 col-md-6">
+        <div class="col-xl-4 col-md-6">
             <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Call Back</span>
-                <h3 class="mb-1">{{ followup_summary.callback_count }}</h3>
-                <p class="mb-0 text-muted">{{ followup_summary.due_now_count }} due in the {{ followup_summary.current_slot_label|lower }} slot.</p>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Unassigned</span>
-                <h3 class="mb-1">{{ followup_summary.unassigned_count }}</h3>
-                <p class="mb-0 text-muted">Rows that need staff allocation or CSV reassignment.</p>
+                <span class="mf-db2-kicker">With Notes</span>
+                <h3 class="mb-1">{{ followup_summary.with_notes_count }}</h3>
+                <p class="mb-0 text-muted">{{ followup_summary.unassigned_count }} still need staff ownership before export.</p>
             </div>
         </div>
     </div>
 
     <div class="alert alert-primary border-0 mb-4" role="alert">
-        Download the current follow-up list as CSV, update the rows you need, then upload the file back here. Match rows by <strong>Lead ID</strong> or <strong>Phone</strong>. Editable columns are status, callback window, notes, and assigned staff.
-    </div>
-
-    <div class="hc-filter-row">
-        <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
-        <button type="button" class="hc-filter-chip" data-filter-status="interested">Follow Up</button>
-        <button type="button" class="hc-filter-chip" data-filter-status="call_back">Call Back</button>
+        This page only shows the positive leads marked as <strong>Follow Up</strong> by staff. Download them as CSV or Excel and share the file with the loan provider. You can still upload a CSV or Excel file here to update ownership or notes later.
     </div>
 
     <div class="hc-search-box">
         <i class="bi bi-search"></i>
-        <input type="search" id="followupSearchInput" placeholder="Search lead, phone, note, or staff">
+        <input type="search" id="followupSearchInput" placeholder="Search positive lead, phone, note, or staff">
     </div>
 
     <div class="table-responsive">
@@ -67,8 +55,7 @@
                 <tr>
                     <th>Lead</th>
                     <th>Phone</th>
-                    <th>Type</th>
-                    <th>Assigned To</th>
+                    <th>Staff</th>
                     <th>Last Contact</th>
                     <th>Updated</th>
                     <th>Actions</th>
@@ -83,16 +70,8 @@
                     </td>
                     <td>{{ lead.phone }}</td>
                     <td>
-                        <span class="hc-status hc-status-{% if lead.status == 'call_back' %}warning{% else %}success{% endif %}">{{ lead.status_label }}</span>
-                        {% if lead.callback_window_label %}
-                        <div class="small text-muted mt-1">
-                            {{ lead.callback_window_label }}
-                            {% if lead.is_due_now %}<span class="badge text-bg-warning ms-1">Due Now</span>{% endif %}
-                        </div>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {{ lead.assigned_to }}
+                        <span class="hc-status hc-status-success mb-1">{{ lead.status_label }}</span>
+                        <div class="mt-1">{{ lead.assigned_to }}</div>
                         {% if lead.assigned_to_phone %}
                         <div class="small text-muted">{{ lead.assigned_to_phone }}</div>
                         {% endif %}
@@ -112,12 +91,11 @@
                                 data-assigned-to-id="{{ lead.assigned_to_id }}"
                                 data-notes="{{ lead.notes }}"
                             >Edit</button>
-                            <a href="{% url 'leads-page' %}" class="btn btn-outline-secondary btn-sm">Lead Desk</a>
                         </div>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" class="text-center py-4">No follow-up leads are waiting right now.</td></tr>
+                <tr><td colspan="6" class="text-center py-4">No positive follow-up leads are ready right now.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -146,7 +124,7 @@
                         </div>
                     </div>
                     <div class="alert alert-light border mb-0">
-                        Supported update columns: <strong>Status</strong>, <strong>Callback Window</strong>, <strong>Notes</strong>, <strong>Assigned Staff</strong>, and <strong>Assigned Staff Phone</strong>.
+                        Supported update columns: <strong>Status</strong>, <strong>Notes</strong>, <strong>Assigned Staff</strong>, and <strong>Assigned Staff Phone</strong>.
                     </div>
                     <div class="d-flex justify-content-end gap-2 mt-4">
                         <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>

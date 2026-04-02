@@ -59,6 +59,7 @@ from backend.apps.telecalling.services import (
     build_dashboard_payload,
     build_developer_release_payload,
     build_followup_csv_response,
+    build_followup_excel_response,
     build_followup_payload,
     build_learning_management_payload,
     build_lead_management_payload,
@@ -810,6 +811,14 @@ def followups_page(request):
         response = HttpResponse(csv_content, content_type="text/csv")
         response["Content-Disposition"] = 'attachment; filename="heavenection-followups.csv"'
         return response
+    if request.GET.get("download") == "xlsx":
+        excel_content = build_followup_excel_response()
+        response = HttpResponse(
+            excel_content,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = 'attachment; filename="heavenection-followups.xlsx"'
+        return response
 
     context = _admin_web_context(
         request,
@@ -817,7 +826,7 @@ def followups_page(request):
         active_page="followups",
         page_title="Follow-Up Queue",
         page_heading="Follow-Up Queue",
-        page_subtitle="Review leads that need another touch and update them in bulk with CSV.",
+        page_subtitle="Review the positive leads found by staff and export them for the lending partners.",
         extra_context=build_followup_payload(),
     )
     return render(request, "admin_followups.html", context)

@@ -28,8 +28,9 @@ from backend.apps.telecalling.models import (
 )
 
 try:
-    from openpyxl import load_workbook
+    from openpyxl import Workbook, load_workbook
 except ImportError:  # pragma: no cover - dependency installed in runtime
+    Workbook = None
     load_workbook = None
 
 
@@ -64,10 +65,7 @@ STAFF_CALL_QUEUE_STATUSES = (
     Lead.Status.NEW,
     Lead.Status.CALL_BACK,
 )
-FOLLOW_UP_STATUSES = (
-    Lead.Status.INTERESTED,
-    Lead.Status.CALL_BACK,
-)
+FOLLOW_UP_STATUSES = (Lead.Status.INTERESTED,)
 RECOVERY_LEAD_STATUSES = (
     Lead.Status.NOT_INTERESTED,
     Lead.Status.NO_ANSWER,
@@ -2708,20 +2706,7 @@ def build_lead_management_payload():
 
 
 def build_followup_payload():
-    current_slot = _current_callback_window()
-    followups = (
-        _follow_up_queryset()
-        .select_related("assigned_to")
-        .annotate(
-            callback_priority=Case(
-                When(status=Lead.Status.CALL_BACK, callback_window=current_slot, then=Value(0)),
-                When(status=Lead.Status.CALL_BACK, then=Value(1)),
-                default=Value(2),
-                output_field=IntegerField(),
-            )
-        )
-        .order_by("callback_priority", "-last_contacted_at", "-updated_at")
-    )
+    followups = _follow_up_queryset().select_related("assigned_to").order_by("-updated_at", "-last_contacted_at")
 
     followup_rows = []
     for lead in followups:
@@ -2740,7 +2725,6 @@ def build_followup_payload():
                 "notes": lead.notes,
                 "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
                 "updated_at": _format_datetime(lead.updated_at),
-                "is_due_now": lead.status == Lead.Status.CALL_BACK and lead.callback_window == current_slot,
             }
         )
 
@@ -2752,11 +2736,9 @@ def build_followup_payload():
         ],
         "followup_summary": {
             "total_followups": len(followup_rows),
-            "follow_up_count": sum(1 for row in followup_rows if row["status"] == Lead.Status.INTERESTED),
-            "callback_count": sum(1 for row in followup_rows if row["status"] == Lead.Status.CALL_BACK),
-            "due_now_count": sum(1 for row in followup_rows if row["is_due_now"]),
+            "assigned_count": sum(1 for row in followup_rows if row["assigned_to_id"]),
             "unassigned_count": sum(1 for row in followup_rows if not row["assigned_to_id"]),
-            "current_slot_label": dict(Lead.CallbackWindow.choices).get(current_slot, "No slot"),
+            "with_notes_count": sum(1 for row in followup_rows if row["notes"]),
         },
     }
 
@@ -2796,6 +2778,56 @@ def build_followup_csv_response():
         )
 
     return response.getvalue()
+
+
+def build_followup_excel_response():
+    if Workbook is None:
+        raise ValueError("Excel export is not available right now.")
+
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Follow Ups"
+    worksheet.append(
+        [
+            "Lead ID",
+            "Name",
+            "Phone",
+            "Status",
+            "Assigned Staff",
+            "Assigned Staff Phone",
+            "Notes",
+            "Last Contacted",
+            "Updated At",
+        ]
+    )
+
+    for row in build_followup_payload()["followup_rows"]:
+        worksheet.append(
+            [
+                row["id"],
+                row["name"],
+                row["phone"],
+                row["status_label"],
+                row["assigned_to"],
+                row["assigned_to_phone"],
+                row["notes"],
+                row["last_contacted"],
+                row["updated_at"],
+            ]
+        )
+
+    for column_cells in worksheet.columns:
+        max_length = 0
+        column_letter = column_cells[0].column_letter
+        for cell in column_cells:
+            cell_value = "" if cell.value is None else str(cell.value)
+            max_length = max(max_length, len(cell_value))
+        worksheet.column_dimensions[column_letter].width = min(max(max_length + 2, 14), 36)
+
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return output.getvalue()
 
 
 def _recovery_status_scope(scope):
