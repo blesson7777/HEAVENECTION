@@ -24,8 +24,8 @@ Set these on the web service:
 
 - `DJANGO_SECRET_KEY`
 - `DJANGO_DEBUG=false`
-- `DJANGO_ALLOWED_HOSTS=your-app.up.railway.app,healthcheck.railway.app`
-- `DJANGO_CSRF_TRUSTED_ORIGINS=https://your-app.up.railway.app`
+- `DJANGO_ALLOWED_HOSTS=heavenection-production.up.railway.app,heavenection.com,www.heavenection.com,healthcheck.railway.app`
+- `DJANGO_CSRF_TRUSTED_ORIGINS=https://heavenection-production.up.railway.app,https://heavenection.com,https://www.heavenection.com`
 - `DJANGO_MEDIA_ROOT=/data/media`
 - `DATABASE_URL=${{Postgres.DATABASE_URL}}`
 - `POSTGRES_CONN_MAX_AGE=60`
@@ -69,24 +69,26 @@ The staff app already supports a production API base URL using a Flutter dart de
 Build the production APK with:
 
 ```powershell
-flutter build apk --release --dart-define=API_BASE_URL=https://your-app.up.railway.app
+flutter build apk --release --dart-define=API_BASE_URL=https://heavenection-production.up.railway.app
 ```
 
 If you want your live users to receive that build through the in-app updater:
 
 1. Build the APK with the Railway URL.
-2. Open `/developer/login/` on your Railway domain.
+2. Open `https://heavenection-production.up.railway.app/developer/login/`.
 3. Upload the APK on `/developer/releases/`.
 4. Mark that release active.
 
 ## Custom domain
 
-If you attach a custom domain, update both:
-- `DJANGO_ALLOWED_HOSTS`
-- `DJANGO_CSRF_TRUSTED_ORIGINS`
+Current live-safe setup:
+- backend web can use `https://heavenection-production.up.railway.app`
+- custom domain can be added in parallel with:
+  - `https://heavenection.com`
+  - `https://www.heavenection.com`
 
-Then build future APKs with:
+Once the custom domain is fully verified and no longer returns `400`, build future APKs with:
 
 ```powershell
-flutter build apk --release --dart-define=API_BASE_URL=https://your-domain.com
+flutter build apk --release --dart-define=API_BASE_URL=https://heavenection.com
 ```

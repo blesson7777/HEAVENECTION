@@ -5,6 +5,18 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+DEFAULT_PRODUCTION_HOSTS = [
+    "heavenection-production.up.railway.app",
+    "heavenection.com",
+    "www.heavenection.com",
+    ".up.railway.app",
+    "healthcheck.railway.app",
+]
+DEFAULT_PRODUCTION_CSRF_ORIGINS = [
+    "https://heavenection-production.up.railway.app",
+    "https://heavenection.com",
+    "https://www.heavenection.com",
+]
 
 
 def split_env_list(value):
@@ -62,14 +74,20 @@ ALLOWED_HOSTS = split_env_list(os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,loca
 railway_public_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
 if railway_public_domain and railway_public_domain not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(railway_public_domain)
-if not DEBUG and "healthcheck.railway.app" not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append("healthcheck.railway.app")
+if not DEBUG:
+    for host in DEFAULT_PRODUCTION_HOSTS:
+        if host not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(host)
 if DEBUG and "testserver" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append("testserver")
 if not ALLOWED_HOSTS:
     ALLOWED_HOSTS = ["127.0.0.1", "localhost"] if DEBUG else ["healthcheck.railway.app"]
 
 CSRF_TRUSTED_ORIGINS = split_env_list(os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", ""))
+if not DEBUG:
+    for origin in DEFAULT_PRODUCTION_CSRF_ORIGINS:
+        if origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(origin)
 if railway_public_domain:
     railway_origin = f"https://{railway_public_domain}"
     if railway_origin not in CSRF_TRUSTED_ORIGINS:
