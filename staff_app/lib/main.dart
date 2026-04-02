@@ -167,6 +167,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _isHeartbeatRequestInFlight = false;
   bool _isSyncingCallLog = false;
   bool _isCallStatusPromptVisible = false;
+  bool _isExitDialogVisible = false;
   bool _isCheckingForUpdate = false;
   bool _isUpdateDialogVisible = false;
   bool _isDownloadingUpdate = false;
@@ -2259,6 +2260,93 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
+  Future<void> _markOfflineBeforeExit() async {
+    if (_user == null || !_summary.workingNow) {
+      return;
+    }
+
+    try {
+      final response = await _apiClient.sendHeartbeat(
+        state: 'offline',
+        source: 'app_exit',
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _summary = response.summary;
+      });
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _apiClient.clearSession();
+      }
+    } catch (_) {
+      // Best-effort only. The app should still be allowed to exit.
+    }
+  }
+
+  Future<void> _handleRootBackNavigation() async {
+    if (!mounted) {
+      return;
+    }
+
+    if (_user != null && _tab != 0) {
+      _registerInteraction(syncServer: false);
+      setState(() {
+        _tab = 0;
+        _lastLoadedTab = 0;
+      });
+      return;
+    }
+
+    if (_isExitDialogVisible) {
+      return;
+    }
+
+    _isExitDialogVisible = true;
+    final message = _activeCallId != null
+        ? 'A customer call is still active. If you exit now, you will be marked offline immediately and work-hour counting will stop.'
+        : _hasPendingCallStatus
+        ? 'A recent call result is still pending. If you exit now, you will be marked offline immediately and work-hour counting will stop.'
+        : _summary.workingNow
+        ? 'If you exit the app now, you will be marked offline immediately and work-hour counting will stop.'
+        : 'Do you want to exit the app?';
+
+    final shouldExit = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: const Text('Exit App?'),
+              content: Text(message),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  style: ElevatedButton.styleFrom(backgroundColor: kRed),
+                  child: const Text('Exit'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+    _isExitDialogVisible = false;
+
+    if (!shouldExit) {
+      return;
+    }
+
+    await _markOfflineBeforeExit();
+    await SystemNavigator.pop();
+  }
+
   Future<void> _completeTrainingLesson(TrainingLesson lesson) async {
     try {
       final payload = await _apiClient.completeTrainingLesson(
@@ -2695,114 +2783,123 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   @override
   Widget build(BuildContext context) {
+    late final Widget screen;
     if (_isBootstrapping) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    if (_isNetworkErrorVisible && _user == null) {
-      return Scaffold(
+      screen = const Scaffold(body: Center(child: CircularProgressIndicator()));
+    } else if (_isNetworkErrorVisible && _user == null) {
+      screen = Scaffold(
         body: NetworkErrorView(
           message: _networkErrorMessage,
           onRetry: _recoverFromNetworkError,
         ),
       );
-    }
+    } else if (_user == null) {
+      screen = _login();
+    } else {
+      final pages = [
+        _dashboard(),
+        _leadList(),
+        _learningCenter(),
+        _staffProfilePage(),
+      ];
 
-    if (_user == null) {
-      return _login();
-    }
-    final pages = [
-      _dashboard(),
-      _leadList(),
-      _learningCenter(),
-      _staffProfilePage(),
-    ];
-
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (_) => _registerInteraction(syncServer: false),
-      child: Scaffold(
-        appBar: AppBar(
-          title: const BrandWordmark(
-            titleSize: 18,
-            subtitle: 'CallTrack',
-            subtitleSize: 11,
-            markSize: 36,
+      screen = Listener(
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: (_) => _registerInteraction(syncServer: false),
+        child: Scaffold(
+          appBar: AppBar(
+            title: const BrandWordmark(
+              titleSize: 18,
+              subtitle: 'CallTrack',
+              subtitleSize: 11,
+              markSize: 36,
+            ),
+            actions: [
+              if (_pendingAppUpdate != null)
+                IconButton(
+                  onPressed: _openAvailableAppUpdatePrompt,
+                  icon: const Icon(Icons.system_update_alt),
+                  tooltip: 'App update',
+                ),
+              if (_hasPendingCallStatus)
+                IconButton(
+                  onPressed: _recoverPendingCallStatusPrompt,
+                  icon: const Icon(Icons.assignment_late),
+                ),
+              IconButton(
+                onPressed: _isLoadingData
+                    ? null
+                    : () {
+                        _registerInteraction(syncServer: false);
+                        _loadDashboardData(promptTrainingGate: false);
+                        if (_tab == 3) {
+                          _loadProfile(showLoader: false);
+                        }
+                      },
+                icon: _isLoadingData
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.refresh),
+              ),
+            ],
           ),
-          actions: [
-            if (_pendingAppUpdate != null)
-              IconButton(
-                onPressed: _openAvailableAppUpdatePrompt,
-                icon: const Icon(Icons.system_update_alt),
-                tooltip: 'App update',
+          body: SafeArea(
+            child: _isNetworkErrorVisible
+                ? NetworkErrorView(
+                    message: _networkErrorMessage,
+                    onRetry: _recoverFromNetworkError,
+                  )
+                : pages[_tab],
+          ),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _tab,
+            onDestinationSelected: (value) {
+              _registerInteraction(syncServer: false);
+              _lastLoadedTab = value;
+              setState(() => _tab = value);
+              if (value == 3 && _profile == null) {
+                unawaited(_loadProfile());
+              }
+            },
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home),
+                label: 'Home',
               ),
-            if (_hasPendingCallStatus)
-              IconButton(
-                onPressed: _recoverPendingCallStatusPrompt,
-                icon: const Icon(Icons.assignment_late),
+              NavigationDestination(
+                icon: Icon(Icons.people_outline),
+                selectedIcon: Icon(Icons.people),
+                label: 'Leads',
               ),
-            IconButton(
-              onPressed: _isLoadingData
-                  ? null
-                  : () {
-                      _registerInteraction(syncServer: false);
-                      _loadDashboardData(promptTrainingGate: false);
-                      if (_tab == 3) {
-                        _loadProfile(showLoader: false);
-                      }
-                    },
-              icon: _isLoadingData
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.refresh),
-            ),
-          ],
+              NavigationDestination(
+                icon: Icon(Icons.school_outlined),
+                selectedIcon: Icon(Icons.school),
+                label: 'Learn',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.person_outline),
+                selectedIcon: Icon(Icons.person),
+                label: 'Profile',
+              ),
+            ],
+          ),
         ),
-        body: SafeArea(
-          child: _isNetworkErrorVisible
-              ? NetworkErrorView(
-                  message: _networkErrorMessage,
-                  onRetry: _recoverFromNetworkError,
-                )
-              : pages[_tab],
-        ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _tab,
-          onDestinationSelected: (value) {
-            _registerInteraction(syncServer: false);
-            _lastLoadedTab = value;
-            setState(() => _tab = value);
-            if (value == 3 && _profile == null) {
-              unawaited(_loadProfile());
-            }
-          },
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.home_outlined),
-              selectedIcon: Icon(Icons.home),
-              label: 'Home',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.people_outline),
-              selectedIcon: Icon(Icons.people),
-              label: 'Leads',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.school_outlined),
-              selectedIcon: Icon(Icons.school),
-              label: 'Learn',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person),
-              label: 'Profile',
-            ),
-          ],
-        ),
-      ),
+      );
+    }
+
+    return PopScope<void>(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          return;
+        }
+        unawaited(_handleRootBackNavigation());
+      },
+      child: screen,
     );
   }
 
