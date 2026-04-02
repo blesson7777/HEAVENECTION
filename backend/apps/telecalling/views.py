@@ -1,5 +1,5 @@
 from django.db.models import Count, Q
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_GET, require_http_methods
@@ -301,6 +301,11 @@ def developer_releases_page(request):
         **build_developer_release_payload(),
     }
     return render(request, "developer_releases.html", context)
+
+@require_GET
+def health_check(request):
+    return JsonResponse({"status": "ok"})
+
 
 @require_GET
 def dashboard_page(request):
@@ -1517,6 +1522,8 @@ def update_call_status_api(request, call_id):
         serializer.validated_data.get("callback_window", ""),
     )
     return Response(CallSerializer(call).data)
+
+
 
 
 
