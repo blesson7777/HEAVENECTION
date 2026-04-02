@@ -374,6 +374,69 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
+  Future<void> _showCallScreenForLead(
+    LeadItem lead, {
+    int? index,
+  }) async {
+    if (!mounted) {
+      return;
+    }
+
+    _registerInteraction(syncServer: false);
+    setState(() {
+      if (index != null) {
+        _leadIndex = index;
+      } else {
+        final resolvedIndex = _leads.indexWhere((item) => item.id == lead.id);
+        if (resolvedIndex >= 0) {
+          _leadIndex = resolvedIndex;
+        }
+      }
+      _callStatus = 'Follow Up';
+    });
+
+    if (_isCallScreenOpen) {
+      return;
+    }
+
+    _isCallScreenOpen = true;
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            appBar: AppBar(title: const Text('Call')),
+            body: SafeArea(child: _call(lead)),
+          ),
+        ),
+      );
+    } finally {
+      _isCallScreenOpen = false;
+    }
+  }
+
+  Future<void> _openCurrentCallScreen({
+    String? notice,
+  }) async {
+    final activeLeadId = _activeCallLeadId ?? _pendingDialerCall?.leadId;
+    final activeLead = _leadById(activeLeadId);
+    if (activeLead == null) {
+      if (notice != null && notice.isNotEmpty) {
+        _showMessage(notice, isError: true);
+      } else {
+        _showMessage(
+          'Finish the current customer call before moving to another lead.',
+          isError: true,
+        );
+      }
+      return;
+    }
+
+    if (notice != null && notice.isNotEmpty) {
+      _showMessage(notice, isError: true);
+    }
+    await _showCallScreenForLead(activeLead);
+  }
+
   Future<void> _retryPendingCustomerCall() async {
     final callId = _pendingStatusCallId;
     final leadPhone = _pendingStatusLeadPhone;
@@ -1900,9 +1963,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
     }
     if (_activeCallId != null) {
-      _showMessage(
-        'Finish the current call before starting another.',
-        isError: true,
+      await _openCurrentCallScreen(
+        notice: 'Finish the current customer call before starting another.',
       );
       return;
     }
@@ -3755,31 +3817,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (index < 0 || index >= _leads.length) {
       return;
     }
+    if (_hasActiveCustomerCall && _activeCallLeadId != _leads[index].id) {
+      await _openCurrentCallScreen(
+        notice: 'Finish the current customer call before moving to another lead.',
+      );
+      return;
+    }
     if (!await _ensurePendingCallStatusResolved(_leads[index])) {
       return;
     }
-    if (!mounted) {
-      return;
-    }
-    _registerInteraction(syncServer: false);
-    setState(() {
-      _leadIndex = index;
-      _callStatus = 'Follow Up';
-    });
-
-    _isCallScreenOpen = true;
-    try {
-      await Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => Scaffold(
-            appBar: AppBar(title: const Text('Call')),
-            body: SafeArea(child: _call(_leads[index])),
-          ),
-        ),
-      );
-    } finally {
-      _isCallScreenOpen = false;
-    }
+    await _showCallScreenForLead(_leads[index], index: index);
   }
 
   Widget _call(LeadItem? lead) {
