@@ -31,6 +31,12 @@ Set these on the web service:
 - `POSTGRES_CONN_MAX_AGE=60`
 - `POSTGRES_SSLMODE=require`
 
+Initial admin bootstrap:
+- `BOOTSTRAP_ADMIN_NAME=HEAVENECTION Admin`
+- `BOOTSTRAP_ADMIN_PHONE=your-phone-number`
+- `BOOTSTRAP_ADMIN_EMAIL=your-email@example.com`
+- `BOOTSTRAP_ADMIN_PASSWORD=your-strong-password`
+
 Optional email settings:
 - `EMAIL_HOST`
 - `EMAIL_PORT`
@@ -43,9 +49,35 @@ Optional email settings:
 
 `railway.json` is configured to:
 - run `python manage.py migrate --noinput` before deploy
+- run `python manage.py bootstrap_admin_from_env` before deploy
 - run `python manage.py collectstatic --noinput` on service start
 - serve Django with `gunicorn`
 - use `/health/` for Railway health checks
+
+## First login
+
+After the first successful deploy and admin bootstrap, open:
+- `/login/` for admin web
+- `/developer/login/` for release publishing
+
+Admin users can also use the developer portal.
+
+## Staff mobile app
+
+The staff app already supports a production API base URL using a Flutter dart define.
+
+Build the production APK with:
+
+```powershell
+flutter build apk --release --dart-define=API_BASE_URL=https://your-app.up.railway.app
+```
+
+If you want your live users to receive that build through the in-app updater:
+
+1. Build the APK with the Railway URL.
+2. Open `/developer/login/` on your Railway domain.
+3. Upload the APK on `/developer/releases/`.
+4. Mark that release active.
 
 ## Custom domain
 
@@ -53,12 +85,8 @@ If you attach a custom domain, update both:
 - `DJANGO_ALLOWED_HOSTS`
 - `DJANGO_CSRF_TRUSTED_ORIGINS`
 
-## First login
+Then build future APKs with:
 
-After deploy, open:
-- `/login/` for admin web
-- `/developer/login/` for release publishing
-
-## Staff mobile app note
-
-For phones outside your local USB setup, the mobile app base URL must point to the Railway domain instead of `http://127.0.0.1:8000`.
+```powershell
+flutter build apk --release --dart-define=API_BASE_URL=https://your-domain.com
+```
