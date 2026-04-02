@@ -163,6 +163,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   DateTime? _backgroundedAt;
   BuildContext? _idleWarningDialogContext;
   BuildContext? _callStatusDialogContext;
+  BuildContext? _callScreenContext;
   bool _isIdleWarningVisible = false;
   bool _isHeartbeatRequestInFlight = false;
   bool _isSyncingCallLog = false;
@@ -369,12 +370,13 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
     _openPendingCustomerPage();
-    if (_isCallScreenOpen) {
+    final callScreenContext = _callScreenContext;
+    if (_isCallScreenOpen && callScreenContext != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) {
           return;
         }
-        final navigator = Navigator.of(context, rootNavigator: true);
+        final navigator = Navigator.of(callScreenContext);
         if (navigator.canPop()) {
           navigator.pop();
         }
@@ -413,11 +415,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         MaterialPageRoute<void>(
           builder: (_) => Scaffold(
             appBar: AppBar(title: const Text('Call')),
-            body: SafeArea(child: _call(lead)),
+            body: Builder(
+              builder: (callScreenContext) {
+                _callScreenContext = callScreenContext;
+                return SafeArea(child: _call(lead));
+              },
+            ),
           ),
         ),
       );
     } finally {
+      _callScreenContext = null;
       _isCallScreenOpen = false;
     }
   }
