@@ -58,7 +58,7 @@
             {% if company_profile.logo %}
             <img src="{{ company_profile.logo.url }}" alt="{{ company_profile.company_name }}">
             {% else %}
-            <img src="{% static 'images/logo.svg' %}" alt="HEAVENECTION">
+            <img src="{% static 'images/heavenection-logo.png' %}" alt="HEAVENECTION">
             {% endif %}
             <div>
                 <strong>{{ company_profile.company_name|default:'Heavenection' }}</strong>

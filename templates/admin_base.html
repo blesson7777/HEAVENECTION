@@ -49,7 +49,7 @@
                     {% if company_profile.logo %}
                     <img src="{{ company_profile.logo.url }}" alt="{{ company_profile.company_name }}" class="hc-brand-logo">
                     {% else %}
-                    <img src="{% static 'images/logo.svg' %}" alt="{{ company_profile.company_name|default:'Heavenection' }}" class="hc-brand-logo">
+                    <img src="{% static 'images/heavenection-logo.png' %}" alt="{{ company_profile.company_name|default:'Heavenection' }}" class="hc-brand-logo">
                     {% endif %}
                 </span>
                 <span class="hc-brand-copy">
