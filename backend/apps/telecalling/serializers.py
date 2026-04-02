@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from django.db.models import Sum
 from rest_framework import serializers
 from django.utils import timezone
@@ -40,6 +42,39 @@ def _validate_unique_email(value, *, instance=None):
     if queryset.exists():
         raise serializers.ValidationError("Email address already exists.")
     return email
+
+
+_SUPPORTED_DOCUMENT_IMAGE_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".heic",
+    ".heif",
+}
+
+
+def _validate_document_image(value, *, field_label):
+    if not value:
+        return value
+
+    content_type = (getattr(value, "content_type", "") or "").lower().strip()
+    file_extension = Path(getattr(value, "name", "")).suffix.lower()
+    has_supported_extension = file_extension in _SUPPORTED_DOCUMENT_IMAGE_EXTENSIONS
+    is_supported_content_type = content_type.startswith("image/")
+    is_generic_binary_upload = content_type in {"", "application/octet-stream"}
+
+    if not is_supported_content_type and not (is_generic_binary_upload and has_supported_extension):
+        raise serializers.ValidationError(
+            f"Upload a JPG, PNG, WEBP, or HEIC image file for the {field_label}."
+        )
+
+    if getattr(value, "size", 0) > 10 * 1024 * 1024:
+        raise serializers.ValidationError(
+            f"{field_label.capitalize()} image size must be 10 MB or smaller."
+        )
+
+    return value
 
 
 class HeartbeatSerializer(serializers.Serializer):
@@ -261,24 +296,10 @@ class StaffProfileUpdateSerializer(serializers.Serializer):
         return normalized
 
     def validate_aadhar_photo(self, value):
-        if not value:
-            return value
-        content_type = getattr(value, "content_type", "")
-        if content_type and not content_type.startswith("image/"):
-            raise serializers.ValidationError("Upload an image file for the Aadhaar photo.")
-        if getattr(value, "size", 0) > 5 * 1024 * 1024:
-            raise serializers.ValidationError("Aadhaar photo size must be 5 MB or smaller.")
-        return value
+        return _validate_document_image(value, field_label="Aadhaar photo")
 
     def validate_passbook_photo(self, value):
-        if not value:
-            return value
-        content_type = getattr(value, "content_type", "")
-        if content_type and not content_type.startswith("image/"):
-            raise serializers.ValidationError("Upload an image file for the passbook.")
-        if getattr(value, "size", 0) > 5 * 1024 * 1024:
-            raise serializers.ValidationError("Passbook image size must be 5 MB or smaller.")
-        return value
+        return _validate_document_image(value, field_label="passbook")
 
     def validate(self, attrs):
         current_password = attrs.get("current_password")
@@ -427,24 +448,10 @@ class UpdateStaffSerializer(serializers.Serializer):
         return normalized
 
     def validate_aadhar_photo(self, value):
-        if not value:
-            return value
-        content_type = getattr(value, "content_type", "")
-        if content_type and not content_type.startswith("image/"):
-            raise serializers.ValidationError("Upload an image file for the Aadhaar photo.")
-        if getattr(value, "size", 0) > 5 * 1024 * 1024:
-            raise serializers.ValidationError("Aadhaar photo size must be 5 MB or smaller.")
-        return value
+        return _validate_document_image(value, field_label="Aadhaar photo")
 
     def validate_passbook_photo(self, value):
-        if not value:
-            return value
-        content_type = getattr(value, "content_type", "")
-        if content_type and not content_type.startswith("image/"):
-            raise serializers.ValidationError("Upload an image file for the passbook.")
-        if getattr(value, "size", 0) > 5 * 1024 * 1024:
-            raise serializers.ValidationError("Passbook image size must be 5 MB or smaller.")
-        return value
+        return _validate_document_image(value, field_label="passbook")
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
