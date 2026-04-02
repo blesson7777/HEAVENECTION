@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,6 +13,9 @@ class ApiClient {
 
   final String baseUrl;
   final http.Client _client;
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
 
   SharedPreferences? _preferences;
   String? _accessToken;
@@ -22,8 +26,11 @@ class ApiClient {
 
   Future<void> loadStoredSession() async {
     _preferences ??= await SharedPreferences.getInstance();
-    _accessToken = _preferences!.getString(_accessKey);
-    _refreshToken = _preferences!.getString(_refreshKey);
+    _accessToken = await _secureStorage.read(key: _accessKey);
+    _refreshToken = await _secureStorage.read(key: _refreshKey);
+    if (_accessToken == null || _refreshToken == null) {
+      await _migrateLegacyStoredSession();
+    }
   }
 
   Future<StaffUser?> restoreSession() async {
@@ -72,6 +79,8 @@ class ApiClient {
     _preferences ??= await SharedPreferences.getInstance();
     _accessToken = null;
     _refreshToken = null;
+    await _secureStorage.delete(key: _accessKey);
+    await _secureStorage.delete(key: _refreshKey);
     await _preferences!.remove(_accessKey);
     await _preferences!.remove(_refreshKey);
   }
@@ -297,11 +306,28 @@ class ApiClient {
   Future<void> _persistTokens() async {
     _preferences ??= await SharedPreferences.getInstance();
     if (_accessToken != null) {
-      await _preferences!.setString(_accessKey, _accessToken!);
+      await _secureStorage.write(key: _accessKey, value: _accessToken!);
+      await _preferences!.remove(_accessKey);
     }
     if (_refreshToken != null) {
-      await _preferences!.setString(_refreshKey, _refreshToken!);
+      await _secureStorage.write(key: _refreshKey, value: _refreshToken!);
+      await _preferences!.remove(_refreshKey);
     }
+  }
+
+  Future<void> _migrateLegacyStoredSession() async {
+    _preferences ??= await SharedPreferences.getInstance();
+    final legacyAccessToken = _preferences!.getString(_accessKey);
+    final legacyRefreshToken = _preferences!.getString(_refreshKey);
+    if (legacyAccessToken == null || legacyRefreshToken == null) {
+      return;
+    }
+    _accessToken = legacyAccessToken;
+    _refreshToken = legacyRefreshToken;
+    await _secureStorage.write(key: _accessKey, value: legacyAccessToken);
+    await _secureStorage.write(key: _refreshKey, value: legacyRefreshToken);
+    await _preferences!.remove(_accessKey);
+    await _preferences!.remove(_refreshKey);
   }
 
   Future<void> _refreshAccessToken() async {
