@@ -22,7 +22,9 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     private var pendingDownloadId: Long? = null
     private var pendingInstallFilePath: String? = null
+    private var pendingDownloadedVersionCode: Int? = null
     private var isDownloadReceiverRegistered = false
+    private var resumeInstallAfterSettings = false
 
     private val downloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -39,6 +41,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        loadPersistedPendingUpdate()
         registerDownloadReceiverIfNeeded()
     }
 
@@ -49,7 +52,8 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (canInstallPackages() && !pendingInstallFilePath.isNullOrBlank()) {
+        if (resumeInstallAfterSettings && canInstallPackages() && !pendingInstallFilePath.isNullOrBlank()) {
+            resumeInstallAfterSettings = false
             attemptInstallDownloadedApk()
         }
     }
@@ -62,7 +66,11 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getVersionInfo" -> result.success(buildVersionInfoPayload())
+                "getDownloadedUpdateStatus" -> result.success(
+                    buildDownloadedUpdateStatus(call.argument<Int>("versionCode")),
+                )
                 "downloadAppUpdate" -> handleDownloadRequest(call, result)
+                "installDownloadedUpdate" -> result.success(startInstallForDownloadedUpdate())
                 else -> result.notImplemented()
             }
         }
@@ -81,6 +89,7 @@ class MainActivity : FlutterActivity() {
         }
 
         val fileName = sanitizeFileName(call.argument<String>("fileName"))
+        val versionCode = (call.argument<Int>("versionCode") ?: 0).takeIf { it > 0 }
         val title = call.argument<String>("title").orEmpty().ifBlank {
             "HEAVENECTION Update"
         }
@@ -125,6 +134,8 @@ class MainActivity : FlutterActivity() {
         val downloadId = downloadManager.enqueue(request)
         pendingDownloadId = downloadId
         pendingInstallFilePath = targetFile.absolutePath
+        pendingDownloadedVersionCode = versionCode
+        persistPendingUpdate()
         result.success(
             mapOf(
                 "status" to "started",
@@ -162,12 +173,12 @@ class MainActivity : FlutterActivity() {
         cursor.use {
             if (!it.moveToFirst()) {
                 pendingDownloadId = null
+                persistPendingUpdate()
                 return
             }
             val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
             if (status != DownloadManager.STATUS_SUCCESSFUL) {
-                pendingDownloadId = null
-                pendingInstallFilePath = null
+                clearPersistedPendingUpdate()
                 return
             }
             val localUriIndex = it.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
@@ -182,14 +193,20 @@ class MainActivity : FlutterActivity() {
             }
         }
         pendingDownloadId = null
+        persistPendingUpdate()
         attemptInstallDownloadedApk()
     }
 
     private fun attemptInstallDownloadedApk() {
         val filePath = pendingInstallFilePath ?: return
+        val storedVersionCode = pendingDownloadedVersionCode ?: 0
+        if (storedVersionCode > 0 && readInstalledVersionCode() >= storedVersionCode) {
+            clearPersistedPendingUpdate()
+            return
+        }
         val apkFile = File(filePath)
         if (!apkFile.exists()) {
-            pendingInstallFilePath = null
+            clearPersistedPendingUpdate()
             return
         }
         if (!canInstallPackages()) {
@@ -222,13 +239,13 @@ class MainActivity : FlutterActivity() {
             fallbackIntent
         }
         startActivity(launchIntent)
-        pendingInstallFilePath = null
     }
 
     private fun openUnknownAppSourcesSettings() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return
         }
+        resumeInstallAfterSettings = true
         val intent = Intent(
             Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
             Uri.parse("package:$packageName"),
@@ -238,24 +255,121 @@ class MainActivity : FlutterActivity() {
         startActivity(intent)
     }
 
+    private fun startInstallForDownloadedUpdate(): Map<String, Any> {
+        val status = buildDownloadedUpdateStatus(null)
+        if (status["isDownloaded"] != true) {
+            return mapOf(
+                "status" to "missing",
+                "message" to "The downloaded update file is no longer available on this device.",
+            )
+        }
+        attemptInstallDownloadedApk()
+        return mapOf(
+            "status" to "started",
+            "message" to "Android is opening the installer for the downloaded update.",
+        )
+    }
+
+    private fun buildDownloadedUpdateStatus(requestedVersionCode: Int?): Map<String, Any> {
+        loadPersistedPendingUpdate()
+        val storedVersionCode = pendingDownloadedVersionCode ?: 0
+        if (storedVersionCode > 0 && readInstalledVersionCode() >= storedVersionCode) {
+            clearPersistedPendingUpdate()
+            return mapOf("isDownloaded" to false, "versionCode" to 0)
+        }
+
+        val matchesRequestedVersion =
+            requestedVersionCode == null || requestedVersionCode <= 0 || requestedVersionCode == storedVersionCode
+        if (!matchesRequestedVersion) {
+            return mapOf("isDownloaded" to false, "versionCode" to storedVersionCode)
+        }
+
+        if (pendingDownloadId != null && !isDownloadSuccessful(pendingDownloadId!!)) {
+            return mapOf("isDownloaded" to false, "versionCode" to storedVersionCode)
+        }
+
+        val fileExists = !pendingInstallFilePath.isNullOrBlank() && File(pendingInstallFilePath!!).exists()
+        if (!fileExists) {
+            if (pendingDownloadId == null) {
+                clearPersistedPendingUpdate()
+            }
+            return mapOf("isDownloaded" to false, "versionCode" to storedVersionCode)
+        }
+
+        if (pendingDownloadId != null) {
+            pendingDownloadId = null
+            persistPendingUpdate()
+        }
+        return mapOf(
+            "isDownloaded" to true,
+            "versionCode" to storedVersionCode,
+            "filePath" to (pendingInstallFilePath ?: ""),
+        )
+    }
+
+    private fun isDownloadSuccessful(downloadId: Long): Boolean {
+        val downloadManager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+        val cursor = downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
+        cursor.use {
+            if (!it.moveToFirst()) {
+                return false
+            }
+            val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+            return status == DownloadManager.STATUS_SUCCESSFUL
+        }
+    }
+
+    private fun persistPendingUpdate() {
+        updaterPreferences()
+            .edit()
+            .putLong(KEY_PENDING_DOWNLOAD_ID, pendingDownloadId ?: -1L)
+            .putString(KEY_PENDING_FILE_PATH, pendingInstallFilePath)
+            .putInt(KEY_PENDING_VERSION_CODE, pendingDownloadedVersionCode ?: 0)
+            .apply()
+    }
+
+    private fun loadPersistedPendingUpdate() {
+        val preferences = updaterPreferences()
+        pendingDownloadId = preferences.getLong(KEY_PENDING_DOWNLOAD_ID, -1L).takeIf { it > 0L }
+        pendingInstallFilePath = preferences.getString(KEY_PENDING_FILE_PATH, null)
+        pendingDownloadedVersionCode = preferences.getInt(KEY_PENDING_VERSION_CODE, 0).takeIf { it > 0 }
+    }
+
+    private fun clearPersistedPendingUpdate() {
+        pendingDownloadId = null
+        pendingInstallFilePath = null
+        pendingDownloadedVersionCode = null
+        updaterPreferences()
+            .edit()
+            .remove(KEY_PENDING_DOWNLOAD_ID)
+            .remove(KEY_PENDING_FILE_PATH)
+            .remove(KEY_PENDING_VERSION_CODE)
+            .apply()
+    }
+
+    private fun updaterPreferences() = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
     private fun canInstallPackages(): Boolean {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
     }
 
     private fun buildVersionInfoPayload(): Map<String, Any> {
         val packageInfo = readPackageInfo()
-        val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        return mapOf(
+            "versionName" to (packageInfo.versionName ?: ""),
+            "versionCode" to readInstalledVersionCode(packageInfo),
+            "packageName" to packageName,
+            "canInstallPackages" to canInstallPackages(),
+        )
+    }
+
+    private fun readInstalledVersionCode(packageInfo: PackageInfo = readPackageInfo()): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             packageInfo.longVersionCode.toInt()
         } else {
             @Suppress("DEPRECATION")
             packageInfo.versionCode
         }
-        return mapOf(
-            "versionName" to (packageInfo.versionName ?: ""),
-            "versionCode" to versionCode,
-            "packageName" to packageName,
-            "canInstallPackages" to canInstallPackages(),
-        )
     }
 
     private fun readPackageInfo(): PackageInfo {
@@ -282,5 +396,9 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL_NAME = "heavenection/updater"
         private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
+        private const val PREFS_NAME = "heavenection_updater"
+        private const val KEY_PENDING_DOWNLOAD_ID = "pending_download_id"
+        private const val KEY_PENDING_FILE_PATH = "pending_file_path"
+        private const val KEY_PENDING_VERSION_CODE = "pending_version_code"
     }
 }

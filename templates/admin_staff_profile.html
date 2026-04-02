@@ -4,6 +4,32 @@
 <a href="{% url 'staff-page' %}" class="btn btn-outline-primary btn-sm">Back To Staff</a>
 {% endblock %}
 
+{% block extra_scripts %}
+{{ block.super }}
+<script>
+  (function () {
+    const removeCheckboxes = document.querySelectorAll(
+      '#staffProfileRemoveAadharPhoto, #staffProfileRemovePassbookPhoto'
+    );
+
+    removeCheckboxes.forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        if (!checkbox.checked) {
+          return;
+        }
+        const label = checkbox.id === 'staffProfileRemoveAadharPhoto'
+          ? 'Aadhaar photo'
+          : 'passbook photo';
+        const confirmed = window.confirm(`Remove the current ${label}?`);
+        if (!confirmed) {
+          checkbox.checked = false;
+        }
+      });
+    });
+  })();
+</script>
+{% endblock %}
+
 {% block admin_content %}
 <section class="row g-4">
     <div class="col-xl-4">

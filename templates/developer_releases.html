@@ -2,7 +2,10 @@
 
 {% block page_actions %}
 {% if latest_release %}
-<a href="{{ latest_release_download_url }}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Download Current Update</a>
+<a href="{{ latest_release_download_url }}" class="btn btn-primary btn-sm" download>Download Current Update</a>
+{% if latest_release_download_full_url %}
+<button type="button" class="btn btn-outline-primary btn-sm" data-copy-download-link="{{ latest_release_download_full_url }}">Copy Download Link</button>
+{% endif %}
 {% endif %}
 {% endblock %}
 
@@ -33,6 +36,14 @@
                 </div>
             </div>
             <div class="hc-document-empty mt-3">{{ latest_release.release_notes|default:"No update notes added." }}</div>
+            <div class="mt-3">
+                <label class="form-label fw-semibold">Direct Download Link</label>
+                <div class="input-group">
+                    <input type="text" class="form-control" value="{{ latest_release_download_full_url }}" readonly>
+                    <button type="button" class="btn btn-outline-primary" data-copy-download-link="{{ latest_release_download_full_url }}">Copy</button>
+                </div>
+                <a href="{{ latest_release_download_url }}" class="hc-inline-link mt-2 d-inline-flex" download>Download APK</a>
+            </div>
             {% endif %}
         </div>
     </div>
@@ -203,19 +214,36 @@
                     <td>{{ row.published_at }}</td>
                     <td>
                         <div>{{ row.file_size_label }}</div>
-                        <a href="{{ row.download_url }}" target="_blank" rel="noopener" class="hc-inline-link">Download</a>
+                        {% if row.download_url %}
+                        <a href="{{ row.download_url }}" class="hc-inline-link" download>Download</a>
+                        <div class="text-muted small text-break mt-1">{{ row.download_full_url }}</div>
+                        {% else %}
+                        <span class="text-muted small">No file available</span>
+                        {% endif %}
                     </td>
                     <td>
-                        {% if not row.is_active %}
-                        <form method="post" action="{% url 'developer-releases-page' %}" class="m-0 d-inline-block">
-                            {% csrf_token %}
-                            <input type="hidden" name="release_action" value="set_active_release">
-                            <input type="hidden" name="release_id" value="{{ row.id }}">
-                            <button type="submit" class="btn btn-outline-primary btn-sm">Make Active</button>
-                        </form>
-                        {% else %}
-                        <span class="text-muted small">Live for team devices</span>
-                        {% endif %}
+                        <div class="d-flex flex-wrap gap-2">
+                            {% if row.download_url %}
+                            <a href="{{ row.download_url }}" class="btn btn-outline-secondary btn-sm" download>Download</a>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" data-copy-download-link="{{ row.download_full_url }}">Copy Link</button>
+                            {% endif %}
+                            {% if not row.is_active %}
+                            <form method="post" action="{% url 'developer-releases-page' %}" class="m-0 d-inline-block">
+                                {% csrf_token %}
+                                <input type="hidden" name="release_action" value="set_active_release">
+                                <input type="hidden" name="release_id" value="{{ row.id }}">
+                                <button type="submit" class="btn btn-outline-primary btn-sm">Make Active</button>
+                            </form>
+                            <form method="post" action="{% url 'developer-releases-page' %}" class="m-0 d-inline-block" onsubmit="return confirm('Delete this stored update file?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="release_action" value="delete_release">
+                                <input type="hidden" name="release_id" value="{{ row.id }}">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                            </form>
+                            {% else %}
+                            <span class="text-muted small align-self-center">Live for team devices</span>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% empty %}
@@ -239,6 +267,27 @@
     const statusText = document.getElementById('developerUploadStatusText');
     const fileName = document.getElementById('developerUploadFileName');
     const fileSize = document.getElementById('developerUploadSize');
+    const copyButtons = document.querySelectorAll('[data-copy-download-link]');
+
+    copyButtons.forEach((button) => {
+        button.addEventListener('click', async () => {
+            const url = button.getAttribute('data-copy-download-link') || '';
+            if (!url) {
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(url);
+                const previousText = button.textContent;
+                button.textContent = 'Copied';
+                window.setTimeout(() => {
+                    button.textContent = previousText;
+                }, 1400);
+            } catch (error) {
+                window.prompt('Copy this download link:', url);
+            }
+        });
+    });
+
     if (!form || !fileInput || !progressCard || !progressBar || !progressPercent || !statusText || !fileName || !fileSize) {
         return;
     }
@@ -335,3 +384,10 @@
 })();
 </script>
 {% endblock %}
+
+
+
+
+
+
+

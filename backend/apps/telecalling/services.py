@@ -2256,14 +2256,10 @@ def build_staff_profile_payload(request, staff):
             "bank_account_number": staff.bank_account_number or "--",
             "bank_ifsc_code": staff.bank_ifsc_code or "--",
             "aadhar_number": staff.aadhar_number or "--",
-            "aadhar_photo_url": request.build_absolute_uri(
-                reverse("staff-document-page", args=[staff.id, "aadhar"])
-            )
+            "aadhar_photo_url": reverse("staff-document-page", args=[staff.id, "aadhar"])
             if staff.aadhar_photo
             else "",
-            "passbook_photo_url": request.build_absolute_uri(
-                reverse("staff-document-page", args=[staff.id, "passbook"])
-            )
+            "passbook_photo_url": reverse("staff-document-page", args=[staff.id, "passbook"])
             if staff.passbook_photo
             else "",
         },
@@ -2312,9 +2308,7 @@ def build_salary_control_payload(request):
                 "bank_account_number": staff.bank_account_number or "--",
                 "bank_ifsc_code": staff.bank_ifsc_code or "--",
                 "has_passbook_photo": bool(staff.passbook_photo),
-                "passbook_photo_url": request.build_absolute_uri(
-                    reverse("staff-document-page", args=[staff.id, "passbook"])
-                )
+                "passbook_photo_url": reverse("staff-document-page", args=[staff.id, "passbook"])
                 if staff.passbook_photo
                 else "",
                 "profile_url": reverse("staff-profile-page", args=[staff.id]),
@@ -2523,7 +2517,15 @@ def set_active_app_release(app_release):
     return app_release
 
 
-def build_developer_release_payload():
+def delete_app_release(app_release):
+    if app_release.is_active:
+        raise ValueError("The active release cannot be deleted.")
+    if app_release.apk_file:
+        app_release.apk_file.delete(save=False)
+    app_release.delete()
+
+
+def build_developer_release_payload(request):
     releases = AppRelease.objects.select_related("created_by").order_by("-version_code", "-published_at")
     latest_release = get_latest_app_release()
     total_uploaded_bytes = sum(int(release.file_size_bytes or 0) for release in releases)
@@ -2540,6 +2542,11 @@ def build_developer_release_payload():
             "published_at": _format_datetime(release.published_at),
             "created_by": release.created_by.name if release.created_by else "Release Desk",
             "download_url": reverse("app-release-download", args=[release.id]) if release.apk_file else "",
+            "download_full_url": request.build_absolute_uri(
+                reverse("app-release-download", args=[release.id])
+            )
+            if release.apk_file
+            else "",
             "file_size_label": f"{round((release.file_size_bytes or 0) / (1024 * 1024), 2)} MB",
         }
         for release in releases
@@ -2559,6 +2566,11 @@ def build_developer_release_payload():
     return {
         "latest_release": latest_release,
         "latest_release_download_url": reverse("app-release-download", args=[latest_release.id])
+        if latest_release and latest_release.apk_file
+        else "",
+        "latest_release_download_full_url": request.build_absolute_uri(
+            reverse("app-release-download", args=[latest_release.id])
+        )
         if latest_release and latest_release.apk_file
         else "",
         "release_summary": {

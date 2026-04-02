@@ -800,8 +800,62 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     await _showAppUpdatePrompt(update);
   }
 
+  Future<bool> _hasDownloadedAppUpdate(AppUpdateInfo update) async {
+    try {
+      final payload =
+          await _updaterChannel.invokeMapMethod<String, dynamic>(
+            'getDownloadedUpdateStatus',
+            <String, dynamic>{'versionCode': update.versionCode},
+          ) ??
+          const <String, dynamic>{};
+      return payload['isDownloaded'] == true;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
+  Future<bool> _installDownloadedAppUpdate(AppUpdateInfo update) async {
+    try {
+      final response =
+          await _updaterChannel.invokeMapMethod<String, dynamic>(
+            'installDownloadedUpdate',
+            <String, dynamic>{'versionCode': update.versionCode},
+          ) ??
+          const <String, dynamic>{};
+      final status = response['status']?.toString() ?? 'error';
+      final message =
+          response['message']?.toString() ??
+          'Android is opening the installer for the downloaded update.';
+      if (status == 'started' || status == 'up_to_date') {
+        _showMessage(message);
+        return true;
+      }
+      _showMessage(message, isError: true);
+      return false;
+    } on MissingPluginException {
+      _showMessage(
+        'This device cannot open the downloaded update right now.',
+        isError: true,
+      );
+      return false;
+    } on PlatformException catch (error) {
+      _showMessage(
+        error.message ?? 'Could not open the downloaded update.',
+        isError: true,
+      );
+      return false;
+    }
+  }
+
   Future<void> _showAppUpdatePrompt(AppUpdateInfo update) async {
     if (!mounted || _isUpdateDialogVisible) {
+      return;
+    }
+
+    final hasDownloadedUpdate = await _hasDownloadedAppUpdate(update);
+    if (!mounted) {
       return;
     }
 
@@ -825,7 +879,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'A new HEAVENECTION update is ready.',
+                    hasDownloadedUpdate
+                        ? 'The downloaded HEAVENECTION update is ready to install.'
+                        : 'A new HEAVENECTION update is ready.',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -856,6 +912,24 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                           ),
                         ),
                       ),
+                      if (hasDownloadedUpdate)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kGreen.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: const Text(
+                            'Downloaded',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: kGreen,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 14),
@@ -885,7 +959,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    update.isMandatory
+                    hasDownloadedUpdate
+                        ? 'Install the downloaded package to finish updating.'
+                        : update.isMandatory
                         ? 'Please complete this update before continuing.'
                         : 'You can update now or continue and do it later.',
                     style: const TextStyle(
@@ -906,10 +982,20 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 ),
               ElevatedButton.icon(
                 onPressed: () {
-                  Navigator.of(dialogContext).pop(_AppUpdateAction.download);
+                  Navigator.of(dialogContext).pop(
+                    hasDownloadedUpdate
+                        ? _AppUpdateAction.install
+                        : _AppUpdateAction.download,
+                  );
                 },
-                icon: const Icon(Icons.download_rounded),
-                label: const Text('Update Now'),
+                icon: Icon(
+                  hasDownloadedUpdate
+                      ? Icons.install_mobile_rounded
+                      : Icons.download_rounded,
+                ),
+                label: Text(
+                  hasDownloadedUpdate ? 'Install Update' : 'Update Now',
+                ),
               ),
             ],
           ),
@@ -924,6 +1010,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     if (action == _AppUpdateAction.download) {
       final started = await _downloadAppUpdate(update);
+      if (!started && update.isMandatory) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            unawaited(_showAppUpdatePrompt(update));
+          }
+        });
+      }
+    } else if (action == _AppUpdateAction.install) {
+      final started = await _installDownloadedAppUpdate(update);
       if (!started && update.isMandatory) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
@@ -948,6 +1043,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             <String, dynamic>{
               'url': update.downloadUrl,
               'fileName': update.fileName,
+              'versionCode': update.versionCode,
               'title': 'HEAVENECTION ${update.versionName}',
               'description': 'Downloading the latest HEAVENECTION update.',
             },
@@ -1369,6 +1465,117 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   Future<void> _pickPassbookPhoto() =>
       _pickDocumentPhoto(_ProfileDocument.passbook);
+
+  Future<void> _confirmDocumentRemoval(_ProfileDocument document) async {
+    final profile = _profile;
+    final isAadhar = document == _ProfileDocument.aadhar;
+    final selectedFile = isAadhar ? _selectedAadharPhoto : _selectedPassbookPhoto;
+    final hasSavedDocument = isAadhar
+        ? (profile?.hasAadharPhoto ?? false)
+        : (profile?.hasPassbookPhoto ?? false);
+    final documentLabel = isAadhar ? 'Aadhaar photo' : 'passbook photo';
+
+    if (selectedFile == null && !hasSavedDocument) {
+      return;
+    }
+
+    final shouldRemove = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: Text('Remove $documentLabel'),
+          content: Text(
+            hasSavedDocument
+                ? 'Do you want to remove the saved $documentLabel from your profile?'
+                : 'Do you want to discard the selected $documentLabel before saving?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Remove'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldRemove != true || !mounted) {
+      return;
+    }
+
+    if (selectedFile != null && !hasSavedDocument) {
+      setState(() {
+        if (isAadhar) {
+          _selectedAadharPhoto = null;
+          _removeAadharPhoto = false;
+        } else {
+          _selectedPassbookPhoto = null;
+          _removePassbookPhoto = false;
+        }
+      });
+      _showMessage(
+        isAadhar
+            ? 'Selected Aadhaar photo removed.'
+            : 'Selected passbook photo removed.',
+      );
+      return;
+    }
+
+    setState(() => _isProfileSaving = true);
+    try {
+      final updatedProfile = await _apiClient.removeStaffDocument(
+        removeAadharPhoto: isAadhar,
+        removePassbookPhoto: !isAadhar,
+      );
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _profile = updatedProfile;
+        _user = StaffUser(
+          id: updatedProfile.id,
+          name: updatedProfile.name,
+          phone: updatedProfile.phone,
+          role: updatedProfile.role,
+        );
+        if (isAadhar) {
+          _selectedAadharPhoto = null;
+          _removeAadharPhoto = false;
+        } else {
+          _selectedPassbookPhoto = null;
+          _removePassbookPhoto = false;
+        }
+      });
+      _showMessage(
+        isAadhar
+            ? 'Aadhaar photo removed successfully.'
+            : 'Passbook photo removed successfully.',
+      );
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+        return;
+      }
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Unable to remove the document right now. Please try again shortly.',
+        );
+        return;
+      }
+      _showMessage(error.message, isError: true);
+    } finally {
+      if (mounted) {
+        setState(() => _isProfileSaving = false);
+      }
+    }
+  }
 
   Future<void> _saveProfile() async {
     FocusScope.of(context).unfocus();
@@ -3720,6 +3927,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     required File? selectedFile,
     required bool removeDocument,
     required String existingUrl,
+    required String documentName,
     required String emptyLabel,
     required IconData icon,
     required String networkErrorLabel,
@@ -3766,6 +3974,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       borderRadius: BorderRadius.circular(20),
       child: Image.network(
         existingUrl,
+        headers: _apiClient.authenticatedDocumentHeaders,
         width: double.infinity,
         height: 190,
         fit: BoxFit.cover,
@@ -3779,7 +3988,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             ),
             child: Center(
               child: Text(
-                networkErrorLabel,
+                documentName.isNotEmpty
+                    ? '$networkErrorLabel\n$documentName'
+                    : networkErrorLabel,
+                textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.black54),
               ),
             ),
@@ -3797,6 +4009,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       selectedFile: _selectedAadharPhoto,
       removeDocument: _removeAadharPhoto,
       existingUrl: profile?.aadharPhotoUrl ?? '',
+      documentName: profile?.aadharPhotoName ?? '',
       emptyLabel: 'No Aadhaar photo added',
       icon: Icons.badge_outlined,
       networkErrorLabel: 'Could not load the saved Aadhaar photo.',
@@ -3805,6 +4018,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       selectedFile: _selectedPassbookPhoto,
       removeDocument: _removePassbookPhoto,
       existingUrl: profile?.passbookPhotoUrl ?? '',
+      documentName: profile?.passbookPhotoName ?? '',
       emptyLabel: 'No passbook photo added',
       icon: Icons.menu_book_outlined,
       networkErrorLabel: 'Could not load the saved passbook photo.',
@@ -4133,12 +4347,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                           (profile?.hasAadharPhoto == true &&
                               !_removeAadharPhoto))
                         OutlinedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _selectedAadharPhoto = null;
-                              _removeAadharPhoto = true;
-                            });
-                          },
+                          onPressed: _isProfileSaving
+                              ? null
+                              : () =>
+                                    _confirmDocumentRemoval(
+                                      _ProfileDocument.aadhar,
+                                    ),
                           icon: const Icon(Icons.delete_outline),
                           label: const Text('Remove Photo'),
                         ),
@@ -4165,12 +4379,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                           (profile?.hasPassbookPhoto == true &&
                               !_removePassbookPhoto))
                         OutlinedButton.icon(
-                          onPressed: () {
-                            setState(() {
-                              _selectedPassbookPhoto = null;
-                              _removePassbookPhoto = true;
-                            });
-                          },
+                          onPressed: _isProfileSaving
+                              ? null
+                              : () =>
+                                    _confirmDocumentRemoval(
+                                      _ProfileDocument.passbook,
+                                    ),
                           icon: const Icon(Icons.delete_outline),
                           label: const Text('Remove Passbook'),
                         ),
@@ -5655,7 +5869,7 @@ enum ShortCallDecision { markNoResponse, markRejected, callAgain }
 
 enum _PendingCallAction { markStatus, callRecent, cancel }
 
-enum _AppUpdateAction { download, later }
+enum _AppUpdateAction { download, install, later }
 
 enum _ProfileDocument { aadhar, passbook }
 
@@ -5810,3 +6024,6 @@ class StatusPill extends StatelessWidget {
     );
   }
 }
+
+
+

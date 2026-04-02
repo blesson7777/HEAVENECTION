@@ -67,6 +67,7 @@ from backend.apps.telecalling.services import (
     build_team_management_payload,
     build_work_hours_payload,
     complete_training_lesson,
+    delete_app_release,
     end_staff_call,
     end_staff_session,
     get_assigned_leads,
@@ -316,6 +317,21 @@ def developer_releases_page(request):
                 set_active_app_release(release)
                 messages.success(request, f"{release.version_name} is now the active published release.")
                 return redirect("developer-releases-page")
+        elif release_action == "delete_release":
+            release_id = request.POST.get("release_id", "").strip()
+            try:
+                release = AppRelease.objects.get(id=release_id)
+            except AppRelease.DoesNotExist:
+                messages.error(request, "Release not found.")
+            else:
+                release_name = release.version_name
+                try:
+                    delete_app_release(release)
+                except ValueError as error:
+                    messages.error(request, str(error))
+                else:
+                    messages.success(request, f"{release_name} was removed from stored updates.")
+                    return redirect("developer-releases-page")
         else:
             release_form_data = {
                 "version_name": request.POST.get("version_name", "").strip(),
@@ -352,7 +368,7 @@ def developer_releases_page(request):
         "page_title": "Mobile Updates",
         "release_form_data": release_form_data,
         "release_errors": release_errors,
-        **build_developer_release_payload(),
+        **build_developer_release_payload(request),
     }
     return render(request, "developer_releases.html", context)
 
@@ -1607,6 +1623,13 @@ def update_call_status_api(request, call_id):
         serializer.validated_data.get("callback_window", ""),
     )
     return Response(CallSerializer(call).data)
+
+
+
+
+
+
+
 
 
 
