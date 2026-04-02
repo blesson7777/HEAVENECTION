@@ -60,6 +60,10 @@ ACTIVE_QUEUE_STATUSES = (
     Lead.Status.CALL_BACK,
     Lead.Status.INTERESTED,
 )
+STAFF_CALL_QUEUE_STATUSES = (
+    Lead.Status.NEW,
+    Lead.Status.CALL_BACK,
+)
 FOLLOW_UP_STATUSES = (
     Lead.Status.INTERESTED,
     Lead.Status.CALL_BACK,
@@ -892,6 +896,11 @@ def _follow_up_queryset():
     return Lead.objects.filter(status__in=FOLLOW_UP_STATUSES)
 
 
+def _staff_call_queue_queryset(queryset=None):
+    base_queryset = queryset if queryset is not None else Lead.objects.all()
+    return base_queryset.filter(status__in=STAFF_CALL_QUEUE_STATUSES)
+
+
 def _recovery_lead_queryset():
     return Lead.objects.filter(status__in=RECOVERY_LEAD_STATUSES)
 
@@ -1152,10 +1161,10 @@ def _visible_staff_lead_queryset(queryset, *, now=None):
     current_slot = _current_callback_window(now)
     if current_slot:
         return queryset.filter(
-            Q(status__in=(Lead.Status.NEW, Lead.Status.INTERESTED))
+            Q(status=Lead.Status.NEW)
             | Q(status=Lead.Status.CALL_BACK, callback_window=current_slot)
         )
-    return queryset.exclude(status=Lead.Status.CALL_BACK)
+    return queryset.filter(status=Lead.Status.NEW)
 
 
 def is_staff_lead_visible_now(lead, *, now=None):
@@ -1194,7 +1203,9 @@ def release_staff_queue(staff):
 def _normalize_active_queue_assignments(*, target_staff=None):
     now = timezone.now()
     queue_limit = get_lead_queue_limit()
-    queue_queryset = _lead_queue_queryset().select_related("assigned_to").exclude(assigned_to=None)
+    queue_queryset = _staff_call_queue_queryset(
+        _lead_queue_queryset().select_related("assigned_to")
+    ).exclude(assigned_to=None)
     if target_staff is not None:
         queue_queryset = queue_queryset.filter(assigned_to=target_staff)
 
@@ -1231,11 +1242,16 @@ def auto_allocate_leads(*, target_staff=None, prioritized_lead_ids=None):
 
     staff_members = list(staff_queryset)
     if not staff_members:
-        return {"assigned_count": 0, "remaining_unassigned_count": _lead_queue_queryset().filter(assigned_to=None).count()}
+        return {
+            "assigned_count": 0,
+            "remaining_unassigned_count": _staff_call_queue_queryset(
+                _lead_queue_queryset().filter(assigned_to=None)
+            ).count(),
+        }
 
     active_counts = {
         row["assigned_to"]: row["count"]
-        for row in _lead_queue_queryset()
+        for row in _staff_call_queue_queryset(_lead_queue_queryset())
         .exclude(assigned_to=None)
         .values("assigned_to")
         .annotate(count=Count("id"))
@@ -1243,7 +1259,7 @@ def auto_allocate_leads(*, target_staff=None, prioritized_lead_ids=None):
     completed_today_counts = _daily_completed_call_counts()
     open_leads = list(
         _ordered_lead_queryset(
-            _lead_queue_queryset().filter(assigned_to=None),
+            _staff_call_queue_queryset(_lead_queue_queryset().filter(assigned_to=None)),
             now=now,
             prioritized_lead_ids=prioritized_lead_ids,
         ).values("id", "status", "callback_window")
@@ -3120,6 +3136,18 @@ def build_staff_today_payload(staff):
         Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES),
         now=now,
     )
+    positive_leads = Lead.objects.filter(
+        assigned_to=staff,
+        status=Lead.Status.INTERESTED,
+    )
+    callback_leads = Lead.objects.filter(
+        assigned_to=staff,
+        status=Lead.Status.CALL_BACK,
+    )
+    converted_leads = Lead.objects.filter(
+        assigned_to=staff,
+        status=Lead.Status.CONVERTED,
+    )
     open_session = get_open_session(staff, reconcile=True)
     latest_session = sessions_today.order_by("-login_time").first()
     learning_payload = build_staff_learning_payload(staff)
@@ -3127,9 +3155,9 @@ def build_staff_today_payload(staff):
 
     active_seconds = sessions_today.aggregate(total=Sum("active_seconds")).get("total") or 0
     calls_count = qualifying_calls.count()
-    follow_up_count = assigned_leads.filter(status=Lead.Status.INTERESTED).count()
-    callback_count = assigned_leads.filter(status=Lead.Status.CALL_BACK).count()
-    converted_count = assigned_leads.filter(status=Lead.Status.CONVERTED).count()
+    follow_up_count = positive_leads.count()
+    callback_count = callback_leads.count()
+    converted_count = converted_leads.count()
 
     return {
         "today": today.isoformat(),
@@ -3139,7 +3167,7 @@ def build_staff_today_payload(staff):
             "calls_count": calls_count,
             "interested_count": follow_up_count,
             "converted_count": converted_count,
-            "result_label": f"{follow_up_count} follow up / {callback_count} call back",
+            "result_label": f"{follow_up_count} positive / {callback_count} call back",
             "working_now": bool(open_session),
             "current_state": open_session.last_known_state if open_session else "stopped",
             "status_label": _session_status_label(open_session, latest_session=latest_session),
@@ -3172,7 +3200,10 @@ def get_assigned_leads(staff):
     auto_allocate_leads(target_staff=staff)
     return _ordered_lead_queryset(
         _visible_staff_lead_queryset(
-            Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES).select_related("assigned_to"),
+            Lead.objects.filter(
+                assigned_to=staff,
+                status__in=STAFF_CALL_QUEUE_STATUSES,
+            ).select_related("assigned_to"),
             now=now,
         ),
         now=now,

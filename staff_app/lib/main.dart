@@ -3641,12 +3641,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
         children: [
           const Text(
-            'Assigned leads',
+            'Customers ready to call',
             style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 8),
           Text(
-            '${_leads.length} leads assigned for follow-up.',
+            '${_leads.length} customer(s) are ready right now. Scheduled callbacks appear here at their requested time.',
             style: const TextStyle(fontSize: 16.5, color: Colors.black54),
           ),
           const SizedBox(height: 16),
