@@ -11,7 +11,13 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from backend.apps.telecalling.auth import clear_auth_cookies, get_staff_from_request, issue_tokens_for_user, set_auth_cookies
+from backend.apps.telecalling.auth import (
+    clear_auth_cookies,
+    get_staff_from_request,
+    issue_tokens_for_user,
+    rotate_auth_session,
+    set_auth_cookies,
+)
 from backend.apps.telecalling.models import AppRelease, Call, Lead, Salary, Staff, StaffAction, TrainingLesson
 from backend.apps.telecalling.permissions import IsAdminStaff, IsCallingStaff
 from backend.apps.telecalling.serializers import (
@@ -145,6 +151,7 @@ def _normalize_errors(error_dict):
 def _apply_staff_post_save_actions(staff, was_active):
     released_count = 0
     if was_active and not staff.is_active:
+        rotate_auth_session(staff)
         end_staff_session(staff, close_reason="admin_disabled")
         released_count = release_staff_queue(staff)
         auto_allocate_leads()
@@ -229,6 +236,9 @@ def web_login_page(request):
 
 @require_http_methods(["POST"])
 def web_logout(request):
+    current_user = get_staff_from_request(request)
+    if current_user and current_user.is_active:
+        rotate_auth_session(current_user)
     response = redirect("web-login")
     clear_auth_cookies(response)
     return response
@@ -283,6 +293,9 @@ def developer_login_page(request):
 
 @require_http_methods(["POST"])
 def developer_logout(request):
+    current_user = get_staff_from_request(request)
+    if current_user and current_user.is_active:
+        rotate_auth_session(current_user)
     response = redirect("developer-login")
     clear_auth_cookies(response)
     return response
@@ -1112,6 +1125,8 @@ def staff_app_update_api(request):
 
 @api_view(["POST"])
 def logout_api(request):
+    if request.user.is_authenticated:
+        rotate_auth_session(request.user)
     response = Response({"detail": "Logged out."})
     clear_auth_cookies(response)
     return response

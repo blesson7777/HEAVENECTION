@@ -167,6 +167,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _isHeartbeatRequestInFlight = false;
   bool _isSyncingCallLog = false;
   bool _isCallStatusPromptVisible = false;
+  bool _isCallScreenOpen = false;
   bool _isExitDialogVisible = false;
   bool _isCheckingForUpdate = false;
   bool _isUpdateDialogVisible = false;
@@ -351,6 +352,26 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       unawaited(_showPendingCallStatusPrompt());
     });
+  }
+
+  void _openPendingCustomerPage() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _tab = 1;
+      _lastLoadedTab = 1;
+    });
+  }
+
+  Future<void> _focusLeadWorkflowAfterCallResultSaved() async {
+    if (!mounted) {
+      return;
+    }
+    _openPendingCustomerPage();
+    if (_isCallScreenOpen) {
+      await Navigator.of(context).maybePop();
+    }
   }
 
   Future<void> _retryPendingCustomerCall() async {
@@ -671,6 +692,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _applyLearningPayload(results[2] as LearningCenterPayload);
         _syncPendingCallStatusFromSummary();
         _isNetworkErrorVisible = false;
+        if (_summary.pendingCallStatusRequired) {
+          _tab = 1;
+          _lastLoadedTab = 1;
+        }
         if (_leadIndex >= _leads.length) {
           _leadIndex = _leads.isEmpty ? 0 : _leads.length - 1;
         }
@@ -2689,6 +2714,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _callStatus = label;
         _lastCallActivityAt = DateTime.now();
         _clearPendingCallStatus();
+        _tab = 1;
+        _lastLoadedTab = 1;
       });
       await _loadDashboardData(showLoader: false, promptTrainingGate: true);
       if (mounted) {
@@ -2729,7 +2756,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         : 'Follow Up';
     var selectedCallbackWindow = '';
 
-    await showDialog<void>(
+    final didSave = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
@@ -2873,7 +2900,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                               return;
                             }
                             if (saved && dialogContext.mounted) {
-                              Navigator.of(dialogContext).pop();
+                              Navigator.of(dialogContext).pop(true);
                               return;
                             }
                             if (dialogContext.mounted) {
@@ -2888,10 +2915,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           },
         );
       },
-    ).then((_) {
-      _callStatusDialogContext = null;
-      _isCallStatusPromptVisible = false;
-    });
+    );
+    _callStatusDialogContext = null;
+    _isCallStatusPromptVisible = false;
+    if (didSave == true) {
+      await _focusLeadWorkflowAfterCallResultSaved();
+    }
   }
 
   Future<void> _recoverPendingCallStatusPrompt() async {
@@ -3443,6 +3472,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   }
 
   Widget _leadList() {
+    if (_hasPendingCallStatus) {
+      return _pendingCustomerCallPage();
+    }
+
     return RefreshIndicator(
       onRefresh: () {
         _registerInteraction(syncServer: false);
@@ -3594,6 +3627,130 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     );
   }
 
+  Widget _pendingCustomerCallPage() {
+    final leadSummary = _pendingStatusLeadName.isNotEmpty
+        ? _pendingStatusLeadName
+        : 'Recent customer';
+    final hasPhone = _pendingStatusLeadPhone.isNotEmpty;
+
+    return RefreshIndicator(
+      onRefresh: () {
+        _registerInteraction(syncServer: false);
+        return _loadDashboardData();
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        children: [
+          const Text(
+            'Pending customer call',
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Finish the latest customer action before the lead list opens.',
+            style: TextStyle(fontSize: 16.5, color: Colors.black54),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(26),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.phone_in_talk, color: kOrange),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Recent customer needs an update',
+                        style: TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  leadSummary,
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (hasPhone) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    _pendingStatusLeadPhone,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+                const Text(
+                  'You can call this customer again or save the result now. The rest of the lead list stays locked until this is completed.',
+                  style: TextStyle(fontSize: 15.5, color: Colors.black54),
+                ),
+                const SizedBox(height: 18),
+                ElevatedButton.icon(
+                  onPressed: _recoverPendingCallStatusPrompt,
+                  icon: const Icon(Icons.assignment_turned_in),
+                  label: const Text('Mark Call Result'),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _retryPendingCustomerCall,
+                  icon: const Icon(Icons.call),
+                  label: const Text('Call Recent Customer'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.lock_clock, color: kPrimary),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Lead list is waiting',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Once the customer result is saved, the normal lead list will open automatically.',
+                  style: TextStyle(fontSize: 15.5, color: Colors.black54),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openCallScreenForLead(int index) async {
     if (index < 0 || index >= _leads.length) {
       return;
@@ -3610,14 +3767,19 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _callStatus = 'Follow Up';
     });
 
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => Scaffold(
-          appBar: AppBar(title: const Text('Call')),
-          body: SafeArea(child: _call(_leads[index])),
+    _isCallScreenOpen = true;
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            appBar: AppBar(title: const Text('Call')),
+            body: SafeArea(child: _call(_leads[index])),
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      _isCallScreenOpen = false;
+    }
   }
 
   Widget _call(LeadItem? lead) {

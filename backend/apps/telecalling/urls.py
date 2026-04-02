@@ -1,14 +1,19 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
+from backend.apps.telecalling.auth import SessionAwareTokenRefreshSerializer
 from backend.apps.telecalling import views
+
+
+class SessionAwareTokenRefreshView(TokenRefreshView):
+    serializer_class = SessionAwareTokenRefreshSerializer
 
 
 urlpatterns = [
     path("auth/login/", views.login_api, name="api-login"),
     path("auth/me/", views.auth_me_api, name="api-me"),
     path("auth/logout/", views.logout_api, name="api-logout"),
-    path("auth/refresh/", TokenRefreshView.as_view(), name="api-refresh"),
+    path("auth/refresh/", SessionAwareTokenRefreshView.as_view(), name="api-refresh"),
     path("dashboard/", views.dashboard_data_api, name="api-dashboard"),
     path("admin/profile/", views.admin_profile_api, name="api-admin-profile"),
     path("company/profile/", views.company_profile_api, name="api-company-profile"),

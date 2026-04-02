@@ -63,6 +63,7 @@ class Staff(AbstractBaseUser, PermissionsMixin):
     aadhar_number = models.CharField(max_length=20, blank=True)
     aadhar_photo = models.FileField(upload_to="staff_documents/aadhar/", blank=True, null=True)
     passbook_photo = models.FileField(upload_to="staff_documents/passbook/", blank=True, null=True)
+    auth_session_key = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     last_seen_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
