@@ -51,7 +51,7 @@
         show(message) {
             showOverlay(
                 message ||
-                    "Connection lost. Check your internet or server and wait for automatic recovery.",
+                    "Connection interrupted. Please wait while the page reconnects.",
             );
         },
         hide: hideOverlay,
@@ -63,12 +63,12 @@
             restoreLastPage();
             return;
         }
-        showOverlay("Still offline. Check Wi-Fi, mobile data, or the server connection.");
+        showOverlay("Still offline. Please check your internet connection and try again.");
     });
 
     window.addEventListener("offline", () => {
         showOverlay(
-            "Connection lost. Check Wi-Fi, mobile data, or the server connection.",
+            "Connection interrupted. Please check your internet connection.",
         );
     });
 
@@ -82,7 +82,7 @@
         window.setTimeout(restoreLastPage, 500);
     } else if (!window.navigator.onLine) {
         showOverlay(
-            "Connection lost. Check Wi-Fi, mobile data, or the server connection.",
+            "Connection interrupted. Please check your internet connection.",
         );
     }
 })();

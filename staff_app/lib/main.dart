@@ -144,7 +144,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   String _callStatus = 'Follow Up';
   String _learningQuery = '';
   String? _loginErrorText;
-  String _networkErrorMessage = 'Network connection lost.';
+  String _networkErrorMessage = 'Connection interrupted.';
   String? _activeCallId;
   String? _activeCallLeadId;
   PendingDialerCall? _pendingDialerCall;
@@ -172,8 +172,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _isUpdateDialogVisible = false;
   bool _isDownloadingUpdate = false;
   bool _hasCheckedAppUpdate = false;
-  int _currentVersionCode = 0;
-  String _currentVersionName = '';
   AppUpdateInfo? _pendingAppUpdate;
   File? _selectedAadharPhoto;
   File? _selectedPassbookPhoto;
@@ -552,7 +550,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       );
       if (!hasConnection) {
         _showNetworkError(
-          'You are offline. Check mobile data, Wi-Fi, or your server connection.',
+          'You are offline. Check mobile data or Wi-Fi and try again.',
         );
         return;
       }
@@ -619,7 +617,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _showMessage(error.message, isError: true);
       } else {
         _showNetworkError(
-          'Still unable to reconnect. Check internet, Wi-Fi, or server access.',
+          'Still unable to reconnect. Check your internet connection and try again.',
         );
       }
     }
@@ -637,7 +635,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
     } on ApiException catch (error) {
       if (error.code == 'network_error') {
-        _showNetworkError('Unable to reach the server. Reconnect to continue.');
+        _showNetworkError('Unable to connect right now. Please try again.');
       } else {
         await _apiClient.clearSession();
       }
@@ -761,8 +759,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     var success = false;
     try {
       final versionInfo = await _readCurrentVersionInfo();
-      _currentVersionCode = versionInfo.versionCode;
-      _currentVersionName = versionInfo.versionName;
       final update = await _apiClient.fetchAppUpdate(
         versionCode: versionInfo.versionCode,
       );
@@ -798,7 +794,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final update =
         _pendingAppUpdate ?? await _checkForAvailableUpdate(force: true);
     if (update == null) {
-      _showMessage('This device is already on the latest version.');
+      _showMessage('Your app is up to date.');
       return;
     }
     await _showAppUpdatePrompt(update);
@@ -821,7 +817,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               borderRadius: BorderRadius.circular(24),
             ),
             title: Text(
-              update.isMandatory ? 'Update Required' : 'App Update Available',
+              update.isMandatory ? 'Update Required' : 'New Update Ready',
             ),
             content: SingleChildScrollView(
               child: Column(
@@ -829,7 +825,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Version ${update.versionName} is ready for HEAVENECTION.',
+                    'A new HEAVENECTION update is ready.',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -841,7 +837,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     runSpacing: 10,
                     children: [
                       StatusPill(
-                        label: update.isMandatory ? 'Mandatory' : 'Optional',
+                        label: update.isMandatory ? 'Required' : 'Optional',
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -863,27 +859,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     ],
                   ),
                   const SizedBox(height: 14),
-                  Text(
-                    _currentVersionName.isEmpty
-                        ? 'Current build: ${_currentVersionCode == 0 ? '--' : _currentVersionCode}'
-                        : 'Current build: $_currentVersionName ($_currentVersionCode)',
-                    style: const TextStyle(color: Colors.black54),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'New build code: ${update.versionCode}',
-                    style: const TextStyle(color: Colors.black54),
-                  ),
-                  if (update.minimumSupportedVersionCode > 0) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      'Minimum supported build: ${update.minimumSupportedVersionCode}',
-                      style: const TextStyle(color: Colors.black54),
-                    ),
-                  ],
                   const SizedBox(height: 16),
                   const Text(
-                    'Release notes',
+                    "What's New",
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
@@ -896,7 +874,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     ),
                     child: Text(
                       update.releaseNotes.trim().isEmpty
-                          ? 'A new HEAVENECTION update is ready to install.'
+                          ? 'A new HEAVENECTION update is ready.'
                           : update.releaseNotes,
                       style: const TextStyle(
                         fontSize: 15.5,
@@ -908,8 +886,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   const SizedBox(height: 14),
                   Text(
                     update.isMandatory
-                        ? 'Download and install this update before continuing in the app.'
-                        : 'Download the new APK now, or continue and install it later.',
+                        ? 'Please complete this update before continuing.'
+                        : 'You can update now or continue and do it later.',
                     style: const TextStyle(
                       fontSize: 14.5,
                       color: Colors.black54,
@@ -931,7 +909,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   Navigator.of(dialogContext).pop(_AppUpdateAction.download);
                 },
                 icon: const Icon(Icons.download_rounded),
-                label: const Text('Download Update'),
+                label: const Text('Update Now'),
               ),
             ],
           ),
@@ -978,7 +956,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       final status = response['status']?.toString() ?? 'error';
       final message =
           response['message']?.toString() ??
-          'Android will install the update after the download completes.';
+          'Your phone will guide you through the update once the file is ready.';
       if (status == 'started') {
         _showMessage(message);
         return true;
@@ -1131,14 +1109,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     FocusScope.of(context).unfocus();
     setState(() => _loginErrorText = null);
     if (phone.text.trim().isEmpty || password.text.isEmpty) {
-      setState(() => _loginErrorText = 'Enter phone number and password.');
+      setState(
+        () => _loginErrorText = 'Enter your phone number or email and password.',
+      );
       return;
     }
 
     setState(() => _isLoggingIn = true);
     try {
       final user = await _apiClient.login(
-        phone: phone.text.trim(),
+        identifier: phone.text.trim(),
         password: password.text,
       );
       if (user.role != 'staff') {
@@ -1156,7 +1136,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     } on ApiException catch (error) {
       if (error.code == 'network_error') {
         _showNetworkError(
-          'Unable to reach the server. Reconnect and the app will restore automatically.',
+          'Unable to connect right now. The app will recover automatically when service returns.',
         );
       } else if (mounted) {
         setState(() => _loginErrorText = error.message);
@@ -1199,8 +1179,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _removeAadharPhoto = false;
       _removePassbookPhoto = false;
       _pendingAppUpdate = null;
-      _currentVersionCode = 0;
-      _currentVersionName = '';
       _hasCheckedAppUpdate = false;
       _isDownloadingUpdate = false;
       _isUpdateDialogVisible = false;
@@ -1245,8 +1223,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _removeAadharPhoto = false;
       _removePassbookPhoto = false;
       _pendingAppUpdate = null;
-      _currentVersionCode = 0;
-      _currentVersionName = '';
       _hasCheckedAppUpdate = false;
       _isDownloadingUpdate = false;
       _isUpdateDialogVisible = false;
@@ -1455,7 +1431,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       if (error.code == 'network_error') {
         _showNetworkError(
-          'Unable to save the profile because the network is unavailable.',
+          'Unable to save right now. Please check your connection and try again.',
         );
         return;
       }
@@ -1506,7 +1482,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       if (error.code == 'network_error') {
         _showNetworkError(
-          'Unable to start the call session because the server is unreachable.',
+          'Unable to start right now. Please try again.',
         );
         return;
       }
@@ -1547,7 +1523,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       if (error.code == 'network_error') {
         _showNetworkError(
-          'Unable to end work because the network is unavailable.',
+          'Unable to finish right now. Please check your connection and try again.',
         );
         return;
       }
@@ -1593,7 +1569,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       if (error.code == 'network_error') {
         _showNetworkError(
-          'Connection lost while syncing activity. The app will restore when the network returns.',
+          'Connection interrupted. The app will restore automatically when service returns.',
         );
         return;
       }
@@ -2073,7 +2049,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       if (error.code == 'network_error') {
         _showNetworkError(
-          'Connection lost while syncing the call. The app will return when the network is back.',
+          'Connection interrupted while saving the call. The app will recover automatically when service returns.',
         );
         return false;
       }
@@ -2968,7 +2944,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Sign in with your assigned phone number and password.',
+                    'Sign in with your assigned phone number or email and password.',
                     style: TextStyle(fontSize: 17, color: Colors.black54),
                     textAlign: TextAlign.center,
                   ),
@@ -3001,10 +2977,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   ],
                   TextField(
                     controller: phone,
-                    keyboardType: TextInputType.phone,
+                    keyboardType: TextInputType.emailAddress,
                     decoration: const InputDecoration(
-                      labelText: 'Phone Number',
-                      prefixIcon: Icon(Icons.phone),
+                      labelText: 'Phone Number or Email',
+                      prefixIcon: Icon(Icons.person_outline),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -3032,11 +3008,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     label: Text(_isLoggingIn ? 'Signing In...' : 'Login'),
                   ),
                   const SizedBox(height: 12),
-                  Text(
-                    'API: $kApiBaseUrl',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 12, color: Colors.black45),
-                  ),
+                  const SizedBox.shrink(),
                 ],
               ),
             ),
@@ -4468,7 +4440,7 @@ class _TrainingLessonCard extends StatelessWidget {
         : (lesson.isMandatory ? kOrange : kPrimary);
     final statusLabel = lesson.isCompleted
         ? 'Completed'
-        : (lesson.isMandatory ? 'Mandatory' : 'Optional');
+        : (lesson.isMandatory ? 'Required' : 'Optional');
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -4877,7 +4849,7 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
                 StatusPill(
                   label: widget.lesson.isCompleted
                       ? 'Completed'
-                      : (widget.lesson.isMandatory ? 'Mandatory' : 'Optional'),
+                      : (widget.lesson.isMandatory ? 'Required' : 'Optional'),
                 ),
                 if (widget.lesson.searchKeywords.isNotEmpty)
                   Container(
@@ -5188,7 +5160,7 @@ class NetworkErrorView extends StatelessWidget {
                         SizedBox(height: 10),
                         Text('1. Check mobile data or Wi-Fi on the device.'),
                         SizedBox(height: 6),
-                        Text('2. Confirm the local or live server is running.'),
+                        Text('2. Check that your internet service is available.'),
                         SizedBox(height: 6),
                         Text(
                           '3. Wait a moment. The app will restore automatically when the connection returns.',
@@ -5200,7 +5172,7 @@ class NetworkErrorView extends StatelessWidget {
                   ElevatedButton.icon(
                     onPressed: onRetry,
                     icon: const Icon(Icons.refresh),
-                    label: const Text('Retry Now'),
+                    label: const Text('Try Again'),
                   ),
                 ],
               ),
@@ -5817,7 +5789,7 @@ class StatusPill extends StatelessWidget {
       'Converted' => kGreen,
       'Rejected' => kRed,
       'Completed' => kGreen,
-      'Mandatory' => kOrange,
+      'Required' => kOrange,
       'Optional' => kPrimary,
       _ => kPrimary,
     };

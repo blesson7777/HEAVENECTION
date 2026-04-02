@@ -1,7 +1,7 @@
 {% extends "admin_base.html" %}
 
 {% block page_actions %}
-<span class="hc-sync-pill"><i class="bi bi-cloud-check-fill"></i> Auto sync healthy</span>
+<span class="hc-sync-pill"><i class="bi bi-cloud-check-fill"></i> Live activity connected</span>
 {% endblock %}
 
 {% block admin_content %}
@@ -108,7 +108,7 @@
             <div class="hc-surface-card mt-4">
                 <div class="mf-db2-panel-head mb-3">
                     <div><span class="mf-db2-kicker">Salary Module</span><h5>Current payout preview</h5></div>
-                    <a href="{% url 'api-salary-summary' %}" class="btn btn-outline-primary btn-sm">Open API</a>
+                    <a href="{% url 'salary-page' %}" class="btn btn-outline-primary btn-sm">Open Salary Page</a>
                 </div>
                 <div class="table-responsive">
                     <table class="table hc-table align-middle mb-0">

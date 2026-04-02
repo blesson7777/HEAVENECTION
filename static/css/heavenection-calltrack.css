@@ -1219,6 +1219,62 @@
     gap: 0.45rem;
 }
 
+.hc-quality-card {
+    min-width: 220px;
+    padding: 0.95rem 1rem;
+    border-radius: 20px;
+    border: 1px solid rgba(77, 92, 144, 0.1);
+    background: linear-gradient(145deg, #f8fbff 0%, #eef3fd 100%);
+}
+
+.hc-quality-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.35rem;
+}
+
+.hc-quality-card-head strong {
+    color: #1f2d4f;
+    font-size: 1.35rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.hc-quality-card small {
+    display: block;
+    color: #6d7c97;
+    line-height: 1.45;
+}
+
+.hc-quality-card-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.8rem;
+    margin-top: 0.65rem;
+    color: #51627f;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.hc-salary-payment-brief {
+    min-width: 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.hc-salary-payment-brief strong {
+    color: #1f2d4f;
+    font-weight: 800;
+}
+
+.hc-salary-verification-card {
+    border: 1px solid rgba(77, 92, 144, 0.14);
+    background: linear-gradient(145deg, rgba(77, 92, 144, 0.06), rgba(255, 255, 255, 0.96));
+}
+
 @media (max-width: 767.98px) {
     .hc-header-actions {
         width: 100%;

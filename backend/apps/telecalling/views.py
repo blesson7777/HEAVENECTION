@@ -192,12 +192,18 @@ def web_login_page(request):
         return render(
             request,
             "admin_login.html",
-            {"submitted_phone": request.POST.get("phone", "").strip(), "company_profile": get_company_profile()},
+            {
+                "submitted_identifier": (
+                    request.POST.get("identifier", "").strip()
+                    or request.POST.get("phone", "").strip()
+                ),
+                "company_profile": get_company_profile(),
+            },
             status=400,
         )
 
     staff = authenticate_staff(
-        serializer.validated_data["phone"],
+        serializer.validated_data["identifier"],
         serializer.validated_data["password"],
         required_role=Staff.Role.ADMIN,
     )
@@ -206,7 +212,10 @@ def web_login_page(request):
         return render(
             request,
             "admin_login.html",
-            {"submitted_phone": serializer.validated_data["phone"], "company_profile": get_company_profile()},
+            {
+                "submitted_identifier": serializer.validated_data["identifier"],
+                "company_profile": get_company_profile(),
+            },
             status=400,
         )
 
@@ -238,12 +247,18 @@ def developer_login_page(request):
         return render(
             request,
             "developer_login.html",
-            {"submitted_phone": request.POST.get("phone", "").strip(), "company_profile": get_company_profile()},
+            {
+                "submitted_identifier": (
+                    request.POST.get("identifier", "").strip()
+                    or request.POST.get("phone", "").strip()
+                ),
+                "company_profile": get_company_profile(),
+            },
             status=400,
         )
 
     staff = authenticate_staff(
-        serializer.validated_data["phone"],
+        serializer.validated_data["identifier"],
         serializer.validated_data["password"],
     )
     if not staff or staff.role not in {Staff.Role.ADMIN, Staff.Role.DEVELOPER}:
@@ -251,7 +266,10 @@ def developer_login_page(request):
         return render(
             request,
             "developer_login.html",
-            {"submitted_phone": serializer.validated_data["phone"], "company_profile": get_company_profile()},
+            {
+                "submitted_identifier": serializer.validated_data["identifier"],
+                "company_profile": get_company_profile(),
+            },
             status=400,
         )
 
@@ -322,16 +340,16 @@ def developer_releases_page(request):
             serializer = CreateAppReleaseSerializer(data=serializer_data)
             if serializer.is_valid():
                 release = publish_app_release(created_by=current_user, validated_data=serializer.validated_data)
-                messages.success(request, f"App release {release.version_name} published successfully.")
+                messages.success(request, f"Mobile update {release.version_name} published successfully.")
                 return redirect("developer-releases-page")
 
             release_errors = _normalize_errors(serializer.errors)
-            messages.error(request, "Please correct the app release details and upload the APK again.")
+            messages.error(request, "Please correct the update details and upload the file again.")
 
     context = {
         "developer_user": current_user,
         "company_profile": get_company_profile(),
-        "page_title": "Developer Releases",
+        "page_title": "Mobile Updates",
         "release_form_data": release_form_data,
         "release_errors": release_errors,
         **build_developer_release_payload(),
@@ -964,7 +982,7 @@ def salary_control_page(request):
         page_title="Salary Control Panel",
         page_heading="Salary Control Panel",
         page_subtitle="Configure weekly, monthly, and hourly salary settings for each staff member.",
-        extra_context=build_salary_control_payload(),
+        extra_context=build_salary_control_payload(request),
     )
     return render(request, "admin_salary_control.html", context)
 
@@ -1026,7 +1044,7 @@ def login_api(request):
     serializer = LoginSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     staff = authenticate_staff(
-        serializer.validated_data["phone"],
+        serializer.validated_data["identifier"],
         serializer.validated_data["password"],
     )
     if not staff:

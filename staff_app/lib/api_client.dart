@@ -50,13 +50,13 @@ class ApiClient {
   }
 
   Future<StaffUser> login({
-    required String phone,
+    required String identifier,
     required String password,
   }) async {
     final response = await _send(
       'POST',
       '/api/auth/login/',
-      body: {'phone': phone, 'password': password},
+      body: {'identifier': identifier, 'password': password},
       requiresAuth: false,
     );
     final payload = _decodeMap(response.body);

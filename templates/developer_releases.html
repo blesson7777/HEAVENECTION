@@ -2,7 +2,7 @@
 
 {% block page_actions %}
 {% if latest_release %}
-<a href="{{ latest_release_download_url }}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Download Current APK</a>
+<a href="{{ latest_release_download_url }}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Download Current Update</a>
 {% endif %}
 {% endblock %}
 
@@ -12,15 +12,15 @@
         <div class="hc-surface-card h-100">
             <span class="mf-db2-kicker">Active Release</span>
             <h4 class="mt-2 mb-2">{% if latest_release %}{{ latest_release.version_name }}{% else %}No release yet{% endif %}</h4>
-            <p class="text-muted mb-3">{% if latest_release %}Version code {{ latest_release.version_code }}{% else %}Upload your first APK build from this portal.{% endif %}</p>
+            <p class="text-muted mb-3">{% if latest_release %}Release number {{ latest_release.version_code }}{% else %}Add your first mobile update from this page.{% endif %}</p>
             {% if latest_release %}
             <div class="hc-profile-meta-grid">
                 <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Mandatory</span>
+                    <span class="hc-profile-meta-label">Team Update</span>
                     <strong>{% if latest_release.is_mandatory %}Yes{% else %}No{% endif %}</strong>
                 </div>
                 <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Min Supported</span>
+                    <span class="hc-profile-meta-label">Earliest Supported Release</span>
                     <strong>{{ latest_release.minimum_supported_version_code }}</strong>
                 </div>
                 <div class="hc-profile-meta-card">
@@ -32,7 +32,7 @@
                     <strong>{{ latest_release.file_size_bytes|filesizeformat }}</strong>
                 </div>
             </div>
-            <div class="hc-document-empty mt-3">{{ latest_release.release_notes|default:"No release notes added." }}</div>
+            <div class="hc-document-empty mt-3">{{ latest_release.release_notes|default:"No update notes added." }}</div>
             {% endif %}
         </div>
     </div>
@@ -41,8 +41,8 @@
         <div class="hc-surface-card h-100">
             <div class="mf-db2-panel-head mb-3">
                 <div>
-                    <span class="mf-db2-kicker">Publish APK</span>
-                    <h5>Upload the next app update</h5>
+                    <span class="mf-db2-kicker">Publish Mobile Update</span>
+                    <h5>Upload the next staff update</h5>
                 </div>
             </div>
             <form id="developerReleaseUploadForm" method="post" action="{% url 'developer-releases-page' %}" enctype="multipart/form-data" novalidate>
@@ -50,17 +50,17 @@
                 <input type="hidden" name="release_action" value="upload_release">
                 <div class="row g-3">
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">Version Name</label>
+                        <label class="form-label fw-semibold">Release Name</label>
                         <input type="text" class="form-control{% if release_errors.version_name %} is-invalid{% endif %}" name="version_name" value="{{ release_form_data.version_name }}" placeholder="1.0.1" required>
                         {% if release_errors.version_name %}<div class="invalid-feedback">{{ release_errors.version_name }}</div>{% endif %}
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">Version Code</label>
+                        <label class="form-label fw-semibold">Release Number</label>
                         <input type="number" min="1" class="form-control{% if release_errors.version_code %} is-invalid{% endif %}" name="version_code" value="{{ release_form_data.version_code }}" placeholder="2" required>
                         {% if release_errors.version_code %}<div class="invalid-feedback">{{ release_errors.version_code }}</div>{% endif %}
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">Minimum Supported Version Code</label>
+                        <label class="form-label fw-semibold">Earliest Supported Release</label>
                         <input type="number" min="0" class="form-control{% if release_errors.minimum_supported_version_code %} is-invalid{% endif %}" name="minimum_supported_version_code" value="{{ release_form_data.minimum_supported_version_code }}">
                         {% if release_errors.minimum_supported_version_code %}<div class="invalid-feedback">{{ release_errors.minimum_supported_version_code }}</div>{% endif %}
                     </div>
@@ -70,12 +70,12 @@
                         {% if release_errors.published_at %}<div class="invalid-feedback">{{ release_errors.published_at }}</div>{% endif %}
                     </div>
                     <div class="col-12">
-                        <label class="form-label fw-semibold">Release Notes</label>
+                        <label class="form-label fw-semibold">Update Notes</label>
                         <textarea class="form-control{% if release_errors.release_notes %} is-invalid{% endif %}" name="release_notes" rows="4" placeholder="What changed in this update?">{{ release_form_data.release_notes }}</textarea>
                         {% if release_errors.release_notes %}<div class="invalid-feedback">{{ release_errors.release_notes }}</div>{% endif %}
                     </div>
                     <div class="col-12">
-                        <label class="form-label fw-semibold">APK File</label>
+                        <label class="form-label fw-semibold">Update File</label>
                         <input type="file" class="form-control{% if release_errors.apk_file %} is-invalid{% endif %}" id="developerApkFileInput" name="apk_file" accept=".apk" required>
                         {% if release_errors.apk_file %}<div class="invalid-feedback">{{ release_errors.apk_file }}</div>{% endif %}
                     </div>
@@ -85,7 +85,7 @@
                                 <div>
                                     <span class="mf-db2-kicker">Upload Progress</span>
                                     <h6 class="mb-1" id="developerUploadFileName">No file selected</h6>
-                                    <p class="text-muted mb-0" id="developerUploadStatusText">Choose an APK file to see upload progress.</p>
+                                    <p class="text-muted mb-0" id="developerUploadStatusText">Choose an update file to see upload progress.</p>
                                 </div>
                                 <div class="hc-upload-progress-metric">
                                     <strong id="developerUploadPercent">0%</strong>
@@ -100,18 +100,18 @@
                     <div class="col-md-6">
                         <div class="form-check mt-2">
                             <input class="form-check-input" type="checkbox" id="developerMandatoryRelease" name="is_mandatory" {% if release_form_data.is_mandatory %}checked{% endif %}>
-                            <label class="form-check-label" for="developerMandatoryRelease">Force update for staff</label>
+                            <label class="form-check-label" for="developerMandatoryRelease">Require this update for all staff</label>
                         </div>
                     </div>
                     <div class="col-md-6">
                         <div class="form-check mt-2">
                             <input class="form-check-input" type="checkbox" id="developerActiveRelease" name="is_active" {% if release_form_data.is_active %}checked{% endif %}>
-                            <label class="form-check-label" for="developerActiveRelease">Publish as active release</label>
+                            <label class="form-check-label" for="developerActiveRelease">Make this the current update</label>
                         </div>
                     </div>
                 </div>
                 <div class="d-flex justify-content-end mt-4">
-                    <button type="submit" class="btn btn-primary">Publish APK Release</button>
+                    <button type="submit" class="btn btn-primary">Publish Update</button>
                 </div>
             </form>
         </div>
@@ -121,11 +121,11 @@
 <section class="row g-4 mt-1">
     <div class="col-lg-4">
         <div class="hc-surface-card h-100">
-            <span class="mf-db2-kicker">Upload Summary</span>
-            <h5 class="mt-2 mb-3">Release storage overview</h5>
+            <span class="mf-db2-kicker">Update Summary</span>
+            <h5 class="mt-2 mb-3">Stored update overview</h5>
             <div class="hc-profile-meta-grid">
                 <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Total Releases</span>
+                    <span class="hc-profile-meta-label">Total Updates</span>
                     <strong>{{ release_summary.release_count }}</strong>
                 </div>
                 <div class="hc-profile-meta-card">
@@ -133,7 +133,7 @@
                     <strong>{{ release_summary.total_uploaded_label }}</strong>
                 </div>
                 <div class="hc-profile-meta-card hc-profile-meta-card-wide">
-                    <span class="hc-profile-meta-label">Largest APK</span>
+                    <span class="hc-profile-meta-label">Largest Update File</span>
                     <strong>{{ release_summary.largest_release_label }}</strong>
                 </div>
             </div>
@@ -144,7 +144,7 @@
             <div class="mf-db2-panel-head mb-3">
                 <div>
                     <span class="mf-db2-kicker">Upload Graph</span>
-                    <h5>APK data uploaded by release</h5>
+                    <h5>File size by update</h5>
                 </div>
             </div>
             <div class="hc-release-graph">
@@ -162,7 +162,7 @@
                     </div>
                 </div>
                 {% empty %}
-                <div class="hc-document-empty">Upload your first APK to start tracking release data.</div>
+                <div class="hc-document-empty">Upload your first update file to start tracking file history.</div>
                 {% endfor %}
             </div>
         </div>
@@ -172,15 +172,15 @@
 <section class="hc-surface-card mt-4">
     <div class="mf-db2-panel-head mb-3">
         <div>
-            <span class="mf-db2-kicker">Release History</span>
-            <h5>Published Android builds</h5>
+            <span class="mf-db2-kicker">Update History</span>
+            <h5>Published Mobile Updates</h5>
         </div>
     </div>
     <div class="table-responsive">
         <table class="table hc-table align-middle mb-0">
             <thead>
                 <tr>
-                    <th>Release</th>
+                    <th>Update</th>
                     <th>Scope</th>
                     <th>Published</th>
                     <th>File</th>
@@ -192,13 +192,13 @@
                 <tr>
                     <td>
                         <strong>{{ row.version_name }}</strong>
-                        <div class="text-muted small">Version code {{ row.version_code }} | By {{ row.created_by }}</div>
+                        <div class="text-muted small">Release number {{ row.version_code }} | By {{ row.created_by }}</div>
                         <div class="text-muted small">{{ row.release_notes }}</div>
                     </td>
                     <td>
                         <span class="hc-status {% if row.is_active %}hc-status-success{% else %}hc-status-muted{% endif %}">{% if row.is_active %}Active{% else %}Archived{% endif %}</span>
-                        <div class="text-muted small mt-1">Min support {{ row.minimum_supported_version_code }}</div>
-                        <div class="text-muted small">{% if row.is_mandatory %}Mandatory{% else %}Optional{% endif %}</div>
+                        <div class="text-muted small mt-1">Earliest supported release {{ row.minimum_supported_version_code }}</div>
+                        <div class="text-muted small">{% if row.is_mandatory %}Required for all staff{% else %}Available when ready{% endif %}</div>
                     </td>
                     <td>{{ row.published_at }}</td>
                     <td>
@@ -214,12 +214,12 @@
                             <button type="submit" class="btn btn-outline-primary btn-sm">Make Active</button>
                         </form>
                         {% else %}
-                        <span class="text-muted small">Live for staff devices</span>
+                        <span class="text-muted small">Live for team devices</span>
                         {% endif %}
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="5" class="text-center py-4">No APK releases uploaded yet.</td></tr>
+                <tr><td colspan="5" class="text-center py-4">No mobile updates published yet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -271,7 +271,7 @@
         }
         fileName.textContent = file.name;
         fileSize.textContent = formatBytes(file.size);
-        setProgress(0, 'Ready to upload this APK build.');
+        setProgress(0, 'Ready to upload this release file.');
     });
 
     form.addEventListener('submit', (event) => {
@@ -288,30 +288,30 @@
         xhr.upload.addEventListener('loadstart', () => {
             fileName.textContent = file.name;
             fileSize.textContent = formatBytes(file.size);
-            setProgress(2, 'Starting secure upload to the server.');
+            setProgress(2, 'Preparing upload.');
             if (submitButton) {
                 submitButton.disabled = true;
-                submitButton.textContent = 'Uploading APK...';
+                submitButton.textContent = 'Uploading...';
             }
         });
 
         xhr.upload.addEventListener('progress', (uploadEvent) => {
             if (!uploadEvent.lengthComputable) {
-                setProgress(55, 'Uploading the APK package to the server.');
+                setProgress(55, 'Uploading the release file.');
                 return;
             }
             const percent = (uploadEvent.loaded / uploadEvent.total) * 100;
             const message = percent < 100
                 ? `Uploading ${formatBytes(uploadEvent.loaded)} of ${formatBytes(uploadEvent.total)}.`
-                : 'Finalizing the uploaded APK release.';
+                : 'Finalizing the update.';
             setProgress(percent, message);
         });
 
         xhr.addEventListener('load', () => {
-            setProgress(100, 'Upload completed. Refreshing the release dashboard.');
+            setProgress(100, 'Upload complete. Refreshing the page.');
             if (submitButton) {
                 submitButton.disabled = false;
-                submitButton.textContent = 'Publish APK Release';
+                submitButton.textContent = 'Publish Update';
             }
             if (xhr.status >= 200 && xhr.status < 400) {
                 document.open();
@@ -319,14 +319,14 @@
                 document.close();
                 return;
             }
-            statusText.textContent = 'Upload finished with an error. Please review the form and try again.';
+            statusText.textContent = 'Upload finished with an error. Please review the details and try again.';
         });
 
         xhr.addEventListener('error', () => {
-            setProgress(0, 'Upload failed. Check your network connection and try again.');
+            setProgress(0, 'Upload could not be completed. Please check your internet connection and try again.');
             if (submitButton) {
                 submitButton.disabled = false;
-                submitButton.textContent = 'Publish APK Release';
+                submitButton.textContent = 'Publish Update';
             }
         });
 

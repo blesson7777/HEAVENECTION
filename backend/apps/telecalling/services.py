@@ -47,6 +47,8 @@ VERIFIED_CALL_SOURCES = {
     "call_log_short_resolution",
     "call_log_short_recall",
 }
+QUALITY_SCORE_LOOKBACK_DAYS = 30
+MISSED_CALLBACK_AFTER_HOURS = 24
 TWOPLACES = Decimal("0.01")
 DEFAULT_LEAD_QUEUE_LIMIT = 1
 CALLBACK_NOON_HOURS = range(12, 16)
@@ -721,8 +723,11 @@ def reconcile_session(session, now=None):
     return session
 
 
-def authenticate_staff(phone, password, required_role=None):
-    queryset = Staff.objects.filter(phone=phone.strip(), is_active=True)
+def authenticate_staff(identifier, password, required_role=None):
+    identifier = identifier.strip()
+    queryset = Staff.objects.filter(is_active=True).filter(
+        Q(phone=identifier) | Q(email__iexact=identifier)
+    )
     if required_role:
         queryset = queryset.filter(role=required_role)
 
@@ -931,6 +936,170 @@ def _current_callback_window(now=None):
     if hour in CALLBACK_NIGHT_HOURS:
         return Lead.CallbackWindow.NIGHT
     return ""
+
+
+def _quality_tone(score):
+    if score >= 85:
+        return "success"
+    if score >= 70:
+        return "primary"
+    if score >= 55:
+        return "warning"
+    return "muted"
+
+
+def _quality_label(score, *, has_activity):
+    if not has_activity:
+        return "No Recent Activity"
+    if score >= 85:
+        return "Excellent"
+    if score >= 70:
+        return "Strong"
+    if score >= 55:
+        return "Needs Attention"
+    return "Review Needed"
+
+
+def _build_quality_note(*, followup_started_count, followup_closed_count, missed_callback_count):
+    if followup_started_count and followup_closed_count:
+        return f"{followup_closed_count} of {followup_started_count} follow-up leads completed."
+    if followup_started_count:
+        return f"{followup_started_count} follow-up leads still in progress."
+    if missed_callback_count:
+        return f"{missed_callback_count} callback lead(s) need review."
+    return "Build more recent call activity for a fuller review."
+
+
+def _build_staff_quality_metrics(staff_ids, *, now=None):
+    if not staff_ids:
+        return {}
+
+    current_time = timezone.localtime(now or timezone.now())
+    lookback_start = current_time - timedelta(days=QUALITY_SCORE_LOOKBACK_DAYS)
+    missed_callback_cutoff = current_time - timedelta(hours=MISSED_CALLBACK_AFTER_HOURS)
+
+    recent_calls = Call.objects.filter(
+        staff_id__in=staff_ids,
+        start_time__gte=lookback_start,
+    ).values("staff_id", "lead_id", "status", "is_verified")
+
+    callback_rows = Lead.objects.filter(
+        assigned_to_id__in=staff_ids,
+        status=Lead.Status.CALL_BACK,
+    ).values("assigned_to_id", "last_contacted_at")
+
+    metrics = {
+        staff_id: {
+            "total_completed_calls": 0,
+            "invalid_short_calls": 0,
+            "verified_resolved_calls": 0,
+            "followup_started_leads": set(),
+            "followup_closed_leads": set(),
+            "callback_total": 0,
+            "missed_callbacks": 0,
+        }
+        for staff_id in staff_ids
+    }
+
+    for row in recent_calls:
+        staff_id = row["staff_id"]
+        if staff_id not in metrics:
+            continue
+        status = row["status"]
+        if status != Call.Status.STARTED:
+            metrics[staff_id]["total_completed_calls"] += 1
+        if status == Call.Status.INVALID_SHORT:
+            metrics[staff_id]["invalid_short_calls"] += 1
+        elif status != Call.Status.STARTED and row["is_verified"]:
+            metrics[staff_id]["verified_resolved_calls"] += 1
+        if status in {Call.Status.INTERESTED, Call.Status.CALL_BACK}:
+            metrics[staff_id]["followup_started_leads"].add(str(row["lead_id"]))
+        if status in {Call.Status.CONVERTED, Call.Status.NOT_INTERESTED}:
+            metrics[staff_id]["followup_closed_leads"].add(str(row["lead_id"]))
+
+    for row in callback_rows:
+        staff_id = row["assigned_to_id"]
+        if staff_id not in metrics:
+            continue
+        metrics[staff_id]["callback_total"] += 1
+        last_contacted_at = row["last_contacted_at"]
+        if not last_contacted_at or timezone.localtime(last_contacted_at) <= missed_callback_cutoff:
+            metrics[staff_id]["missed_callbacks"] += 1
+
+    quality_payload = {}
+    for staff_id, staff_metrics in metrics.items():
+        total_completed_calls = staff_metrics["total_completed_calls"]
+        invalid_short_calls = staff_metrics["invalid_short_calls"]
+        resolved_calls = max(total_completed_calls - invalid_short_calls, 0)
+        verified_resolved_calls = min(staff_metrics["verified_resolved_calls"], resolved_calls)
+        followup_started_count = len(staff_metrics["followup_started_leads"])
+        followup_closed_count = len(
+            staff_metrics["followup_started_leads"] & staff_metrics["followup_closed_leads"]
+        )
+        callback_total = staff_metrics["callback_total"]
+        missed_callback_count = staff_metrics["missed_callbacks"]
+
+        weighted_total = Decimal("0")
+        total_weight = Decimal("0")
+
+        outcome_score = None
+        if total_completed_calls > 0:
+            resolved_ratio = Decimal(resolved_calls) / Decimal(total_completed_calls)
+            verified_ratio = (
+                Decimal(verified_resolved_calls) / Decimal(resolved_calls)
+                if resolved_calls
+                else Decimal("0")
+            )
+            outcome_score = ((resolved_ratio * Decimal("0.6")) + (verified_ratio * Decimal("0.4"))) * Decimal("100")
+            weighted_total += outcome_score * Decimal("0.45")
+            total_weight += Decimal("0.45")
+
+        followup_score = None
+        if followup_started_count > 0:
+            followup_score = (Decimal(followup_closed_count) / Decimal(followup_started_count)) * Decimal("100")
+            weighted_total += followup_score * Decimal("0.35")
+            total_weight += Decimal("0.35")
+
+        callback_score = None
+        if callback_total > 0:
+            callback_score = max(
+                Decimal("0"),
+                (Decimal(callback_total - missed_callback_count) / Decimal(callback_total)) * Decimal("100"),
+            )
+            weighted_total += callback_score * Decimal("0.20")
+            total_weight += Decimal("0.20")
+
+        has_activity = total_completed_calls > 0 or followup_started_count > 0 or callback_total > 0
+        overall_score = int((weighted_total / total_weight).quantize(Decimal("1"))) if total_weight > 0 else 0
+
+        outcome_value = int(outcome_score.quantize(Decimal("1"))) if outcome_score is not None else None
+        followup_value = int(followup_score.quantize(Decimal("1"))) if followup_score is not None else None
+        callback_value = int(callback_score.quantize(Decimal("1"))) if callback_score is not None else None
+
+        quality_payload[staff_id] = {
+            "score": overall_score,
+            "label": _quality_label(overall_score, has_activity=has_activity),
+            "tone": _quality_tone(overall_score) if has_activity else "muted",
+            "note": _build_quality_note(
+                followup_started_count=followup_started_count,
+                followup_closed_count=followup_closed_count,
+                missed_callback_count=missed_callback_count,
+            ),
+            "has_activity": has_activity,
+            "outcome_consistency": outcome_value,
+            "outcome_consistency_label": f"{outcome_value}%" if outcome_value is not None else "--",
+            "followup_completion": followup_value,
+            "followup_completion_label": f"{followup_value}%" if followup_value is not None else "--",
+            "callback_discipline": callback_value,
+            "callback_discipline_label": f"{callback_value}%" if callback_value is not None else "--",
+            "followup_started_count": followup_started_count,
+            "followup_closed_count": followup_closed_count,
+            "callback_total": callback_total,
+            "missed_callbacks": missed_callback_count,
+            "lookback_days": QUALITY_SCORE_LOOKBACK_DAYS,
+        }
+
+    return quality_payload
 
 
 def _with_lead_priority(queryset, *, now=None, prioritized_lead_ids=None):
@@ -1502,7 +1671,7 @@ def build_learning_management_payload():
             status_label = "Inactive"
         elif lesson.is_mandatory:
             status_filter = "mandatory"
-            status_label = "Mandatory"
+            status_label = "Required"
         else:
             status_filter = "optional"
             status_label = "Optional"
@@ -1865,8 +2034,10 @@ def build_team_management_payload():
     today, start, end = _today_range()
     active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
     staff_queryset = _staff_queryset()
+    staff_ids = [staff.id for staff in staff_queryset]
     open_sessions = _open_sessions_by_staff()
     live_call_staff_ids = _live_call_staff_ids()
+    quality_by_staff = _build_staff_quality_metrics(staff_ids)
 
     call_totals = {
         row["staff_id"]: row["count"]
@@ -1910,6 +2081,7 @@ def build_team_management_payload():
         calls_today = call_totals.get(staff.id, 0)
         converted_today = converted_totals.get(staff.id, 0)
         assigned_leads = assigned_totals.get(staff.id, 0)
+        quality = quality_by_staff.get(staff.id, {})
         is_available = staff.is_active and online_label in {"Online", "On Call"}
         status_filter = "inactive"
         status_tone = "muted"
@@ -1957,6 +2129,13 @@ def build_team_management_payload():
                 "assigned_leads": assigned_leads,
                 "last_seen": _format_datetime(staff.last_seen_at),
                 "is_available": is_available,
+                "quality_score": quality.get("score", 0),
+                "quality_label": quality.get("label", "No Recent Activity"),
+                "quality_tone": quality.get("tone", "muted"),
+                "quality_note": quality.get("note", "Build more recent call activity for a fuller review."),
+                "outcome_consistency_label": quality.get("outcome_consistency_label", "--"),
+                "followup_completion_label": quality.get("followup_completion_label", "--"),
+                "missed_callbacks": quality.get("missed_callbacks", 0),
             }
         )
 
@@ -1990,6 +2169,7 @@ def build_staff_profile_payload(request, staff):
         Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES).select_related("assigned_to"),
         now=timezone.now(),
     )
+    quality = _build_staff_quality_metrics([staff.id]).get(staff.id, {})
 
     active_seconds_today = sessions_today.aggregate(total=Sum("active_seconds")).get("total") or 0
     converted_today = qualifying_calls_today.filter(status=Call.Status.CONVERTED).count()
@@ -2056,6 +2236,18 @@ def build_staff_profile_payload(request, staff):
             "bonus_per_conversion": _format_currency(staff.bonus_per_conversion),
             "compensation_type_label": staff.get_compensation_type_display(),
             "queue_target": get_lead_queue_limit(),
+            "quality_score": quality.get("score", 0),
+            "quality_label": quality.get("label", "No Recent Activity"),
+            "quality_tone": quality.get("tone", "muted"),
+            "quality_note": quality.get("note", "Build more recent call activity for a fuller review."),
+            "quality_lookback_days": quality.get("lookback_days", QUALITY_SCORE_LOOKBACK_DAYS),
+            "outcome_consistency_label": quality.get("outcome_consistency_label", "--"),
+            "followup_completion_label": quality.get("followup_completion_label", "--"),
+            "callback_discipline_label": quality.get("callback_discipline_label", "--"),
+            "followup_started_count": quality.get("followup_started_count", 0),
+            "followup_closed_count": quality.get("followup_closed_count", 0),
+            "callback_total": quality.get("callback_total", 0),
+            "missed_callbacks": quality.get("missed_callbacks", 0),
         },
         "identity_details": {
             "email": staff.email or "--",
@@ -2081,7 +2273,7 @@ def build_staff_profile_payload(request, staff):
     }
 
 
-def build_salary_control_payload():
+def build_salary_control_payload(request):
     hourly_tracking_count = 0
     weekly_count = 0
     monthly_count = 0
@@ -2098,6 +2290,7 @@ def build_salary_control_payload():
                 "id": str(staff.id),
                 "name": staff.name,
                 "phone": staff.phone,
+                "email": staff.email or "--",
                 "is_active": staff.is_active,
                 "compensation_type": staff.compensation_type,
                 "compensation_type_label": _payout_cycle_label(staff),
@@ -2114,6 +2307,17 @@ def build_salary_control_payload():
                 "bonus_per_conversion": _format_currency(staff.bonus_per_conversion),
                 "bonus_per_conversion_raw": str(staff.bonus_per_conversion),
                 "target_label": _salary_setting_target_label(staff),
+                "bank_account_name": staff.bank_account_name or "--",
+                "bank_name": staff.bank_name or "--",
+                "bank_account_number": staff.bank_account_number or "--",
+                "bank_ifsc_code": staff.bank_ifsc_code or "--",
+                "has_passbook_photo": bool(staff.passbook_photo),
+                "passbook_photo_url": request.build_absolute_uri(
+                    reverse("staff-document-page", args=[staff.id, "passbook"])
+                )
+                if staff.passbook_photo
+                else "",
+                "profile_url": reverse("staff-profile-page", args=[staff.id]),
             }
         )
 
@@ -2334,7 +2538,7 @@ def build_developer_release_payload():
             "is_mandatory": release.is_mandatory,
             "is_active": release.is_active,
             "published_at": _format_datetime(release.published_at),
-            "created_by": release.created_by.name if release.created_by else "Developer",
+            "created_by": release.created_by.name if release.created_by else "Release Desk",
             "download_url": reverse("app-release-download", args=[release.id]) if release.apk_file else "",
             "file_size_label": f"{round((release.file_size_bytes or 0) / (1024 * 1024), 2)} MB",
         }

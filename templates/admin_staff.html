@@ -76,6 +76,7 @@
                     <th>Staff</th>
                     <th>Presence</th>
                     <th>Daily Output</th>
+                    <th>Quality Score</th>
                     <th>Lead Queue</th>
                     <th>Rates</th>
                     <th class="text-end">Actions</th>
@@ -128,6 +129,20 @@
                         </div>
                     </td>
                     <td>
+                        <div class="hc-quality-card">
+                            <div class="hc-quality-card-head">
+                                <strong>{{ staff.quality_score }}</strong>
+                                <span class="hc-status hc-status-{{ staff.quality_tone }}">{{ staff.quality_label }}</span>
+                            </div>
+                            <small>{{ staff.quality_note }}</small>
+                            <div class="hc-quality-card-meta">
+                                <span>Outcome {{ staff.outcome_consistency_label }}</span>
+                                <span>Follow-Up {{ staff.followup_completion_label }}</span>
+                                <span>Missed {{ staff.missed_callbacks }}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
                         <div class="hc-staff-queue-card">
                             <strong>{{ staff.assigned_leads }}</strong>
                             <span>Active leads assigned</span>
@@ -168,7 +183,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" class="text-center py-4">No staff accounts available.</td></tr>
+                <tr><td colspan="7" class="text-center py-4">No staff accounts available.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

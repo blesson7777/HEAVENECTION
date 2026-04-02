@@ -78,9 +78,9 @@
             });
         } catch (error) {
             window.heavenectionNetworkState?.show(
-                "Connection lost. Check your internet or server and wait for recovery.",
+                "Connection interrupted. Please wait while the page reconnects.",
             );
-            throw new Error("Network connection lost.");
+            throw new Error("Connection interrupted.");
         }
 
         let payload = null;
@@ -91,7 +91,7 @@
         }
 
         if (!response.ok) {
-            throw new Error(payload ? extractErrorMessage(payload) : `Request failed with status ${response.status}.`);
+            throw new Error(payload ? extractErrorMessage(payload) : "Something went wrong. Please try again.");
         }
 
         return payload;
@@ -112,9 +112,9 @@
             });
         } catch (error) {
             window.heavenectionNetworkState?.show(
-                "Connection lost. Check your internet or server and wait for recovery.",
+                "Connection interrupted. Please wait while the page reconnects.",
             );
-            throw new Error("Network connection lost.");
+            throw new Error("Connection interrupted.");
         }
 
         let payload = null;
@@ -125,7 +125,7 @@
         }
 
         if (!response.ok) {
-            throw new Error(payload ? extractErrorMessage(payload) : `Request failed with status ${response.status}.`);
+            throw new Error(payload ? extractErrorMessage(payload) : "Something went wrong. Please try again.");
         }
 
         return payload;
@@ -759,14 +759,32 @@
         const idInput = document.getElementById("salaryControlStaffId");
         const nameInput = document.getElementById("salaryControlStaffName");
         const phoneInput = document.getElementById("salaryControlPhone");
+        const emailInput = document.getElementById("salaryControlEmail");
         const compensationTypeInput = document.getElementById("salaryCompensationType");
         const hourlyRateInput = document.getElementById("salaryHourlyRate");
         const targetWeekInput = document.getElementById("salaryTargetHoursWeek");
         const targetMonthInput = document.getElementById("salaryTargetHoursMonth");
         const callRateInput = document.getElementById("salaryCallRate");
         const bonusRateInput = document.getElementById("salaryBonusRate");
+        const accountHolderValue = document.getElementById("salaryControlAccountHolderValue");
+        const bankNameValue = document.getElementById("salaryControlBankNameValue");
+        const accountNumberValue = document.getElementById("salaryControlAccountNumberValue");
+        const ifscValue = document.getElementById("salaryControlIfscValue");
+        const passbookLink = document.getElementById("salaryControlPassbookLink");
+        const passbookPreview = document.getElementById("salaryControlPassbookPreview");
+        const passbookImage = document.getElementById("salaryControlPassbookImage");
+        const passbookEmpty = document.getElementById("salaryControlPassbookEmpty");
+        const profileLink = document.getElementById("salaryControlProfileLink");
         const feedback = document.getElementById("salaryControlFeedback");
         const submitButton = document.getElementById("salaryControlSubmit");
+
+        function setText(node, value, fallback = "Not added yet") {
+            if (!node) {
+                return;
+            }
+            const resolved = (value || "").toString().trim();
+            node.textContent = resolved || fallback;
+        }
 
         function showFeedback(message, isError) {
             feedback.textContent = message;
@@ -788,12 +806,40 @@
                 idInput.value = button.dataset.staffId || "";
                 nameInput.value = button.dataset.name || "";
                 phoneInput.value = button.dataset.phone || "";
+                if (emailInput) {
+                    emailInput.value = button.dataset.email || "";
+                }
                 compensationTypeInput.value = button.dataset.compensationType || "hourly";
                 hourlyRateInput.value = button.dataset.hourlyRate || "150";
                 targetWeekInput.value = button.dataset.targetHoursWeek || "48";
                 targetMonthInput.value = button.dataset.targetHoursMonth || "208";
                 callRateInput.value = button.dataset.callRate || "3";
                 bonusRateInput.value = button.dataset.bonus || "500";
+                setText(accountHolderValue, button.dataset.bankAccountName);
+                setText(bankNameValue, button.dataset.bankName);
+                setText(accountNumberValue, button.dataset.bankAccountNumber);
+                setText(ifscValue, button.dataset.bankIfsc);
+                const passbookUrl = button.dataset.passbookPhotoUrl || "";
+                if (passbookLink) {
+                    passbookLink.hidden = !passbookUrl;
+                    passbookLink.href = passbookUrl || "#";
+                }
+                if (passbookPreview) {
+                    passbookPreview.hidden = !passbookUrl;
+                }
+                if (passbookImage && passbookUrl) {
+                    passbookImage.src = passbookUrl;
+                } else if (passbookImage) {
+                    passbookImage.removeAttribute("src");
+                }
+                if (passbookEmpty) {
+                    passbookEmpty.hidden = Boolean(passbookUrl);
+                }
+                if (profileLink) {
+                    const resolvedProfileUrl = button.dataset.profileUrl || "";
+                    profileLink.hidden = !resolvedProfileUrl;
+                    profileLink.href = resolvedProfileUrl || "#";
+                }
                 titleNode.textContent = `Salary Settings - ${button.dataset.name || "Staff"}`;
                 modal.show();
             });

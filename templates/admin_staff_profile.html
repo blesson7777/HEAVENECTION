@@ -43,9 +43,42 @@
                 </div>
                 <div class="col-6">
                     <div class="hc-summary-card h-100">
-                        <span class="mf-db2-kicker">No Response</span>
-                        <h3 class="mb-1">{{ summary.no_answer_today }}</h3>
-                        <p class="mb-0 text-muted">{{ summary.status_label }}</p>
+                        <span class="mf-db2-kicker">Quality Score</span>
+                        <h3 class="mb-1">{{ summary.quality_score }}</h3>
+                        <p class="mb-0 text-muted">{{ summary.quality_label }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hc-summary-card mb-4">
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                    <div>
+                        <span class="mf-db2-kicker">Quality Review</span>
+                        <h5 class="mb-1">{{ summary.quality_label }}</h5>
+                        <p class="text-muted mb-0">{{ summary.quality_note }}</p>
+                    </div>
+                    <span class="hc-status hc-status-{{ summary.quality_tone }}">{{ summary.quality_score }} / 100</span>
+                </div>
+                <div class="hc-profile-meta-grid">
+                    <div class="hc-profile-meta-card">
+                        <span class="hc-profile-meta-label">Call Outcome Consistency</span>
+                        <strong>{{ summary.outcome_consistency_label }}</strong>
+                        <small>Recorded over the last {{ summary.quality_lookback_days }} days.</small>
+                    </div>
+                    <div class="hc-profile-meta-card">
+                        <span class="hc-profile-meta-label">Follow-Up Completion</span>
+                        <strong>{{ summary.followup_completion_label }}</strong>
+                        <small>{{ summary.followup_closed_count }} completed from {{ summary.followup_started_count }} started.</small>
+                    </div>
+                    <div class="hc-profile-meta-card">
+                        <span class="hc-profile-meta-label">Callback Discipline</span>
+                        <strong>{{ summary.callback_discipline_label }}</strong>
+                        <small>{{ summary.missed_callbacks }} missed from {{ summary.callback_total }} active callbacks.</small>
+                    </div>
+                    <div class="hc-profile-meta-card">
+                        <span class="hc-profile-meta-label">No Response Today</span>
+                        <strong>{{ summary.no_answer_today }}</strong>
+                        <small>{{ summary.status_label }}</small>
                     </div>
                 </div>
             </div>
