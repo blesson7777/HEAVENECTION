@@ -16,8 +16,30 @@ from backend.apps.telecalling.models import (
 
 
 class LoginSerializer(serializers.Serializer):
-    phone = serializers.CharField(max_length=20)
+    identifier = serializers.CharField(max_length=254, required=False, allow_blank=False)
+    phone = serializers.CharField(max_length=254, required=False, allow_blank=False)
     password = serializers.CharField()
+
+    def validate(self, attrs):
+        identifier = (attrs.get("identifier") or attrs.get("phone") or "").strip()
+        if not identifier:
+            raise serializers.ValidationError(
+                {"identifier": "Enter your email address or phone number."}
+            )
+        attrs["identifier"] = identifier
+        return attrs
+
+
+def _validate_unique_email(value, *, instance=None):
+    email = value.strip().lower()
+    if not email:
+        return ""
+    queryset = Staff.objects.filter(email__iexact=email)
+    if instance:
+        queryset = queryset.exclude(pk=instance.pk)
+    if queryset.exists():
+        raise serializers.ValidationError("Email address already exists.")
+    return email
 
 
 class HeartbeatSerializer(serializers.Serializer):
@@ -228,6 +250,9 @@ class StaffProfileUpdateSerializer(serializers.Serializer):
         if queryset.exists():
             raise serializers.ValidationError("Phone number already exists.")
         return phone
+
+    def validate_email(self, value):
+        return _validate_unique_email(value, instance=getattr(self, "instance", None))
 
     def validate_aadhar_number(self, value):
         normalized = "".join(char for char in value if char.isdigit())
@@ -1007,4 +1032,6 @@ class UpdateTrainingLessonSerializer(serializers.ModelSerializer):
             "sort_order",
             "published_at",
         )
+
+
 
