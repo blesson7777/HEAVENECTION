@@ -126,7 +126,9 @@ class StaffProfile {
     required this.bankIfscCode,
     required this.aadharNumber,
     required this.aadharPhotoUrl,
+    required this.aadharPhotoName,
     required this.passbookPhotoUrl,
+    required this.passbookPhotoName,
     required this.lastSeenAt,
     required this.salarySummary,
     required this.salaryHistory,
@@ -145,7 +147,9 @@ class StaffProfile {
   final String bankIfscCode;
   final String aadharNumber;
   final String aadharPhotoUrl;
+  final String aadharPhotoName;
   final String passbookPhotoUrl;
+  final String passbookPhotoName;
   final DateTime? lastSeenAt;
   final SalarySummary salarySummary;
   final List<SalaryHistoryItem> salaryHistory;
@@ -168,7 +172,9 @@ class StaffProfile {
       bankIfscCode: json['bank_ifsc_code']?.toString() ?? '',
       aadharNumber: json['aadhar_number']?.toString() ?? '',
       aadharPhotoUrl: json['aadhar_photo_url']?.toString() ?? '',
+      aadharPhotoName: json['aadhar_photo_name']?.toString() ?? '',
       passbookPhotoUrl: json['passbook_photo_url']?.toString() ?? '',
+      passbookPhotoName: json['passbook_photo_name']?.toString() ?? '',
       lastSeenAt: json['last_seen_at'] == null
           ? null
           : DateTime.tryParse(json['last_seen_at'].toString())?.toLocal(),

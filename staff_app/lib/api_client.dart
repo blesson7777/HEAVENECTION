@@ -95,6 +95,13 @@ class ApiClient {
     return StaffProfile.fromJson(_decodeMap(response.body));
   }
 
+  Map<String, String> get authenticatedDocumentHeaders {
+    if (_accessToken == null || _accessToken!.isEmpty) {
+      return const {};
+    }
+    return {'Authorization': 'Bearer $_accessToken'};
+  }
+
   Future<AppUpdateInfo?> fetchAppUpdate({required int versionCode}) async {
     final response = await _send(
       'GET',
@@ -145,6 +152,21 @@ class ApiClient {
       filePaths: {
         if (aadharPhoto != null) 'aadhar_photo': aadharPhoto.path,
         if (passbookPhoto != null) 'passbook_photo': passbookPhoto.path,
+      },
+    );
+    return StaffProfile.fromJson(_decodeMap(response.body));
+  }
+
+  Future<StaffProfile> removeStaffDocument({
+    bool removeAadharPhoto = false,
+    bool removePassbookPhoto = false,
+  }) async {
+    final response = await _send(
+      'PATCH',
+      '/api/staff/profile/',
+      body: {
+        'remove_aadhar_photo': removeAadharPhoto,
+        'remove_passbook_photo': removePassbookPhoto,
       },
     );
     return StaffProfile.fromJson(_decodeMap(response.body));
@@ -370,6 +392,13 @@ class ApiClient {
           break;
         case 'POST':
           response = await _client.post(
+            uri,
+            headers: headers,
+            body: body == null ? null : jsonEncode(body),
+          );
+          break;
+        case 'PATCH':
+          response = await _client.patch(
             uri,
             headers: headers,
             body: body == null ? null : jsonEncode(body),

@@ -1296,3 +1296,71 @@
         min-width: 0;
     }
 }
+
+.hc-release-graph {
+  display: grid;
+  gap: 1rem;
+}
+
+.hc-release-graph-row {
+  border: 1px solid rgba(77, 92, 144, 0.12);
+  border-radius: 18px;
+  padding: 0.95rem 1rem;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.hc-release-graph-track {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(77, 92, 144, 0.12);
+  overflow: hidden;
+}
+
+.hc-release-graph-bar {
+  height: 100%;
+  min-width: 0.75rem;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #4d5c90 0%, #7285ca 100%);
+  box-shadow: 0 8px 18px rgba(77, 92, 144, 0.25);
+}
+
+.hc-upload-progress-card {
+  border: 1px solid rgba(77, 92, 144, 0.14);
+  border-radius: 20px;
+  padding: 1rem 1.1rem;
+  background: linear-gradient(180deg, rgba(77, 92, 144, 0.08) 0%, rgba(255, 255, 255, 0.95) 100%);
+}
+
+.hc-upload-progress-metric {
+  min-width: 92px;
+  text-align: right;
+}
+
+.hc-upload-progress-metric strong {
+  display: block;
+  font-size: 1.25rem;
+  color: #2e385e;
+}
+
+.hc-upload-progress-metric small {
+  color: #64748b;
+}
+
+.hc-upload-progress-track {
+  width: 100%;
+  height: 14px;
+  border-radius: 999px;
+  background: rgba(77, 92, 144, 0.14);
+  overflow: hidden;
+}
+
+.hc-upload-progress-bar {
+  height: 100%;
+  min-width: 0.85rem;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #4d5c90 0%, #6d83d7 100%);
+  box-shadow: 0 12px 24px rgba(77, 92, 144, 0.24);
+  transition: width 180ms ease;
+}
+

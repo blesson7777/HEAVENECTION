@@ -30,7 +30,7 @@
             <div class="d-flex align-items-center gap-2 flex-wrap">
                 {% block page_actions %}{% endblock %}
                 <div class="hc-sync-pill"><i class="bi bi-person-badge"></i> {{ developer_user.name }} | {{ developer_user.get_role_display }}</div>
-                <form method="post" action="{% url 'developer-logout' %}" class="m-0">
+                <form method="post" action="{% url 'developer-logout' %}" class="m-0" onsubmit="return window.confirm('Do you want to logout now?');">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline-danger btn-sm">Logout</button>
                 </form>
@@ -47,5 +47,7 @@
 
         {% block developer_content %}{% endblock %}
     </div>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    {% block developer_scripts %}{% endblock %}
 </body>
 </html>

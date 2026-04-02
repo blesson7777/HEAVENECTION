@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django.db.models import Sum
+from django.urls import reverse
 from rest_framework import serializers
 from django.utils import timezone
 
@@ -194,7 +195,9 @@ class StaffSerializer(serializers.ModelSerializer):
 class StaffProfileSerializer(serializers.ModelSerializer):
     role_label = serializers.CharField(source="get_role_display", read_only=True)
     aadhar_photo_url = serializers.SerializerMethodField()
+    aadhar_photo_name = serializers.SerializerMethodField()
     passbook_photo_url = serializers.SerializerMethodField()
+    passbook_photo_name = serializers.SerializerMethodField()
     salary_summary = serializers.SerializerMethodField()
     salary_history = serializers.SerializerMethodField()
 
@@ -214,7 +217,9 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             "bank_ifsc_code",
             "aadhar_number",
             "aadhar_photo_url",
+            "aadhar_photo_name",
             "passbook_photo_url",
+            "passbook_photo_name",
             "last_seen_at",
             "salary_summary",
             "salary_history",
@@ -224,17 +229,29 @@ class StaffProfileSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not obj.aadhar_photo:
             return ""
+        url = reverse("api-staff-profile-document", args=["aadhar"])
         if request:
-            return request.build_absolute_uri(obj.aadhar_photo.url)
-        return obj.aadhar_photo.url
+            return request.build_absolute_uri(url)
+        return url
 
     def get_passbook_photo_url(self, obj):
         request = self.context.get("request")
         if not obj.passbook_photo:
             return ""
+        url = reverse("api-staff-profile-document", args=["passbook"])
         if request:
-            return request.build_absolute_uri(obj.passbook_photo.url)
-        return obj.passbook_photo.url
+            return request.build_absolute_uri(url)
+        return url
+
+    def get_aadhar_photo_name(self, obj):
+        if not obj.aadhar_photo:
+            return ""
+        return Path(obj.aadhar_photo.name).name
+
+    def get_passbook_photo_name(self, obj):
+        if not obj.passbook_photo:
+            return ""
+        return Path(obj.passbook_photo.name).name
 
     def get_salary_history(self, obj):
         records = obj.salary_records.filter(is_paid=True).order_by("-paid_at", "-period_end")[:20]
@@ -989,9 +1006,10 @@ class AppReleaseSerializer(serializers.ModelSerializer):
         request = self.context.get("request")
         if not obj.apk_file:
             return ""
+        url = reverse("app-release-download", args=[obj.id])
         if request:
-            return request.build_absolute_uri(obj.apk_file.url)
-        return obj.apk_file.url
+            return request.build_absolute_uri(url)
+        return url
 
     def get_file_size_mb(self, obj):
         return round((obj.file_size_bytes or 0) / (1024 * 1024), 2)

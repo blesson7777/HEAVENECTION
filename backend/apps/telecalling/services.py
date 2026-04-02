@@ -11,6 +11,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.db.models import Case, Count, IntegerField, Max, Q, Sum, Value, When
 from django.template.loader import render_to_string
 from django.db.models.functions import Coalesce, TruncDate
+from django.urls import reverse
 from django.utils import timezone
 
 from backend.apps.telecalling.models import (
@@ -1974,7 +1975,7 @@ def build_team_management_payload():
     }
 
 
-def build_staff_profile_payload(staff):
+def build_staff_profile_payload(request, staff):
     today, start, end = _today_range()
     active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
     open_session = get_open_session(staff, reconcile=True)
@@ -2063,8 +2064,16 @@ def build_staff_profile_payload(staff):
             "bank_account_number": staff.bank_account_number or "--",
             "bank_ifsc_code": staff.bank_ifsc_code or "--",
             "aadhar_number": staff.aadhar_number or "--",
-            "aadhar_photo_url": staff.aadhar_photo.url if staff.aadhar_photo else "",
-            "passbook_photo_url": staff.passbook_photo.url if staff.passbook_photo else "",
+            "aadhar_photo_url": request.build_absolute_uri(
+                reverse("staff-document-page", args=[staff.id, "aadhar"])
+            )
+            if staff.aadhar_photo
+            else "",
+            "passbook_photo_url": request.build_absolute_uri(
+                reverse("staff-document-page", args=[staff.id, "passbook"])
+            )
+            if staff.passbook_photo
+            else "",
         },
         "assigned_lead_rows": assigned_lead_rows,
         "recent_call_rows": recent_call_rows,
@@ -2313,6 +2322,8 @@ def set_active_app_release(app_release):
 def build_developer_release_payload():
     releases = AppRelease.objects.select_related("created_by").order_by("-version_code", "-published_at")
     latest_release = get_latest_app_release()
+    total_uploaded_bytes = sum(int(release.file_size_bytes or 0) for release in releases)
+    max_release_bytes = max((int(release.file_size_bytes or 0) for release in releases), default=0)
     release_rows = [
         {
             "id": str(release.id),
@@ -2324,13 +2335,36 @@ def build_developer_release_payload():
             "is_active": release.is_active,
             "published_at": _format_datetime(release.published_at),
             "created_by": release.created_by.name if release.created_by else "Developer",
-            "download_url": release.apk_file.url if release.apk_file else "",
+            "download_url": reverse("app-release-download", args=[release.id]) if release.apk_file else "",
             "file_size_label": f"{round((release.file_size_bytes or 0) / (1024 * 1024), 2)} MB",
         }
         for release in releases
     ]
+    upload_graph_rows = [
+        {
+            "label": f"{release.version_name} ({release.version_code})",
+            "file_size_label": f"{round((release.file_size_bytes or 0) / (1024 * 1024), 2)} MB",
+            "relative_percent": round(
+                ((int(release.file_size_bytes or 0) / max_release_bytes) * 100) if max_release_bytes else 0,
+                2,
+            ),
+            "is_active": release.is_active,
+        }
+        for release in reversed(list(releases[:8]))
+    ]
     return {
         "latest_release": latest_release,
+        "latest_release_download_url": reverse("app-release-download", args=[latest_release.id])
+        if latest_release and latest_release.apk_file
+        else "",
+        "release_summary": {
+            "release_count": len(release_rows),
+            "total_uploaded_label": f"{round(total_uploaded_bytes / (1024 * 1024), 2)} MB",
+            "largest_release_label": f"{round(max_release_bytes / (1024 * 1024), 2)} MB"
+            if max_release_bytes
+            else "0 MB",
+        },
+        "upload_graph_rows": upload_graph_rows,
         "release_rows": release_rows,
     }
 
@@ -2341,7 +2375,7 @@ def build_app_update_payload(request, *, current_version_code=0):
         return {"update_available": False}
 
     current_version_code = int(current_version_code or 0)
-    download_url = request.build_absolute_uri(latest_release.apk_file.url)
+    download_url = request.build_absolute_uri(reverse("app-release-download", args=[latest_release.id]))
     effective_mandatory = bool(
         latest_release.is_mandatory
         or (

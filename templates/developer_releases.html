@@ -2,7 +2,7 @@
 
 {% block page_actions %}
 {% if latest_release %}
-<a href="{{ latest_release.apk_file.url }}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Download Current APK</a>
+<a href="{{ latest_release_download_url }}" class="btn btn-primary btn-sm" target="_blank" rel="noopener">Download Current APK</a>
 {% endif %}
 {% endblock %}
 
@@ -45,7 +45,7 @@
                     <h5>Upload the next app update</h5>
                 </div>
             </div>
-            <form method="post" action="{% url 'developer-releases-page' %}" enctype="multipart/form-data" novalidate>
+            <form id="developerReleaseUploadForm" method="post" action="{% url 'developer-releases-page' %}" enctype="multipart/form-data" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="release_action" value="upload_release">
                 <div class="row g-3">
@@ -76,8 +76,26 @@
                     </div>
                     <div class="col-12">
                         <label class="form-label fw-semibold">APK File</label>
-                        <input type="file" class="form-control{% if release_errors.apk_file %} is-invalid{% endif %}" name="apk_file" accept=".apk" required>
+                        <input type="file" class="form-control{% if release_errors.apk_file %} is-invalid{% endif %}" id="developerApkFileInput" name="apk_file" accept=".apk" required>
                         {% if release_errors.apk_file %}<div class="invalid-feedback">{{ release_errors.apk_file }}</div>{% endif %}
+                    </div>
+                    <div class="col-12">
+                        <div class="hc-upload-progress-card" id="developerUploadProgressCard" hidden>
+                            <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-3">
+                                <div>
+                                    <span class="mf-db2-kicker">Upload Progress</span>
+                                    <h6 class="mb-1" id="developerUploadFileName">No file selected</h6>
+                                    <p class="text-muted mb-0" id="developerUploadStatusText">Choose an APK file to see upload progress.</p>
+                                </div>
+                                <div class="hc-upload-progress-metric">
+                                    <strong id="developerUploadPercent">0%</strong>
+                                    <small id="developerUploadSize">0 MB</small>
+                                </div>
+                            </div>
+                            <div class="hc-upload-progress-track">
+                                <div class="hc-upload-progress-bar" id="developerUploadProgressBar" style="width: 0%;"></div>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-md-6">
                         <div class="form-check mt-2">
@@ -96,6 +114,57 @@
                     <button type="submit" class="btn btn-primary">Publish APK Release</button>
                 </div>
             </form>
+        </div>
+    </div>
+</section>
+
+<section class="row g-4 mt-1">
+    <div class="col-lg-4">
+        <div class="hc-surface-card h-100">
+            <span class="mf-db2-kicker">Upload Summary</span>
+            <h5 class="mt-2 mb-3">Release storage overview</h5>
+            <div class="hc-profile-meta-grid">
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Total Releases</span>
+                    <strong>{{ release_summary.release_count }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Uploaded Data</span>
+                    <strong>{{ release_summary.total_uploaded_label }}</strong>
+                </div>
+                <div class="hc-profile-meta-card hc-profile-meta-card-wide">
+                    <span class="hc-profile-meta-label">Largest APK</span>
+                    <strong>{{ release_summary.largest_release_label }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="hc-surface-card h-100">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Upload Graph</span>
+                    <h5>APK data uploaded by release</h5>
+                </div>
+            </div>
+            <div class="hc-release-graph">
+                {% for row in upload_graph_rows %}
+                <div class="hc-release-graph-row">
+                    <div class="d-flex justify-content-between gap-3 mb-2">
+                        <div>
+                            <strong>{{ row.label }}</strong>
+                            {% if row.is_active %}<span class="hc-status hc-status-success ms-2">Active</span>{% endif %}
+                        </div>
+                        <span class="text-muted small">{{ row.file_size_label }}</span>
+                    </div>
+                    <div class="hc-release-graph-track">
+                        <div class="hc-release-graph-bar" style="width: {{ row.relative_percent }}%;"></div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="hc-document-empty">Upload your first APK to start tracking release data.</div>
+                {% endfor %}
+            </div>
         </div>
     </div>
 </section>
@@ -156,4 +225,113 @@
         </table>
     </div>
 </section>
+
+{% endblock %}
+
+{% block developer_scripts %}
+<script>
+(function () {
+    const form = document.getElementById('developerReleaseUploadForm');
+    const fileInput = document.getElementById('developerApkFileInput');
+    const progressCard = document.getElementById('developerUploadProgressCard');
+    const progressBar = document.getElementById('developerUploadProgressBar');
+    const progressPercent = document.getElementById('developerUploadPercent');
+    const statusText = document.getElementById('developerUploadStatusText');
+    const fileName = document.getElementById('developerUploadFileName');
+    const fileSize = document.getElementById('developerUploadSize');
+    if (!form || !fileInput || !progressCard || !progressBar || !progressPercent || !statusText || !fileName || !fileSize) {
+        return;
+    }
+
+    const submitButton = form.querySelector('button[type="submit"]');
+
+    function formatBytes(bytes) {
+        const value = Number(bytes || 0);
+        if (!Number.isFinite(value) || value <= 0) {
+            return '0 MB';
+        }
+        return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+    }
+
+    function setProgress(percent, message) {
+        const clamped = Math.max(0, Math.min(100, Number(percent || 0)));
+        progressCard.hidden = false;
+        progressBar.style.width = `${clamped}%`;
+        progressPercent.textContent = `${Math.round(clamped)}%`;
+        if (message) {
+            statusText.textContent = message;
+        }
+    }
+
+    fileInput.addEventListener('change', () => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) {
+            progressCard.hidden = true;
+            return;
+        }
+        fileName.textContent = file.name;
+        fileSize.textContent = formatBytes(file.size);
+        setProgress(0, 'Ready to upload this APK build.');
+    });
+
+    form.addEventListener('submit', (event) => {
+        const file = fileInput.files && fileInput.files[0];
+        if (!file) {
+            return;
+        }
+        event.preventDefault();
+        const xhr = new XMLHttpRequest();
+        xhr.open(form.method || 'POST', form.action, true);
+        xhr.responseType = 'text';
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+        xhr.upload.addEventListener('loadstart', () => {
+            fileName.textContent = file.name;
+            fileSize.textContent = formatBytes(file.size);
+            setProgress(2, 'Starting secure upload to the server.');
+            if (submitButton) {
+                submitButton.disabled = true;
+                submitButton.textContent = 'Uploading APK...';
+            }
+        });
+
+        xhr.upload.addEventListener('progress', (uploadEvent) => {
+            if (!uploadEvent.lengthComputable) {
+                setProgress(55, 'Uploading the APK package to the server.');
+                return;
+            }
+            const percent = (uploadEvent.loaded / uploadEvent.total) * 100;
+            const message = percent < 100
+                ? `Uploading ${formatBytes(uploadEvent.loaded)} of ${formatBytes(uploadEvent.total)}.`
+                : 'Finalizing the uploaded APK release.';
+            setProgress(percent, message);
+        });
+
+        xhr.addEventListener('load', () => {
+            setProgress(100, 'Upload completed. Refreshing the release dashboard.');
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.textContent = 'Publish APK Release';
+            }
+            if (xhr.status >= 200 && xhr.status < 400) {
+                document.open();
+                document.write(xhr.responseText);
+                document.close();
+                return;
+            }
+            statusText.textContent = 'Upload finished with an error. Please review the form and try again.';
+        });
+
+        xhr.addEventListener('error', () => {
+            setProgress(0, 'Upload failed. Check your network connection and try again.');
+            if (submitButton) {
+                submitButton.disabled = false;
+                submitButton.textContent = 'Publish APK Release';
+            }
+        });
+
+        xhr.send(new FormData(form));
+    });
+})();
+</script>
 {% endblock %}

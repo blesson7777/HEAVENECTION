@@ -251,7 +251,7 @@
                             <i class="bi bi-code-square"></i>
                             <span>Developer Portal</span>
                         </a>
-                        <form method="post" action="{% url 'web-logout' %}" class="m-0">
+                        <form method="post" action="{% url 'web-logout' %}" class="m-0" onsubmit="return window.confirm('Do you want to logout now?');">
                             {% csrf_token %}
                             <button type="submit" class="dropdown-item hc-profile-menu-item hc-profile-menu-item-danger">
                                 <i class="bi bi-box-arrow-right"></i>

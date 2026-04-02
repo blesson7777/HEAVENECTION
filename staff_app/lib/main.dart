@@ -1254,6 +1254,41 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _updatePreferredOrientations();
   }
 
+  Future<void> _confirmLogout() async {
+    if (!mounted) {
+      return;
+    }
+
+    final shouldLogout = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: const Text('Confirm Logout'),
+          content: const Text(
+            'Do you want to log out from HEAVENECTION now?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldLogout == true) {
+      await _logout();
+    }
+  }
+
   Future<ImageSource?> _showDocumentSourcePicker(String documentLabel) async {
     return showModalBottomSheet<ImageSource>(
       context: context,
@@ -2425,7 +2460,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   onPressed: () async {
                     Navigator.of(dialogContext).pop();
                     _isTrainingPromptVisible = false;
-                    await _logout();
+                    await _confirmLogout();
                   },
                   child: const Text('Logout'),
                 ),
@@ -4387,7 +4422,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
-              onPressed: _logout,
+              onPressed: _confirmLogout,
               icon: const Icon(Icons.logout),
               style: OutlinedButton.styleFrom(foregroundColor: kRed),
               label: const Text('Logout'),

@@ -1,7 +1,11 @@
+import mimetypes
+from pathlib import Path
+
 from django.db.models import Count, Q
-from django.http import HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.contrib import messages
 from django.shortcuts import redirect, render
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
@@ -148,6 +152,32 @@ def _apply_staff_post_save_actions(staff, was_active):
     return released_count
 
 
+_PROFILE_DOCUMENT_FIELDS = {
+    "aadhar": "aadhar_photo",
+    "passbook": "passbook_photo",
+}
+
+
+def _get_staff_document_file(staff, document_type):
+    field_name = _PROFILE_DOCUMENT_FIELDS.get(document_type)
+    if not field_name:
+        raise Http404("Unknown document.")
+    file_field = getattr(staff, field_name, None)
+    if not file_field:
+        raise Http404("Document not found.")
+    return file_field
+
+
+def _document_response(file_field, *, content_type=None, as_attachment=False):
+    guessed_type, _ = mimetypes.guess_type(file_field.name)
+    resolved_content_type = content_type or guessed_type or "application/octet-stream"
+    filename = Path(file_field.name).name
+    disposition = "attachment" if as_attachment else "inline"
+    response = FileResponse(file_field.open("rb"), content_type=resolved_content_type)
+    response["Content-Disposition"] = f'{disposition}; filename="{filename}"'
+    return response
+
+
 @require_http_methods(["GET", "POST"])
 def web_login_page(request):
     current_user = get_staff_from_request(request)
@@ -252,7 +282,7 @@ def developer_releases_page(request):
         "release_notes": "",
         "is_mandatory": False,
         "is_active": True,
-        "published_at": "",
+        "published_at": timezone.localtime().strftime("%Y-%m-%dT%H:%M"),
     }
     release_errors = {}
 
@@ -278,12 +308,18 @@ def developer_releases_page(request):
                 "is_active": request.POST.get("is_active") == "on",
                 "published_at": request.POST.get("published_at", "").strip(),
             }
-            serializer = CreateAppReleaseSerializer(
-                data={
-                    **release_form_data,
-                    "apk_file": request.FILES.get("apk_file"),
-                }
-            )
+            serializer_data = {
+                "version_name": release_form_data["version_name"],
+                "version_code": release_form_data["version_code"],
+                "minimum_supported_version_code": release_form_data["minimum_supported_version_code"],
+                "release_notes": release_form_data["release_notes"],
+                "is_mandatory": release_form_data["is_mandatory"],
+                "is_active": release_form_data["is_active"],
+                "apk_file": request.FILES.get("apk_file"),
+            }
+            if release_form_data["published_at"]:
+                serializer_data["published_at"] = release_form_data["published_at"]
+            serializer = CreateAppReleaseSerializer(data=serializer_data)
             if serializer.is_valid():
                 release = publish_app_release(created_by=current_user, validated_data=serializer.validated_data)
                 messages.success(request, f"App release {release.version_name} published successfully.")
@@ -301,6 +337,18 @@ def developer_releases_page(request):
         **build_developer_release_payload(),
     }
     return render(request, "developer_releases.html", context)
+
+
+@require_GET
+def app_release_download(request, release_id):
+    release = AppRelease.objects.filter(id=release_id).first()
+    if not release or not release.apk_file:
+        raise Http404("Release not found.")
+    return _document_response(
+        release.apk_file,
+        content_type="application/vnd.android.package-archive",
+        as_attachment=True,
+    )
 
 @require_GET
 def health_check(request):
@@ -571,7 +619,7 @@ def staff_profile_page(request, staff_id):
             staff_errors = _normalize_errors(serializer.errors)
             messages.error(request, "Please correct the staff profile details and try again.")
 
-    payload = build_staff_profile_payload(staff)
+    payload = build_staff_profile_payload(request, staff)
     context = _admin_web_context(
         request,
         current_user,
@@ -586,6 +634,19 @@ def staff_profile_page(request, staff_id):
         },
     )
     return render(request, "admin_staff_profile.html", context)
+
+
+@require_GET
+def staff_document_page(request, staff_id, document_type):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    mark_staff_seen(current_user)
+    staff = Staff.objects.filter(id=staff_id).first()
+    if not staff:
+        raise Http404("Staff member not found.")
+    return _document_response(_get_staff_document_file(staff, document_type))
 
 
 @require_http_methods(["GET", "POST"])
@@ -997,6 +1058,12 @@ def staff_profile_api(request):
     serializer.is_valid(raise_exception=True)
     staff = serializer.save()
     return Response(StaffProfileSerializer(staff, context={"request": request}).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsCallingStaff])
+def staff_profile_document_api(request, document_type):
+    return _document_response(_get_staff_document_file(request.user, document_type))
 
 
 @api_view(["GET"])
