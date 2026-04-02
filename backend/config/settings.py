@@ -58,22 +58,37 @@ SECRET_KEY = os.getenv(
 )
 DEBUG = env_true("DJANGO_DEBUG", True)
 
-ALLOWED_HOSTS = split_env_list(os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost" if DEBUG else ""))
-railway_public_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
-if railway_public_domain and railway_public_domain not in ALLOWED_HOSTS:
+# Resolve the Railway public domain from the most specific variable available,
+# falling back to RAILWAY_SERVICE_FQDN, then the hardcoded production domain.
+_FALLBACK_DOMAIN = "heavenection-production.up.railway.app"
+railway_public_domain = (
+    os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    or os.getenv("RAILWAY_SERVICE_FQDN", "").strip()
+    or _FALLBACK_DOMAIN
+)
+
+ALLOWED_HOSTS = split_env_list(os.getenv("DJANGO_ALLOWED_HOSTS", ""))
+# Always include localhost/127.0.0.1 in DEBUG mode.
+if DEBUG:
+    for _h in ("127.0.0.1", "localhost"):
+        if _h not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(_h)
+# Always include the public domain so Railway's proxy can reach the app.
+if railway_public_domain not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(railway_public_domain)
+# Railway's internal health-checker uses this host in production.
 if not DEBUG and "healthcheck.railway.app" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append("healthcheck.railway.app")
+# Django's test client sends requests with host "testserver".
 if DEBUG and "testserver" not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append("testserver")
-if not ALLOWED_HOSTS:
-    ALLOWED_HOSTS = ["127.0.0.1", "localhost"] if DEBUG else ["healthcheck.railway.app"]
 
 CSRF_TRUSTED_ORIGINS = split_env_list(os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", ""))
-if railway_public_domain:
-    railway_origin = f"https://{railway_public_domain}"
-    if railway_origin not in CSRF_TRUSTED_ORIGINS:
-        CSRF_TRUSTED_ORIGINS.append(railway_origin)
+# Always trust the public-facing origin so form submissions and AJAX requests
+# from the browser are not rejected with 403 Forbidden.
+for _origin in (f"https://{railway_public_domain}", f"http://{railway_public_domain}"):
+    if _origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_origin)
 
 INSTALLED_APPS = [
     "django.contrib.auth",
