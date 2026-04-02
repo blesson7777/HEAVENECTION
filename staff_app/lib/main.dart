@@ -168,7 +168,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _isSyncingCallLog = false;
   bool _isCallStatusPromptVisible = false;
   bool _isCallScreenOpen = false;
-  PageRoute<void>? _callScreenRoute;
   bool _isExitDialogVisible = false;
   bool _isCheckingForUpdate = false;
   bool _isUpdateDialogVisible = false;
@@ -370,11 +369,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
     _openPendingCustomerPage();
-    final callScreenRoute = _callScreenRoute;
-    if (callScreenRoute != null) {
-      Navigator.of(context).removeRoute(callScreenRoute);
-      _callScreenRoute = null;
-      _isCallScreenOpen = false;
+    if (_isCallScreenOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        final navigator = Navigator.of(context, rootNavigator: true);
+        if (navigator.canPop()) {
+          navigator.pop();
+        }
+      });
     }
   }
 
@@ -404,19 +408,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     _isCallScreenOpen = true;
-    final route = MaterialPageRoute<void>(
-      builder: (_) => Scaffold(
-        appBar: AppBar(title: const Text('Call')),
-        body: SafeArea(child: _call(lead)),
-      ),
-    );
-    _callScreenRoute = route;
     try {
-      await Navigator.of(context).push(route);
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            appBar: AppBar(title: const Text('Call')),
+            body: SafeArea(child: _call(lead)),
+          ),
+        ),
+      );
     } finally {
-      if (identical(_callScreenRoute, route)) {
-        _callScreenRoute = null;
-      }
       _isCallScreenOpen = false;
     }
   }
