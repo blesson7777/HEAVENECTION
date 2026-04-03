@@ -750,6 +750,22 @@ def leads_page(request):
             )
             return redirect("leads-page")
 
+        if lead_action == "bulk_delete":
+            selected_lead_ids = [lead_id.strip() for lead_id in request.POST.getlist("selected_lead_ids") if lead_id.strip()]
+            if not selected_lead_ids:
+                messages.error(request, "Select at least one lead to delete.")
+                return redirect("leads-page")
+
+            deleted_count = Lead.objects.filter(id__in=selected_lead_ids).count()
+            if deleted_count == 0:
+                messages.error(request, "The selected leads could not be found.")
+                return redirect("leads-page")
+
+            Lead.objects.filter(id__in=selected_lead_ids).delete()
+            auto_allocate_leads()
+            messages.success(request, f"Deleted {deleted_count} selected leads successfully.")
+            return redirect("leads-page")
+
         messages.error(request, "Lead request could not be processed.")
         return redirect("leads-page")
 

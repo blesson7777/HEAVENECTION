@@ -2,6 +2,8 @@
 
 {% block page_actions %}
 <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#leadImportModal" id="openLeadImportModal">Import Leads</button>
+<button type="button" class="btn btn-outline-danger btn-sm" id="openLeadSelectionMode">Delete Leads</button>
+<button type="button" class="btn btn-danger btn-sm d-none" id="deleteSelectedLeadsButton" disabled>Delete Marked</button>
 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#leadModal" id="openCreateLeadModal">Add Lead</button>
 {% endblock %}
 
@@ -92,6 +94,9 @@
         <table class="table hc-table align-middle mb-0">
             <thead>
                 <tr>
+                    <th class="lead-select-column d-none">
+                        <input type="checkbox" class="form-check-input" id="leadSelectAll">
+                    </th>
                     <th>Lead</th>
                     <th>Phone</th>
                     <th>Status</th>
@@ -104,6 +109,9 @@
             <tbody id="leadTableBody">
                 {% for lead in lead_rows %}
                 <tr data-status="{{ lead.status }}">
+                    <td class="lead-select-column d-none">
+                        <input type="checkbox" class="form-check-input js-lead-select-checkbox" value="{{ lead.id }}">
+                    </td>
                     <td>
                         <strong>{{ lead.name }}</strong>
                         <div class="text-muted small">{{ lead.notes|default:"No notes" }}</div>
@@ -136,12 +144,18 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" class="text-center py-4">No leads available.</td></tr>
+                <tr><td colspan="8" class="text-center py-4">No leads available.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </section>
+
+<form method="post" action="{% url 'leads-page' %}" id="bulkLeadDeleteForm" class="d-none">
+    {% csrf_token %}
+    <input type="hidden" name="lead_action" value="bulk_delete">
+    <div id="bulkLeadDeleteInputs"></div>
+</form>
 
 <div class="modal fade" id="leadModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">

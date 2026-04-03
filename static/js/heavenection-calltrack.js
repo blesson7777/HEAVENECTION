@@ -480,6 +480,14 @@
         const notesInput = document.getElementById("leadNotes");
         const feedback = document.getElementById("leadFormFeedback");
         const submitButton = document.getElementById("leadSubmitButton");
+        const openSelectionButton = document.getElementById("openLeadSelectionMode");
+        const deleteSelectedButton = document.getElementById("deleteSelectedLeadsButton");
+        const bulkDeleteForm = document.getElementById("bulkLeadDeleteForm");
+        const bulkDeleteInputs = document.getElementById("bulkLeadDeleteInputs");
+        const selectAllCheckbox = document.getElementById("leadSelectAll");
+        const selectionColumns = Array.from(document.querySelectorAll(".lead-select-column"));
+        const selectionCheckboxes = Array.from(document.querySelectorAll(".js-lead-select-checkbox"));
+        let selectionMode = false;
 
         function showFeedback(message, isError) {
             feedback.textContent = message;
@@ -503,6 +511,42 @@
             clearFeedback();
         }
 
+        function refreshBulkDeleteState() {
+            if (!deleteSelectedButton) {
+                return;
+            }
+            const selectedCount = selectionCheckboxes.filter((checkbox) => checkbox.checked).length;
+            deleteSelectedButton.disabled = selectedCount === 0;
+            deleteSelectedButton.textContent = selectedCount > 0 ? `Delete Marked (${selectedCount})` : "Delete Marked";
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = selectedCount > 0 && selectedCount === selectionCheckboxes.length;
+                selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < selectionCheckboxes.length;
+            }
+        }
+
+        function toggleSelectionMode(enabled) {
+            selectionMode = enabled;
+            selectionColumns.forEach((node) => node.classList.toggle("d-none", !enabled));
+            if (deleteSelectedButton) {
+                deleteSelectedButton.classList.toggle("d-none", !enabled);
+            }
+            if (openSelectionButton) {
+                openSelectionButton.textContent = enabled ? "Cancel Delete" : "Delete Leads";
+                openSelectionButton.classList.toggle("btn-outline-danger", !enabled);
+                openSelectionButton.classList.toggle("btn-outline-secondary", enabled);
+            }
+            if (!enabled) {
+                selectionCheckboxes.forEach((checkbox) => {
+                    checkbox.checked = false;
+                });
+                if (selectAllCheckbox) {
+                    selectAllCheckbox.checked = false;
+                    selectAllCheckbox.indeterminate = false;
+                }
+            }
+            refreshBulkDeleteState();
+        }
+
         statusInput.addEventListener("change", () => {
             if (statusInput.value !== "call_back") {
                 callbackWindowInput.value = "";
@@ -511,6 +555,46 @@
 
         document.getElementById("openCreateLeadModal")?.addEventListener("click", resetForm);
         modalNode.addEventListener("hidden.bs.modal", clearFeedback);
+
+        openSelectionButton?.addEventListener("click", () => {
+            toggleSelectionMode(!selectionMode);
+        });
+
+        selectAllCheckbox?.addEventListener("change", () => {
+            selectionCheckboxes.forEach((checkbox) => {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+            refreshBulkDeleteState();
+        });
+
+        selectionCheckboxes.forEach((checkbox) => {
+            checkbox.addEventListener("change", refreshBulkDeleteState);
+        });
+
+        deleteSelectedButton?.addEventListener("click", () => {
+            const selectedIds = selectionCheckboxes
+                .filter((checkbox) => checkbox.checked)
+                .map((checkbox) => checkbox.value);
+            if (!selectedIds.length) {
+                window.alert("Select at least one lead to delete.");
+                return;
+            }
+            if (!bulkDeleteForm || !bulkDeleteInputs) {
+                return;
+            }
+            if (!window.confirm(`Delete ${selectedIds.length} selected lead(s)?`)) {
+                return;
+            }
+            bulkDeleteInputs.innerHTML = "";
+            selectedIds.forEach((leadId) => {
+                const input = document.createElement("input");
+                input.type = "hidden";
+                input.name = "selected_lead_ids";
+                input.value = leadId;
+                bulkDeleteInputs.appendChild(input);
+            });
+            bulkDeleteForm.submit();
+        });
 
         document.querySelectorAll(".js-edit-lead").forEach((button) => {
             button.addEventListener("click", () => {
@@ -542,6 +626,8 @@
                 }
             });
         });
+
+        refreshBulkDeleteState();
 
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
