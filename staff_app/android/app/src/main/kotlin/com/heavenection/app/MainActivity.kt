@@ -1,6 +1,8 @@
 package com.heavenection.app
 
+import android.Manifest
 import android.app.DownloadManager
+import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -12,6 +14,10 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
+import android.telecom.TelecomManager
+import android.telephony.TelephonyManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -25,6 +31,7 @@ class MainActivity : FlutterActivity() {
     private var pendingDownloadedVersionCode: Int? = null
     private var isDownloadReceiverRegistered = false
     private var resumeInstallAfterSettings = false
+    private var pendingPhoneStatePermissionResult: MethodChannel.Result? = null
 
     private val downloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -66,6 +73,8 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "getVersionInfo" -> result.success(buildVersionInfoPayload())
+                "isCallInProgress" -> result.success(buildCallStatePayload())
+                "requestPhoneStatePermission" -> handlePhoneStatePermissionRequest(result)
                 "getDownloadedUpdateStatus" -> result.success(
                     buildDownloadedUpdateStatus(call.argument<Int>("versionCode")),
                 )
@@ -74,6 +83,24 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_READ_PHONE_STATE_PERMISSION) {
+            return
+        }
+        val granted = grantResults.firstOrNull() == PERMISSION_GRANTED
+        pendingPhoneStatePermissionResult?.success(
+            mapOf(
+                "granted" to granted,
+            ),
+        )
+        pendingPhoneStatePermissionResult = null
     }
 
     private fun handleDownloadRequest(call: MethodCall, result: MethodChannel.Result) {
@@ -142,6 +169,23 @@ class MainActivity : FlutterActivity() {
                 "message" to "Update download started. Android will ask to install it when the APK is ready.",
                 "downloadId" to downloadId,
             ),
+        )
+    }
+
+    private fun handlePhoneStatePermissionRequest(result: MethodChannel.Result) {
+        if (hasReadPhoneStatePermission()) {
+            result.success(mapOf("granted" to true))
+            return
+        }
+        if (pendingPhoneStatePermissionResult != null) {
+            result.success(mapOf("granted" to false))
+            return
+        }
+        pendingPhoneStatePermissionResult = result
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.READ_PHONE_STATE),
+            REQUEST_READ_PHONE_STATE_PERMISSION,
         )
     }
 
@@ -363,6 +407,37 @@ class MainActivity : FlutterActivity() {
         )
     }
 
+    private fun buildCallStatePayload(): Map<String, Any> {
+        if (!hasReadPhoneStatePermission()) {
+            return mapOf(
+                "permissionGranted" to false,
+                "isInCall" to false,
+            )
+        }
+
+        val telecomManager = getSystemService(TELECOM_SERVICE) as? TelecomManager
+        val telephonyManager = getSystemService(TELEPHONY_SERVICE) as? TelephonyManager
+        val isInCall = try {
+            telecomManager?.isInCall == true ||
+                telephonyManager?.callState == TelephonyManager.CALL_STATE_OFFHOOK ||
+                telephonyManager?.callState == TelephonyManager.CALL_STATE_RINGING
+        } catch (_: SecurityException) {
+            false
+        }
+
+        return mapOf(
+            "permissionGranted" to true,
+            "isInCall" to isInCall,
+        )
+    }
+
+    private fun hasReadPhoneStatePermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.READ_PHONE_STATE,
+        ) == PERMISSION_GRANTED
+    }
+
     private fun readInstalledVersionCode(packageInfo: PackageInfo = readPackageInfo()): Int {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             packageInfo.longVersionCode.toInt()
@@ -400,5 +475,6 @@ class MainActivity : FlutterActivity() {
         private const val KEY_PENDING_DOWNLOAD_ID = "pending_download_id"
         private const val KEY_PENDING_FILE_PATH = "pending_file_path"
         private const val KEY_PENDING_VERSION_CODE = "pending_version_code"
+        private const val REQUEST_READ_PHONE_STATE_PERMISSION = 4201
     }
 }

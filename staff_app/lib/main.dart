@@ -1136,6 +1136,49 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
+  Future<Map<String, dynamic>> _readPhoneCallState() async {
+    try {
+      return Map<String, dynamic>.from(
+        await _updaterChannel.invokeMapMethod<String, dynamic>(
+              'isCallInProgress',
+            ) ??
+            const <String, dynamic>{},
+      );
+    } on MissingPluginException {
+      return const <String, dynamic>{};
+    } on PlatformException {
+      return const <String, dynamic>{};
+    }
+  }
+
+  Future<bool> _ensurePhoneStateAccess({bool showMessageOnDenied = true}) async {
+    final callState = await _readPhoneCallState();
+    if (callState['permissionGranted'] == true) {
+      return true;
+    }
+
+    try {
+      final response = Map<String, dynamic>.from(
+        await _updaterChannel.invokeMapMethod<String, dynamic>(
+              'requestPhoneStatePermission',
+            ) ??
+            const <String, dynamic>{},
+      );
+      final granted = response['granted'] == true;
+      if (!granted && showMessageOnDenied) {
+        _showMessage(
+          'Allow phone access once so the app can open the customer remark screen automatically after each call.',
+          isError: true,
+        );
+      }
+      return granted;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   Future<bool> _downloadAppUpdate(AppUpdateInfo update) async {
     if (_isDownloadingUpdate) {
       return true;
@@ -1925,6 +1968,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (!canReadCallLog) {
       return;
     }
+    await _ensurePhoneStateAccess();
 
     final dialStartedAt = DateTime.now();
     final call = await _apiClient.startCall(leadId: lead.id);
@@ -2642,6 +2686,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final backgroundedAt = _backgroundedAt;
     _backgroundedAt = null;
 
+    if (await _maybeAutoSyncEndedCall()) {
+      return;
+    }
+
     await _loadDashboardData(showLoader: false, promptTrainingGate: true);
 
     if (!_summary.workingNow) {
@@ -2662,6 +2710,25 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     _lastInteractionAt = DateTime.now();
     await _sendHeartbeat('foreground', interaction: true, source: 'lifecycle');
+  }
+
+  Future<bool> _maybeAutoSyncEndedCall() async {
+    if (_pendingDialerCall == null || _isSyncingCallLog) {
+      return false;
+    }
+
+    final callState = await _readPhoneCallState();
+    if (callState['permissionGranted'] != true) {
+      return false;
+    }
+    if (callState['isInCall'] == true) {
+      return false;
+    }
+
+    return _syncCallFromLog(
+      allowManualFallback: false,
+      showMissingMessage: true,
+    );
   }
 
   void _evaluateIdleState() {
