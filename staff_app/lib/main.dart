@@ -2345,7 +2345,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   }) async {
     final status = switch (decision) {
       ShortCallDecision.markRejected => 'not_interested',
-      _ => 'no_answer',
+      ShortCallDecision.markNoResponse => 'no_answer',
+      ShortCallDecision.callAgain => null,
     };
     final call = await _apiClient.endCall(
       callId: pendingCall.callId,
@@ -2373,9 +2374,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     if (decision == ShortCallDecision.callAgain) {
-      _showMessage(
-        'Short call detected. Marked as No Response and calling again.',
-      );
+      _showMessage('Short call detected. Calling the customer again.');
       final lead = _leadById(pendingCall.leadId);
       if (lead != null) {
         await _placeCallForLead(lead);
