@@ -48,7 +48,7 @@
     </div>
 
     <div class="alert alert-primary border-0 mb-4" role="alert">
-        Upload CSV or Excel files with name and phone columns. New leads are assigned automatically without duplicating them across staff, and the system keeps every active staff member topped up to the target lead count.
+        Upload CSV, Excel, or VCF files. The system reads contact names and phone numbers automatically, avoids duplicate assignment, and keeps every active staff member topped up to the target lead count.
     </div>
 
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
@@ -237,7 +237,7 @@
             <div class="modal-header border-0 pb-0">
                 <div>
                     <span class="mf-db2-kicker">Lead Import</span>
-                    <h5 class="modal-title mt-1">Upload CSV or Excel</h5>
+                    <h5 class="modal-title mt-1">Upload CSV, Excel, or VCF</h5>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -247,9 +247,9 @@
                     <input type="hidden" name="lead_action" value="import">
                     <div class="mb-3">
                         <label class="form-label fw-semibold" for="leadImportFile">Lead file</label>
-                        <input type="file" class="form-control" id="leadImportFile" name="file" accept=".csv,.xlsx,.xlsm" required>
+                        <input type="file" class="form-control" id="leadImportFile" name="file" accept=".csv,.xlsx,.xlsm,.vcf" required>
                         <div class="form-text">
-                            The system reads name and phone columns automatically and skips duplicate phone numbers.
+                            The system reads name and phone columns automatically from spreadsheets, or contact names and phone numbers from VCF files, and skips duplicate phone numbers.
                         </div>
                     </div>
                     <div class="alert alert-light border mb-0" role="alert">

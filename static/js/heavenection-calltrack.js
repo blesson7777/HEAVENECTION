@@ -703,7 +703,7 @@
 
             const file = fileInput?.files?.[0];
             if (!file) {
-                showFeedback("Choose a CSV or Excel file to continue.", true);
+                showFeedback("Choose a CSV, Excel, or VCF file to continue.", true);
                 return;
             }
 

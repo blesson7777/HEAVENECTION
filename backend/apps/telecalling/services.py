@@ -1331,6 +1331,80 @@ def _decode_csv_bytes(file_bytes):
     return file_bytes.decode("utf-8", errors="ignore")
 
 
+def _decode_vcard_value(value):
+    decoded = str(value or "").replace("\\n", " ").replace("\\N", " ")
+    decoded = decoded.replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\")
+    return " ".join(decoded.split()).strip()
+
+
+def _structured_vcard_name(value):
+    parts = [_decode_vcard_value(part) for part in str(value or "").split(";")]
+    ordered_parts = [part for part in (parts[1:3] + parts[:1] + parts[3:]) if part]
+    return " ".join(ordered_parts).strip()
+
+
+def _unfold_vcard_lines(content):
+    unfolded_lines = []
+    for raw_line in str(content or "").splitlines():
+        line = raw_line.rstrip("\r")
+        if not line:
+            unfolded_lines.append("")
+            continue
+        if line.startswith((" ", "\t")) and unfolded_lines:
+            unfolded_lines[-1] = f"{unfolded_lines[-1]}{line[1:]}"
+            continue
+        unfolded_lines.append(line)
+    return unfolded_lines
+
+
+def _read_vcard_rows(uploaded_file):
+    content = _decode_csv_bytes(uploaded_file.read())
+    lines = _unfold_vcard_lines(content)
+    rows = [["Name", "Phone"]]
+    current_name = ""
+    current_structured_name = ""
+    current_phones = []
+
+    def flush_contact():
+        nonlocal current_name, current_structured_name, current_phones
+        resolved_name = current_name or current_structured_name
+        for phone in current_phones:
+            contact_name = resolved_name or f"Contact {phone[-4:]}" if len(phone) >= 4 else "Imported Contact"
+            rows.append([contact_name, phone])
+        current_name = ""
+        current_structured_name = ""
+        current_phones = []
+
+    for line in lines:
+        upper_line = line.upper()
+        if upper_line == "BEGIN:VCARD":
+            current_name = ""
+            current_structured_name = ""
+            current_phones = []
+            continue
+        if upper_line == "END:VCARD":
+            flush_contact()
+            continue
+        if ":" not in line:
+            continue
+        field_meta, raw_value = line.split(":", 1)
+        field_name = field_meta.split(";", 1)[0].upper()
+        value = _decode_vcard_value(raw_value)
+        if field_name == "FN" and value:
+            current_name = value
+        elif field_name == "N" and value and not current_name:
+            current_structured_name = _structured_vcard_name(raw_value)
+        elif field_name == "TEL" and value:
+            phone_value = value[4:] if value.lower().startswith("tel:") else value
+            if phone_value:
+                current_phones.append(phone_value)
+
+    if current_name or current_structured_name or current_phones:
+        flush_contact()
+
+    return [row for row in rows if any(str(cell or "").strip() for cell in row)]
+
+
 def _read_lead_rows_from_upload(uploaded_file):
     file_name = str(getattr(uploaded_file, "name", "")).lower()
     uploaded_file.seek(0)
@@ -1351,7 +1425,10 @@ def _read_lead_rows_from_upload(uploaded_file):
                 rows.append(normalized_row)
         return rows
 
-    raise ValueError("Upload a CSV or XLSX file.")
+    if file_name.endswith(".vcf"):
+        return _read_vcard_rows(uploaded_file)
+
+    raise ValueError("Upload a CSV, Excel, or VCF file.")
 
 
 def _detect_lead_column_indexes(rows):
