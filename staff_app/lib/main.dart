@@ -35,7 +35,7 @@ const Duration kBackgroundSessionTimeout = Duration(minutes: 5);
 const Duration kShortCallReviewThreshold = Duration(seconds: 15);
 const Duration kMinimumQualifyingCallDuration = Duration(seconds: 5);
 const int kCallLogSyncAttempts = 6;
-const Duration kCallLogSyncRetryDelay = Duration(seconds: 2);
+const Duration kCallLogSyncRetryDelay = Duration(seconds: 1);
 
 void main() => runApp(const HeavenectionApp());
 
@@ -353,6 +353,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       unawaited(_showPendingCallStatusPrompt());
     });
+  }
+
+  void _setCallLogSyncing(bool value) {
+    if (_isSyncingCallLog == value) {
+      return;
+    }
+    if (!mounted) {
+      _isSyncingCallLog = value;
+      return;
+    }
+    setState(() => _isSyncingCallLog = value);
   }
 
   void _openPendingCustomerPage() {
@@ -2399,7 +2410,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         'Call duration was less than 5 seconds, so it was not counted.',
         isError: true,
       );
+      return;
     }
+
+    await _focusLeadWorkflowAfterCallResultSaved();
   }
 
   Future<void> _completeCallSync(
@@ -2451,6 +2465,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
     });
 
+    if (call.status == 'started') {
+      _schedulePendingCallStatusPrompt();
+      return;
+    }
+
     await _loadDashboardData(showLoader: false);
     if (!mounted) {
       return;
@@ -2461,8 +2480,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         'Call duration was less than 5 seconds, so it was not counted.',
         isError: true,
       );
-    } else if (call.status == 'started') {
-      _schedulePendingCallStatusPrompt();
     } else {
       _showMessage('Call synced from phone log.');
     }
@@ -2496,6 +2513,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
     });
 
+    if (call.status == 'started') {
+      _showMessage(
+        'Call result is still pending. No work hours were added because the phone log could not verify this call.',
+        isError: true,
+      );
+      _schedulePendingCallStatusPrompt();
+      return;
+    }
+
     await _loadDashboardData(showLoader: false);
     if (!mounted) {
       return;
@@ -2506,12 +2532,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         'Call duration was less than 5 seconds, so it was not counted.',
         isError: true,
       );
-    } else if (call.status == 'started') {
-      _showMessage(
-        'Call result is still pending. No work hours were added because the phone log could not verify this call.',
-        isError: true,
-      );
-      _schedulePendingCallStatusPrompt();
     } else {
       _showMessage(
         'Call ended without phone-log verification. No work hours were added.',
@@ -2537,7 +2557,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return false;
     }
 
-    _isSyncingCallLog = true;
+    _setCallLogSyncing(true);
     try {
       for (var attempt = 0; attempt < kCallLogSyncAttempts; attempt++) {
         final entry = await _findMatchingCallLogEntry(pendingCall);
@@ -2584,7 +2604,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       return false;
     } finally {
-      _isSyncingCallLog = false;
+      _setCallLogSyncing(false);
     }
   }
 
@@ -4025,7 +4045,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () => _startCall(),
+                        onPressed: _isSyncingCallLog ? null : () => _startCall(),
                         icon: const Icon(Icons.phone_forwarded),
                         label: const Text('Call'),
                       ),
@@ -4033,12 +4053,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: hasActiveCallForLead
+                        onPressed: hasActiveCallForLead && !_isSyncingCallLog
                             ? () => _endCall()
                             : null,
                         style: ElevatedButton.styleFrom(backgroundColor: kRed),
-                        icon: const Icon(Icons.sync),
-                        label: const Text('Sync Call'),
+                        icon: Icon(
+                          _isSyncingCallLog ? Icons.hourglass_top : Icons.sync,
+                        ),
+                        label: Text(
+                          _isSyncingCallLog ? 'Syncing...' : 'Sync Call',
+                        ),
                       ),
                     ),
                   ],
