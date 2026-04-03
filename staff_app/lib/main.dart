@@ -4518,12 +4518,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Salary overview',
+                    'Work summary',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Track total worked hours, earned salary, paid salary, and the latest transaction details.',
+                    'See your current worked hours and earned amount here.',
                     style: TextStyle(fontSize: 14.5, color: Colors.black54),
                   ),
                   const SizedBox(height: 14),
@@ -4552,58 +4552,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                           icon: Icons.account_balance_wallet_outlined,
                         ),
                       ),
-                      SizedBox(
-                        width: 150,
-                        child: InfoCard(
-                          title: 'Paid',
-                          value:
-                              salarySummary?.totalPaidAmountLabel ?? 'Rs. 0.00',
-                          color: kOrange,
-                          icon: Icons.payments_outlined,
-                        ),
-                      ),
                     ],
-                  ),
-                  const SizedBox(height: 14),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: kSoft,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Latest transaction ID',
-                          style: TextStyle(
-                            color: Colors.black54,
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          salarySummary?.latestTransactionId.isNotEmpty == true
-                              ? salarySummary!.latestTransactionId
-                              : 'Transaction ID not added yet',
-                          style: const TextStyle(
-                            color: kPrimaryDark,
-                            fontSize: 15.5,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Last payment: ${salarySummary?.latestPaidAtLabel ?? '--'}',
-                          style: const TextStyle(
-                            color: Colors.black54,
-                            fontSize: 13.5,
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),
