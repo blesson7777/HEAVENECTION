@@ -90,28 +90,34 @@
                         <div class="text-muted small">Bonus {{ row.bonus_per_conversion }}</div>
                     </td>
                     <td>
-                        <button
-                            type="button"
-                            class="btn btn-outline-primary btn-sm js-edit-salary"
-                            data-staff-id="{{ row.id }}"
-                            data-name="{{ row.name }}"
-                            data-phone="{{ row.phone }}"
-                            data-email="{{ row.email }}"
-                            data-compensation-type="{{ row.compensation_type }}"
-                            data-hourly-rate="{{ row.hourly_rate_raw }}"
-                            data-weekly-salary="{{ row.weekly_salary_raw }}"
-                            data-monthly-salary="{{ row.monthly_salary_raw }}"
-                            data-target-hours-week="{{ row.target_hours_per_week }}"
-                            data-target-hours-month="{{ row.target_hours_per_month }}"
-                            data-call-rate="{{ row.call_rate_raw }}"
-                            data-bonus="{{ row.bonus_per_conversion_raw }}"
-                            data-bank-account-name="{{ row.bank_account_name }}"
-                            data-bank-name="{{ row.bank_name }}"
-                            data-bank-account-number="{{ row.bank_account_number }}"
-                            data-bank-ifsc="{{ row.bank_ifsc_code }}"
-                            data-passbook-photo-url="{{ row.passbook_photo_url }}"
-                            data-profile-url="{{ row.profile_url }}"
-                        >View & Edit</button>
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="{% url 'salary-detail-page' row.id %}" class="btn btn-dark btn-sm">
+                                <i class="bi bi-wallet2"></i>
+                                <span>Pay Salary</span>
+                            </a>
+                            <button
+                                type="button"
+                                class="btn btn-outline-primary btn-sm js-edit-salary"
+                                data-staff-id="{{ row.id }}"
+                                data-name="{{ row.name }}"
+                                data-phone="{{ row.phone }}"
+                                data-email="{{ row.email }}"
+                                data-compensation-type="{{ row.compensation_type }}"
+                                data-hourly-rate="{{ row.hourly_rate_raw }}"
+                                data-weekly-salary="{{ row.weekly_salary_raw }}"
+                                data-monthly-salary="{{ row.monthly_salary_raw }}"
+                                data-target-hours-week="{{ row.target_hours_per_week }}"
+                                data-target-hours-month="{{ row.target_hours_per_month }}"
+                                data-call-rate="{{ row.call_rate_raw }}"
+                                data-bonus="{{ row.bonus_per_conversion_raw }}"
+                                data-bank-account-name="{{ row.bank_account_name }}"
+                                data-bank-name="{{ row.bank_name }}"
+                                data-bank-account-number="{{ row.bank_account_number }}"
+                                data-bank-ifsc="{{ row.bank_ifsc_code }}"
+                                data-passbook-photo-url="{{ row.passbook_photo_url }}"
+                                data-profile-url="{{ row.profile_url }}"
+                            >View & Edit</button>
+                        </div>
                     </td>
                 </tr>
                 {% empty %}

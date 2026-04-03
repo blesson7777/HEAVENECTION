@@ -2691,6 +2691,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+    if (_tab == 3) {
+      await _loadProfile(showLoader: false);
+    }
 
     if (!_summary.workingNow) {
       return;
@@ -3352,8 +3355,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               _registerInteraction(syncServer: false);
               _lastLoadedTab = value;
               setState(() => _tab = value);
-              if (value == 3 && _profile == null) {
-                unawaited(_loadProfile());
+              if (value == 3) {
+                unawaited(_loadProfile(showLoader: _profile == null));
               }
             },
             destinations: const [
