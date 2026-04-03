@@ -480,8 +480,8 @@
         const notesInput = document.getElementById("leadNotes");
         const feedback = document.getElementById("leadFormFeedback");
         const submitButton = document.getElementById("leadSubmitButton");
-        const openSelectionButton = document.getElementById("openLeadSelectionMode");
-        const deleteSelectedButton = document.getElementById("deleteSelectedLeadsButton");
+        const openSelectionButtons = Array.from(document.querySelectorAll(".js-open-lead-selection-mode"));
+        const deleteSelectedButtons = Array.from(document.querySelectorAll(".js-delete-selected-leads-button"));
         const bulkDeleteForm = document.getElementById("bulkLeadDeleteForm");
         const bulkDeleteInputs = document.getElementById("bulkLeadDeleteInputs");
         const selectAllCheckbox = document.getElementById("leadSelectAll");
@@ -512,12 +512,14 @@
         }
 
         function refreshBulkDeleteState() {
-            if (!deleteSelectedButton) {
+            if (!deleteSelectedButtons.length) {
                 return;
             }
             const selectedCount = selectionCheckboxes.filter((checkbox) => checkbox.checked).length;
-            deleteSelectedButton.disabled = selectedCount === 0;
-            deleteSelectedButton.textContent = selectedCount > 0 ? `Delete Marked (${selectedCount})` : "Delete Marked";
+            deleteSelectedButtons.forEach((button) => {
+                button.disabled = selectedCount === 0;
+                button.textContent = selectedCount > 0 ? `Delete Marked (${selectedCount})` : "Delete Marked";
+            });
             if (selectAllCheckbox) {
                 selectAllCheckbox.checked = selectedCount > 0 && selectedCount === selectionCheckboxes.length;
                 selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < selectionCheckboxes.length;
@@ -527,14 +529,12 @@
         function toggleSelectionMode(enabled) {
             selectionMode = enabled;
             selectionColumns.forEach((node) => node.classList.toggle("d-none", !enabled));
-            if (deleteSelectedButton) {
-                deleteSelectedButton.classList.toggle("d-none", !enabled);
-            }
-            if (openSelectionButton) {
-                openSelectionButton.textContent = enabled ? "Cancel Delete" : "Delete Leads";
-                openSelectionButton.classList.toggle("btn-outline-danger", !enabled);
-                openSelectionButton.classList.toggle("btn-outline-secondary", enabled);
-            }
+            deleteSelectedButtons.forEach((button) => button.classList.toggle("d-none", !enabled));
+            openSelectionButtons.forEach((button) => {
+                button.textContent = enabled ? "Cancel Delete" : "Delete Leads";
+                button.classList.toggle("btn-outline-danger", !enabled);
+                button.classList.toggle("btn-outline-secondary", enabled);
+            });
             if (!enabled) {
                 selectionCheckboxes.forEach((checkbox) => {
                     checkbox.checked = false;
@@ -556,8 +556,10 @@
         document.getElementById("openCreateLeadModal")?.addEventListener("click", resetForm);
         modalNode.addEventListener("hidden.bs.modal", clearFeedback);
 
-        openSelectionButton?.addEventListener("click", () => {
-            toggleSelectionMode(!selectionMode);
+        openSelectionButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                toggleSelectionMode(!selectionMode);
+            });
         });
 
         selectAllCheckbox?.addEventListener("change", () => {
@@ -571,29 +573,31 @@
             checkbox.addEventListener("change", refreshBulkDeleteState);
         });
 
-        deleteSelectedButton?.addEventListener("click", () => {
-            const selectedIds = selectionCheckboxes
-                .filter((checkbox) => checkbox.checked)
-                .map((checkbox) => checkbox.value);
-            if (!selectedIds.length) {
-                window.alert("Select at least one lead to delete.");
-                return;
-            }
-            if (!bulkDeleteForm || !bulkDeleteInputs) {
-                return;
-            }
-            if (!window.confirm(`Delete ${selectedIds.length} selected lead(s)?`)) {
-                return;
-            }
-            bulkDeleteInputs.innerHTML = "";
-            selectedIds.forEach((leadId) => {
-                const input = document.createElement("input");
-                input.type = "hidden";
-                input.name = "selected_lead_ids";
-                input.value = leadId;
-                bulkDeleteInputs.appendChild(input);
+        deleteSelectedButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                const selectedIds = selectionCheckboxes
+                    .filter((checkbox) => checkbox.checked)
+                    .map((checkbox) => checkbox.value);
+                if (!selectedIds.length) {
+                    window.alert("Select at least one lead to delete.");
+                    return;
+                }
+                if (!bulkDeleteForm || !bulkDeleteInputs) {
+                    return;
+                }
+                if (!window.confirm(`Delete ${selectedIds.length} selected lead(s)?`)) {
+                    return;
+                }
+                bulkDeleteInputs.innerHTML = "";
+                selectedIds.forEach((leadId) => {
+                    const input = document.createElement("input");
+                    input.type = "hidden";
+                    input.name = "selected_lead_ids";
+                    input.value = leadId;
+                    bulkDeleteInputs.appendChild(input);
+                });
+                bulkDeleteForm.submit();
             });
-            bulkDeleteForm.submit();
         });
 
         document.querySelectorAll(".js-edit-lead").forEach((button) => {
