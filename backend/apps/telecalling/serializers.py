@@ -1,4 +1,5 @@
 from pathlib import Path
+from decimal import Decimal
 
 from django.db.models import Sum
 from django.urls import reverse
@@ -11,6 +12,7 @@ from backend.apps.telecalling.models import (
     CompanyProfile,
     Lead,
     Salary,
+    SalaryPaymentTransaction,
     Session,
     Staff,
     StaffAction,
@@ -254,16 +256,25 @@ class StaffProfileSerializer(serializers.ModelSerializer):
         return Path(obj.passbook_photo.name).name
 
     def get_salary_history(self, obj):
-        records = obj.salary_records.filter(is_paid=True).order_by("-paid_at", "-period_end")[:20]
-        return SalaryHistorySerializer(records, many=True).data
+        transactions = (
+            SalaryPaymentTransaction.objects.filter(salary_record__staff=obj)
+            .select_related("salary_record")
+            .order_by("-paid_at", "-created_at")[:20]
+        )
+        return SalaryHistorySerializer(transactions, many=True).data
 
     def get_salary_summary(self, obj):
-        totals = obj.salary_records.filter(is_paid=True).aggregate(
+        totals = obj.salary_records.filter(paid_amount__gt=Decimal("0.00")).aggregate(
             total_hours=Sum("total_hours"),
             total_earned=Sum("final_salary"),
             total_paid=Sum("paid_amount"),
         )
-        latest_record = obj.salary_records.filter(is_paid=True).order_by("-paid_at", "-period_end").first()
+        latest_transaction = (
+            SalaryPaymentTransaction.objects.filter(salary_record__staff=obj)
+            .select_related("salary_record")
+            .order_by("-paid_at", "-created_at")
+            .first()
+        )
         total_hours = totals.get("total_hours") or 0
         total_earned = totals.get("total_earned") or 0
         total_paid = totals.get("total_paid") or 0
@@ -274,9 +285,9 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             "total_earned_amount_label": f"Rs. {float(total_earned):,.2f}",
             "total_paid_amount": float(total_paid),
             "total_paid_amount_label": f"Rs. {float(total_paid):,.2f}",
-            "latest_transaction_id": latest_record.payment_reference if latest_record and latest_record.payment_reference else "",
-            "latest_paid_at_label": timezone.localtime(latest_record.paid_at).strftime("%d %b %Y, %I:%M %p")
-            if latest_record and latest_record.paid_at
+            "latest_transaction_id": latest_transaction.payment_reference if latest_transaction and latest_transaction.payment_reference else "",
+            "latest_paid_at_label": timezone.localtime(latest_transaction.paid_at).strftime("%d %b %Y, %I:%M %p")
+            if latest_transaction and latest_transaction.paid_at
             else "--",
         }
 
@@ -884,7 +895,23 @@ class SalarySerializer(serializers.ModelSerializer):
 
 
 class SalaryHistorySerializer(serializers.ModelSerializer):
-    payout_cycle_label = serializers.CharField(source="get_payout_cycle_display", read_only=True)
+    period_start = serializers.DateField(source="salary_record.period_start", read_only=True)
+    period_end = serializers.DateField(source="salary_record.period_end", read_only=True)
+    payout_cycle = serializers.CharField(source="salary_record.payout_cycle", read_only=True)
+    payout_cycle_label = serializers.CharField(source="salary_record.get_payout_cycle_display", read_only=True)
+    total_hours = serializers.DecimalField(
+        source="salary_record.total_hours",
+        max_digits=10,
+        decimal_places=2,
+        read_only=True,
+    )
+    final_salary = serializers.DecimalField(
+        source="salary_record.final_salary",
+        max_digits=12,
+        decimal_places=2,
+        read_only=True,
+    )
+    paid_amount = serializers.DecimalField(source="amount", max_digits=12, decimal_places=2, read_only=True)
     payment_method_label = serializers.CharField(source="get_payment_method_display", read_only=True)
     period_label = serializers.SerializerMethodField()
     total_hours_label = serializers.SerializerMethodField()
@@ -893,7 +920,7 @@ class SalaryHistorySerializer(serializers.ModelSerializer):
     paid_at_label = serializers.SerializerMethodField()
 
     class Meta:
-        model = Salary
+        model = SalaryPaymentTransaction
         fields = (
             "id",
             "period_start",
@@ -916,16 +943,19 @@ class SalaryHistorySerializer(serializers.ModelSerializer):
         )
 
     def get_period_label(self, obj):
-        return f"{obj.period_start.strftime('%d %b %Y')} to {obj.period_end.strftime('%d %b %Y')}"
+        return (
+            f"{obj.salary_record.period_start.strftime('%d %b %Y')} "
+            f"to {obj.salary_record.period_end.strftime('%d %b %Y')}"
+        )
 
     def get_total_hours_label(self, obj):
-        return f"{float(obj.total_hours or 0):,.1f}h"
+        return f"{float(obj.salary_record.total_hours or 0):,.1f}h"
 
     def get_final_salary_label(self, obj):
-        return f"Rs. {float(obj.final_salary or 0):,.2f}"
+        return f"Rs. {float(obj.salary_record.final_salary or 0):,.2f}"
 
     def get_paid_amount_label(self, obj):
-        return f"Rs. {float(obj.paid_amount or 0):,.2f}"
+        return f"Rs. {float(obj.amount or 0):,.2f}"
 
     def get_paid_at_label(self, obj):
         if not obj.paid_at:
@@ -937,7 +967,7 @@ class SalaryPaymentSerializer(serializers.Serializer):
     payout_cycle = serializers.ChoiceField(choices=Salary.PayoutCycle.choices)
     period_start = serializers.DateField()
     period_end = serializers.DateField()
-    paid_amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0)
+    paid_amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
     payment_method = serializers.ChoiceField(choices=Salary.PaymentMethod.choices, required=False, allow_blank=True)
     payment_reference = serializers.CharField(max_length=120, required=False, allow_blank=True)
     payment_note = serializers.CharField(required=False, allow_blank=True)

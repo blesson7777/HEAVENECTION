@@ -2,6 +2,7 @@ import mimetypes
 from pathlib import Path
 
 from django.db.models import Count, Q
+from django.core.exceptions import ValidationError
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.contrib import messages
 from django.shortcuts import redirect, render
@@ -18,7 +19,16 @@ from backend.apps.telecalling.auth import (
     rotate_auth_session,
     set_auth_cookies,
 )
-from backend.apps.telecalling.models import AppRelease, Call, Lead, Salary, Staff, StaffAction, TrainingLesson
+from backend.apps.telecalling.models import (
+    AppRelease,
+    Call,
+    Lead,
+    Salary,
+    SalaryPaymentTransaction,
+    Staff,
+    StaffAction,
+    TrainingLesson,
+)
 from backend.apps.telecalling.permissions import IsAdminStaff, IsCallingStaff
 from backend.apps.telecalling.serializers import (
     AdminProfileSerializer,
@@ -74,6 +84,7 @@ from backend.apps.telecalling.services import (
     build_team_management_payload,
     build_work_hours_payload,
     complete_training_lesson,
+    delete_salary_payment_transaction,
     delete_app_release,
     end_staff_call,
     end_staff_session,
@@ -948,7 +959,20 @@ def salary_detail_page(request, staff_id):
 
     if request.method == "POST":
         payment_action = request.POST.get("payment_action", "").strip()
-        if payment_action == "mark_weekly_paid":
+        if payment_action == "delete_payment_transaction":
+            transaction_id = request.POST.get("transaction_id", "").strip()
+            transaction = (
+                SalaryPaymentTransaction.objects.select_related("salary_record", "salary_record__staff")
+                .filter(id=transaction_id, salary_record__staff=staff)
+                .first()
+            )
+            if not transaction:
+                messages.error(request, "Payment transaction not found.")
+            else:
+                delete_salary_payment_transaction(transaction)
+                messages.success(request, "Payment transaction deleted successfully.")
+                return redirect("salary-detail-page", staff_id=staff.id)
+        elif payment_action == "mark_weekly_paid":
             form_data = {
                 "payout_cycle": "weekly",
                 "period_start": request.POST.get("period_start"),
@@ -979,23 +1003,35 @@ def salary_detail_page(request, staff_id):
                 "payment_note": request.POST.get("payment_note", ""),
             }
 
-        serializer = SalaryPaymentSerializer(data=form_data)
-        if serializer.is_valid():
-            record, created = record_staff_salary_payment(staff, **serializer.validated_data)
-            email_result = send_salary_payment_acknowledgement(record)
-            messages.success(
-                request,
-                f"Salary marked as paid for {staff.name}. "
-                f"Credited Rs. {float(record.paid_amount):,.2f} for {record.period_start} to {record.period_end}.",
-            )
-            if email_result["sent"]:
-                messages.success(request, email_result["message"])
+            serializer = SalaryPaymentSerializer(data=form_data)
+            if serializer.is_valid():
+                try:
+                    record, transaction, created = record_staff_salary_payment(
+                        staff, **serializer.validated_data
+                    )
+                except ValidationError as error:
+                    payment_errors = _normalize_errors(getattr(error, "message_dict", {"paid_amount": error.messages}))
+                    messages.error(request, "Please correct the salary payment details and try again.")
+                else:
+                    email_result = send_salary_payment_acknowledgement(record)
+                    remaining_balance = max(
+                        float(record.final_salary or 0) - float(record.paid_amount or 0),
+                        0.0,
+                    )
+                    messages.success(
+                        request,
+                        f"Salary recorded for {staff.name}. "
+                        f"Credited Rs. {float(transaction.amount):,.2f} for {record.period_start} to {record.period_end}. "
+                        f"Remaining balance Rs. {remaining_balance:,.2f}.",
+                    )
+                    if email_result["sent"]:
+                        messages.success(request, email_result["message"])
+                    else:
+                        messages.warning(request, email_result["message"])
+                    return redirect("salary-detail-page", staff_id=staff.id)
             else:
-                messages.warning(request, email_result["message"])
-            return redirect("salary-detail-page", staff_id=staff.id)
-
-        payment_errors = _normalize_errors(serializer.errors)
-        messages.error(request, "Please correct the salary payment details and try again.")
+                payment_errors = _normalize_errors(serializer.errors)
+                messages.error(request, "Please correct the salary payment details and try again.")
 
     payload = build_salary_detail_payload(staff)
     custom_form_data = {

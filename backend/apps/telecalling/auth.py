@@ -84,6 +84,10 @@ def clear_auth_cookies(response):
 
 
 def get_staff_from_request(request):
+    cached_user = getattr(request, "_heavenection_authenticated_user", None)
+    if cached_user is not None:
+        return cached_user
+
     raw_token = request.COOKIES.get(ACCESS_COOKIE_NAME)
     if not raw_token:
         return None
@@ -91,7 +95,9 @@ def get_staff_from_request(request):
     auth = CookieJWTAuthentication()
     try:
         validated_token = auth.get_validated_token(raw_token)
-        return auth.get_user(validated_token)
+        user = auth.get_user(validated_token)
+        request._heavenection_authenticated_user = user
+        return user
     except (InvalidToken, TokenError):
         return None
 

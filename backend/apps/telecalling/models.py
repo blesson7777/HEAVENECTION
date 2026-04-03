@@ -330,6 +330,30 @@ class Salary(models.Model):
         ]
 
 
+class SalaryPaymentTransaction(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    salary_record = models.ForeignKey(
+        Salary,
+        on_delete=models.CASCADE,
+        related_name="payment_transactions",
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_method = models.CharField(
+        max_length=30,
+        choices=Salary.PaymentMethod.choices,
+        blank=True,
+        default="",
+    )
+    payment_reference = models.CharField(max_length=120, blank=True)
+    payment_note = models.TextField(blank=True)
+    paid_at = models.DateTimeField(default=timezone.now, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-paid_at", "-created_at")
+
+
 class AppRelease(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     version_name = models.CharField(max_length=40)

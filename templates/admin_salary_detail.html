@@ -56,6 +56,14 @@
                     <strong>{{ weekly_breakdown.recommended_amount }}</strong>
                 </div>
                 <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Already Credited</span>
+                    <strong>{{ weekly_breakdown.paid_total }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Balance</span>
+                    <strong>{{ weekly_breakdown.balance_amount }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
                     <span class="hc-profile-meta-label">Base Pay</span>
                     <strong>{{ weekly_breakdown.base_pay }}</strong>
                 </div>
@@ -73,7 +81,7 @@
                 <input type="hidden" name="payment_action" value="mark_weekly_paid">
                 <input type="hidden" name="period_start" value="{{ weekly_breakdown.period_start }}">
                 <input type="hidden" name="period_end" value="{{ weekly_breakdown.period_end }}">
-                <input type="hidden" name="paid_amount" value="{{ weekly_breakdown.recommended_amount_raw }}">
+                <input type="hidden" name="paid_amount" value="{{ weekly_breakdown.balance_amount_raw }}">
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label fw-semibold" for="weeklyPaymentReference">Reference</label>
@@ -83,9 +91,14 @@
                         <label class="form-label fw-semibold" for="weeklyPaymentNote">Note</label>
                         <input type="text" class="form-control" id="weeklyPaymentNote" name="payment_note" placeholder="Optional note">
                     </div>
+                    <div class="col-12">
+                        <div class="text-muted small">Only the remaining balance can be credited for this period.</div>
+                    </div>
                 </div>
                 <div class="d-flex justify-content-end mt-4">
-                    <button type="submit" class="btn btn-primary">Mark Weekly Salary Paid</button>
+                    <button type="submit" class="btn btn-primary"{% if weekly_breakdown.is_fully_paid %} disabled{% endif %}>
+                        {% if weekly_breakdown.is_fully_paid %}Weekly Salary Fully Paid{% else %}Pay Weekly Balance{% endif %}
+                    </button>
                 </div>
             </form>
         </div>
@@ -110,6 +123,14 @@
                     <strong>{{ monthly_breakdown.recommended_amount }}</strong>
                 </div>
                 <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Already Credited</span>
+                    <strong>{{ monthly_breakdown.paid_total }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Balance</span>
+                    <strong>{{ monthly_breakdown.balance_amount }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
                     <span class="hc-profile-meta-label">Base Pay</span>
                     <strong>{{ monthly_breakdown.base_pay }}</strong>
                 </div>
@@ -127,7 +148,7 @@
                 <input type="hidden" name="payment_action" value="mark_monthly_paid">
                 <input type="hidden" name="period_start" value="{{ monthly_breakdown.period_start }}">
                 <input type="hidden" name="period_end" value="{{ monthly_breakdown.period_end }}">
-                <input type="hidden" name="paid_amount" value="{{ monthly_breakdown.recommended_amount_raw }}">
+                <input type="hidden" name="paid_amount" value="{{ monthly_breakdown.balance_amount_raw }}">
                 <div class="row g-3">
                     <div class="col-md-6">
                         <label class="form-label fw-semibold" for="monthlyPaymentReference">Reference</label>
@@ -137,9 +158,14 @@
                         <label class="form-label fw-semibold" for="monthlyPaymentNote">Note</label>
                         <input type="text" class="form-control" id="monthlyPaymentNote" name="payment_note" placeholder="Optional note">
                     </div>
+                    <div class="col-12">
+                        <div class="text-muted small">Only the remaining balance can be credited for this period.</div>
+                    </div>
                 </div>
                 <div class="d-flex justify-content-end mt-4">
-                    <button type="submit" class="btn btn-dark">Mark Monthly Salary Paid</button>
+                    <button type="submit" class="btn btn-dark"{% if monthly_breakdown.is_fully_paid %} disabled{% endif %}>
+                        {% if monthly_breakdown.is_fully_paid %}Monthly Salary Fully Paid{% else %}Pay Monthly Balance{% endif %}
+                    </button>
                 </div>
             </form>
         </div>
@@ -202,6 +228,9 @@
                         <textarea class="form-control{% if custom_payment_errors.payment_note %} is-invalid{% endif %}" id="customPaymentNote" name="payment_note" rows="4" placeholder="Add a note for this credit">{{ custom_form_data.payment_note }}</textarea>
                         {% if custom_payment_errors.payment_note %}<div class="invalid-feedback">{{ custom_payment_errors.payment_note }}</div>{% endif %}
                     </div>
+                    <div class="col-12">
+                        <div class="text-muted small">Custom credits cannot exceed the remaining earnings for the selected period.</div>
+                    </div>
                 </div>
                 <div class="d-flex justify-content-end mt-4">
                     <button type="submit" class="btn btn-primary">Save Custom Payment</button>
@@ -228,6 +257,7 @@
                             <th>Credited</th>
                             <th>Method</th>
                             <th>Paid At</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -246,9 +276,17 @@
                             </td>
                             <td>{{ row.payment_method_label }}</td>
                             <td>{{ row.paid_at }}</td>
+                            <td class="text-end">
+                                <form method="post" action="{% url 'salary-detail-page' staff_member.id %}" class="m-0 d-inline-block" onsubmit="return confirm('Delete this payment transaction?');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="payment_action" value="delete_payment_transaction">
+                                    <input type="hidden" name="transaction_id" value="{{ row.id }}">
+                                    <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                                </form>
+                            </td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="6" class="text-center py-4">No salary credits recorded yet.</td></tr>
+                        <tr><td colspan="7" class="text-center py-4">No salary credits recorded yet.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
