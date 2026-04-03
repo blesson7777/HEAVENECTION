@@ -163,7 +163,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   DateTime? _backgroundedAt;
   BuildContext? _idleWarningDialogContext;
   BuildContext? _callStatusDialogContext;
-  BuildContext? _callScreenContext;
   bool _isIdleWarningVisible = false;
   bool _isHeartbeatRequestInFlight = false;
   bool _isSyncingCallLog = false;
@@ -370,17 +369,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
     _openPendingCustomerPage();
-    final callScreenContext = _callScreenContext;
-    if (_isCallScreenOpen && callScreenContext != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
-        final navigator = Navigator.of(callScreenContext);
+    if (_isCallScreenOpen) {
+      try {
+        final navigator = Navigator.of(context, rootNavigator: true);
         if (navigator.canPop()) {
           navigator.pop();
         }
-      });
+      } catch (_) {
+        // Ignore navigation state races while the route tree settles.
+      }
     }
   }
 
@@ -415,17 +412,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         MaterialPageRoute<void>(
           builder: (_) => Scaffold(
             appBar: AppBar(title: const Text('Call')),
-            body: Builder(
-              builder: (callScreenContext) {
-                _callScreenContext = callScreenContext;
-                return SafeArea(child: _call(lead));
-              },
-            ),
+            body: SafeArea(child: _call(lead)),
           ),
         ),
       );
     } finally {
-      _callScreenContext = null;
       _isCallScreenOpen = false;
     }
   }
@@ -2083,52 +2074,267 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     return null;
   }
 
-  Future<ShortCallDecision?> _askShortCallDecision(int durationSeconds) async {
+  Future<_CallRemarkDialogResult?> _showCallRemarkDialog({
+    required String title,
+    required String message,
+    required List<String> choices,
+    required String saveButtonLabel,
+    String initialStatus = '',
+    bool allowRetryAction = false,
+    String retryButtonLabel = 'Call Again',
+    bool trackPendingPrompt = false,
+  }) async {
     if (!mounted) {
       return null;
     }
 
-    final isNoResponse = durationSeconds <= 0;
-    final title = isNoResponse ? 'No Response?' : 'Short Call Warning';
-    final message = isNoResponse
-        ? 'The customer did not attend the call. Call again, or mark it as No Response or Rejected.'
-        : 'This call lasted less than 10 seconds. Call the customer again, or if the outcome is confirmed, mark No Response or Rejected.';
+    const callbackChoices = ['Noon', 'Evening', 'Night'];
+    var selectedStatus = choices.contains(initialStatus)
+        ? initialStatus
+        : choices.first;
+    var selectedCallbackWindow = '';
 
-    return showDialog<ShortCallDecision>(
+    return showDialog<_CallRemarkDialogResult>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          title: Text(title),
-          content: Text(message),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(
-                  dialogContext,
-                ).pop(ShortCallDecision.markNoResponse);
-              },
-              child: const Text('Mark No Response'),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(ShortCallDecision.markRejected);
-              },
-              child: const Text('Mark Rejected'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(dialogContext).pop(ShortCallDecision.callAgain);
-              },
-              child: const Text('Call Again'),
-            ),
-          ],
+        if (trackPendingPrompt) {
+          _callStatusDialogContext = dialogContext;
+        }
+        var isSaving = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return PopScope(
+              canPop: false,
+              child: AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                title: Text(title),
+                content: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(message),
+                        if (_pendingStatusLeadName.isNotEmpty ||
+                            _pendingStatusLeadPhone.isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: kSoft,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (_pendingStatusLeadName.isNotEmpty)
+                                  Text(
+                                    _pendingStatusLeadName,
+                                    style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                if (_pendingStatusLeadPhone.isNotEmpty)
+                                  Text(
+                                    _pendingStatusLeadPhone,
+                                    style: const TextStyle(color: Colors.black54),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                        ...choices.map((item) {
+                          final isSelected = selectedStatus == item;
+                          final color = _remarkColor(item);
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(20),
+                              onTap: isSaving
+                                  ? null
+                                  : () {
+                                      setDialogState(() {
+                                        selectedStatus = item;
+                                        if (item != 'Call Back') {
+                                          selectedCallbackWindow = '';
+                                        }
+                                      });
+                                    },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? color.withValues(alpha: 0.12)
+                                      : Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: isSelected ? color : Colors.black12,
+                                    width: isSelected ? 1.6 : 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      width: 42,
+                                      height: 42,
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? color
+                                            : color.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      child: Icon(
+                                        _remarkIcon(item),
+                                        color: isSelected ? Colors.white : color,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            item,
+                                            style: TextStyle(
+                                              fontSize: 16.5,
+                                              fontWeight: FontWeight.w800,
+                                              color: isSelected
+                                                  ? color
+                                                  : kPrimaryDark,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            _remarkDescription(item),
+                                            style: const TextStyle(
+                                              fontSize: 14.5,
+                                              color: Colors.black54,
+                                              height: 1.4,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                        if (selectedStatus == 'Call Back') ...[
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Choose the callback time requested by the customer',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: callbackChoices
+                                .map(
+                                  (item) => ChoiceChip(
+                                    selected: selectedCallbackWindow == item,
+                                    onSelected: isSaving
+                                        ? null
+                                        : (_) {
+                                            setDialogState(
+                                              () => selectedCallbackWindow = item,
+                                            );
+                                          },
+                                    selectedColor: kPrimary,
+                                    backgroundColor: Colors.white,
+                                    label: Text(
+                                      item,
+                                      style: TextStyle(
+                                        color: selectedCallbackWindow == item
+                                            ? Colors.white
+                                            : kPrimaryDark,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                actions: [
+                  if (allowRetryAction)
+                    TextButton(
+                      onPressed: isSaving
+                          ? null
+                          : () {
+                              Navigator.of(dialogContext).pop(
+                                const _CallRemarkDialogResult(retryCall: true),
+                              );
+                            },
+                      child: Text(retryButtonLabel),
+                    ),
+                  ElevatedButton(
+                    onPressed:
+                        isSaving ||
+                            (selectedStatus == 'Call Back' &&
+                                selectedCallbackWindow.isEmpty)
+                        ? null
+                        : () async {
+                            setDialogState(() => isSaving = true);
+                            Navigator.of(dialogContext).pop(
+                              _CallRemarkDialogResult(
+                                statusLabel: selectedStatus,
+                                callbackWindow: _callbackWindowValue(
+                                  selectedCallbackWindow,
+                                ),
+                                callbackWindowLabel: selectedCallbackWindow,
+                              ),
+                            );
+                          },
+                    child: Text(isSaving ? 'Saving...' : saveButtonLabel),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );
+  }
+
+  Future<ShortCallDecision?> _askShortCallDecision(int durationSeconds) async {
+    final isNoResponse = durationSeconds <= 0;
+    final result = await _showCallRemarkDialog(
+      title: isNoResponse ? 'Select Customer Remark' : 'Select Customer Remark',
+      message: isNoResponse
+          ? 'The customer did not attend the call. Choose the correct remark or call the customer again.'
+          : 'This call lasted less than 10 seconds. Choose the correct remark, or call the customer again if more discussion is needed.',
+      choices: const ['No Response', 'Rejected'],
+      saveButtonLabel: 'Save Remark',
+      initialStatus: 'No Response',
+      allowRetryAction: true,
+    );
+    if (result == null) {
+      return null;
+    }
+    if (result.retryCall) {
+      return ShortCallDecision.callAgain;
+    }
+    if (result.statusLabel == 'Rejected') {
+      return ShortCallDecision.markRejected;
+    }
+    return ShortCallDecision.markNoResponse;
   }
 
   Future<void> _completeShortCallDecision(
@@ -2825,234 +3031,26 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    const choices = ['Rejected', 'Follow Up', 'Call Back', 'No Response'];
-    const callbackChoices = ['Noon', 'Evening', 'Night'];
-
     _isCallStatusPromptVisible = true;
-    var selectedStatus = choices.contains(_callStatus)
-        ? _callStatus
-        : 'Follow Up';
-    var selectedCallbackWindow = '';
-
-    final didSave = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) {
-        _callStatusDialogContext = dialogContext;
-        var isSaving = false;
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return PopScope(
-              canPop: false,
-              child: AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                title: const Text('Select Customer Remark'),
-                content: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Choose one simple remark before moving to the next customer.',
-                        ),
-                        if (_pendingStatusLeadName.isNotEmpty ||
-                            _pendingStatusLeadPhone.isNotEmpty) ...[
-                          const SizedBox(height: 14),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: kSoft,
-                              borderRadius: BorderRadius.circular(18),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (_pendingStatusLeadName.isNotEmpty)
-                                  Text(
-                                    _pendingStatusLeadName,
-                                    style: const TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                if (_pendingStatusLeadPhone.isNotEmpty)
-                                  Text(
-                                    _pendingStatusLeadPhone,
-                                    style: const TextStyle(color: Colors.black54),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                        ...choices.map((item) {
-                          final isSelected = selectedStatus == item;
-                          final color = _remarkColor(item);
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(20),
-                              onTap: isSaving
-                                  ? null
-                                  : () {
-                                      setDialogState(() {
-                                        selectedStatus = item;
-                                        if (item != 'Call Back') {
-                                          selectedCallbackWindow = '';
-                                        }
-                                      });
-                                    },
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(16),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? color.withValues(alpha: 0.12)
-                                      : Colors.white,
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? color
-                                        : Colors.black12,
-                                    width: isSelected ? 1.6 : 1,
-                                  ),
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      width: 42,
-                                      height: 42,
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? color
-                                            : color.withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(14),
-                                      ),
-                                      child: Icon(
-                                        _remarkIcon(item),
-                                        color: isSelected ? Colors.white : color,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            item,
-                                            style: TextStyle(
-                                              fontSize: 16.5,
-                                              fontWeight: FontWeight.w800,
-                                              color: isSelected
-                                                  ? color
-                                                  : kPrimaryDark,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            _remarkDescription(item),
-                                            style: const TextStyle(
-                                              fontSize: 14.5,
-                                              color: Colors.black54,
-                                              height: 1.4,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                        if (selectedStatus == 'Call Back') ...[
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Choose the callback time requested by the customer',
-                            style: TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: callbackChoices
-                                .map(
-                                  (item) => ChoiceChip(
-                                    selected: selectedCallbackWindow == item,
-                                    onSelected: isSaving
-                                        ? null
-                                        : (_) {
-                                            setDialogState(
-                                              () => selectedCallbackWindow = item,
-                                            );
-                                          },
-                                    selectedColor: kPrimary,
-                                    backgroundColor: Colors.white,
-                                    label: Text(
-                                      item,
-                                      style: TextStyle(
-                                        color: selectedCallbackWindow == item
-                                            ? Colors.white
-                                            : kPrimaryDark,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-                actions: [
-                  ElevatedButton(
-                    onPressed:
-                        isSaving ||
-                            (selectedStatus == 'Call Back' &&
-                                selectedCallbackWindow.isEmpty)
-                        ? null
-                        : () async {
-                            setDialogState(() => isSaving = true);
-                            final saved = await _submitPendingCallStatus(
-                              selectedStatus,
-                              callbackWindow: _callbackWindowValue(
-                                selectedCallbackWindow,
-                              ),
-                              callbackWindowLabel: selectedCallbackWindow,
-                            );
-                            if (!mounted) {
-                              return;
-                            }
-                            if (saved && dialogContext.mounted) {
-                              Navigator.of(dialogContext).pop(true);
-                              return;
-                            }
-                            if (dialogContext.mounted) {
-                              setDialogState(() => isSaving = false);
-                            }
-                          },
-                    child: Text(isSaving ? 'Saving...' : 'Save Remark'),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
+    final selection = await _showCallRemarkDialog(
+      title: 'Select Customer Remark',
+      message: 'Choose one simple remark before moving to the next customer.',
+      choices: const ['Rejected', 'Follow Up', 'Call Back', 'No Response'],
+      saveButtonLabel: 'Save Remark',
+      initialStatus: _callStatus,
+      trackPendingPrompt: true,
     );
     _callStatusDialogContext = null;
     _isCallStatusPromptVisible = false;
-    if (didSave == true) {
+    if (selection == null || selection.retryCall) {
+      return;
+    }
+    final didSave = await _submitPendingCallStatus(
+      selection.statusLabel,
+      callbackWindow: selection.callbackWindow,
+      callbackWindowLabel: selection.callbackWindowLabel,
+    );
+    if (didSave) {
       await _focusLeadWorkflowAfterCallResultSaved();
     }
   }
@@ -6174,6 +6172,20 @@ class PendingDialerCall {
   final String leadId;
   final String phone;
   final DateTime startedAt;
+}
+
+class _CallRemarkDialogResult {
+  const _CallRemarkDialogResult({
+    this.statusLabel = '',
+    this.callbackWindow = '',
+    this.callbackWindowLabel = '',
+    this.retryCall = false,
+  });
+
+  final String statusLabel;
+  final String callbackWindow;
+  final String callbackWindowLabel;
+  final bool retryCall;
 }
 
 enum ShortCallDecision { markNoResponse, markRejected, callAgain }
