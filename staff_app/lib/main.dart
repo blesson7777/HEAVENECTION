@@ -2002,7 +2002,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    await _syncCallFromLog(allowManualFallback: true, showMissingMessage: true);
+    await _syncCallFromLog(allowManualFallback: false, showMissingMessage: true);
   }
 
   Future<bool> _ensureCallLogAccess() async {
@@ -2623,12 +2623,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _backgroundedAt = null;
 
     await _loadDashboardData(showLoader: false, promptTrainingGate: true);
-    if (_pendingDialerCall != null) {
-      await _syncCallFromLog(
-        allowManualFallback: false,
-        showMissingMessage: false,
-      );
-    }
 
     if (!_summary.workingNow) {
       return;
