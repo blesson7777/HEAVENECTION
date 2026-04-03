@@ -33,6 +33,7 @@ const Duration kIdleWarningAfter = Duration(minutes: 5);
 const Duration kIdleWarningGrace = Duration(minutes: 5);
 const Duration kBackgroundSessionTimeout = Duration(minutes: 5);
 const Duration kShortCallReviewThreshold = Duration(seconds: 10);
+const Duration kMinimumQualifyingCallDuration = Duration(seconds: 5);
 const int kCallLogSyncAttempts = 6;
 const Duration kCallLogSyncRetryDelay = Duration(seconds: 2);
 
@@ -2409,7 +2410,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     );
     final endedAt = startedAt.add(Duration(seconds: durationSeconds));
 
-    if (durationSeconds < kShortCallReviewThreshold.inSeconds) {
+    if (durationSeconds < kMinimumQualifyingCallDuration.inSeconds) {
       final decision = await _askShortCallDecision(durationSeconds);
       if (decision == null) {
         return;
