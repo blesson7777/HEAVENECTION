@@ -17,7 +17,7 @@ import 'app_models.dart';
 const String kBrandName = 'HEAVENECTION';
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://127.0.0.1:8000',
+  defaultValue: 'https://heavenection-production.up.railway.app',
 );
 
 const Color kPrimary = Color(0xFF4D5C90);
