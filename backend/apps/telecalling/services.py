@@ -3515,7 +3515,10 @@ def end_staff_call(call, status=None, *, duration_seconds=None, ended_at=None, s
             },
             mark_verified=is_verified,
         )
-    if not call.is_qualifying and requested_status in {
+    if source == "call_log_short_recall":
+        call.is_qualifying = False
+        call.status = Call.Status.INVALID_SHORT
+    elif not call.is_qualifying and requested_status in {
         Call.Status.NO_ANSWER,
         Call.Status.NOT_INTERESTED,
     }:

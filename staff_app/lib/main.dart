@@ -32,7 +32,7 @@ const Duration kIdleMonitorInterval = Duration(seconds: 15);
 const Duration kIdleWarningAfter = Duration(minutes: 5);
 const Duration kIdleWarningGrace = Duration(minutes: 5);
 const Duration kBackgroundSessionTimeout = Duration(minutes: 5);
-const Duration kShortCallReviewThreshold = Duration(seconds: 10);
+const Duration kShortCallReviewThreshold = Duration(seconds: 15);
 const Duration kMinimumQualifyingCallDuration = Duration(seconds: 5);
 const int kCallLogSyncAttempts = 6;
 const Duration kCallLogSyncRetryDelay = Duration(seconds: 2);
@@ -2317,11 +2317,13 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   Future<ShortCallDecision?> _askShortCallDecision(int durationSeconds) async {
     final isNoResponse = durationSeconds <= 0;
     final result = await _showCallRemarkDialog(
-      title: isNoResponse ? 'Select Customer Remark' : 'Select Customer Remark',
+      title: 'Select Customer Remark',
       message: isNoResponse
-          ? 'The customer did not attend the call. Choose the correct remark or call the customer again.'
-          : 'This call lasted less than 10 seconds. Choose the correct remark, or call the customer again if more discussion is needed.',
-      choices: const ['No Response', 'Rejected'],
+          ? 'The call did not connect. Mark it as No Response or call the customer again.'
+          : 'This call lasted less than 15 seconds. If the discussion was not complete, call the customer again. Otherwise mark No Response or Rejected.',
+      choices: isNoResponse
+          ? const ['No Response']
+          : const ['No Response', 'Rejected'],
       saveButtonLabel: 'Save Remark',
       initialStatus: 'No Response',
       allowRetryAction: true,
@@ -2410,7 +2412,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     );
     final endedAt = startedAt.add(Duration(seconds: durationSeconds));
 
-    if (durationSeconds < kMinimumQualifyingCallDuration.inSeconds) {
+    if (durationSeconds < kShortCallReviewThreshold.inSeconds) {
       final decision = await _askShortCallDecision(durationSeconds);
       if (decision == null) {
         return;
