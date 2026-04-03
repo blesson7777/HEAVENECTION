@@ -24,8 +24,8 @@ Set these on the web service:
 
 - `DJANGO_SECRET_KEY`
 - `DJANGO_DEBUG=false`
-- `DJANGO_ALLOWED_HOSTS=heavenection-production.up.railway.app,heavenection.com,www.heavenection.com,healthcheck.railway.app`
-- `DJANGO_CSRF_TRUSTED_ORIGINS=https://heavenection-production.up.railway.app,https://heavenection.com,https://www.heavenection.com`
+- `DJANGO_ALLOWED_HOSTS=api.heavenection.com,heavenection-production.up.railway.app,heavenection.com,www.heavenection.com,healthcheck.railway.app`
+- `DJANGO_CSRF_TRUSTED_ORIGINS=https://api.heavenection.com,https://heavenection-production.up.railway.app,https://heavenection.com,https://www.heavenection.com`
 - `DJANGO_MEDIA_ROOT=/data/media`
 - `DATABASE_URL=${{Postgres.DATABASE_URL}}`
 - `POSTGRES_CONN_MAX_AGE=60`
@@ -83,12 +83,30 @@ If you want your live users to receive that build through the in-app updater:
 
 Current live-safe setup:
 - backend web can use `https://heavenection-production.up.railway.app`
-- custom domain can be added in parallel with:
+- recommended app endpoint is `https://api.heavenection.com`
+- website/admin can use:
   - `https://heavenection.com`
   - `https://www.heavenection.com`
 
-Once the custom domain is fully verified and no longer returns `400`, build future APKs with:
+To add the API subdomain on Railway:
+
+1. Open the `HEAVENECTION` web service.
+2. Go to `Settings -> Networking -> Public Networking -> + Custom Domain`.
+3. Add `api.heavenection.com`.
+4. Railway will show the exact CNAME target to use in DNS.
+5. In your DNS provider, create:
+
+```text
+Type: CNAME
+Name: api
+Value: <the Railway target shown for api.heavenection.com>
+TTL: Auto
+```
+
+6. Wait for Railway to show the green check for the new custom domain.
+
+Once `api.heavenection.com` is verified, build future APKs with:
 
 ```powershell
-flutter build apk --release --dart-define=API_BASE_URL=https://heavenection.com
+flutter build apk --release --dart-define=API_BASE_URL=https://api.heavenection.com
 ```

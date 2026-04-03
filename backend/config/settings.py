@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DEFAULT_PRODUCTION_HOSTS = [
+    "api.heavenection.com",
     "heavenection-production.up.railway.app",
     "heavenection.com",
     "www.heavenection.com",
@@ -13,6 +14,7 @@ DEFAULT_PRODUCTION_HOSTS = [
     "healthcheck.railway.app",
 ]
 DEFAULT_PRODUCTION_CSRF_ORIGINS = [
+    "https://api.heavenection.com",
     "https://heavenection-production.up.railway.app",
     "https://heavenection.com",
     "https://www.heavenection.com",
