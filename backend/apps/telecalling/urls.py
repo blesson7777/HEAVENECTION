@@ -36,6 +36,7 @@ urlpatterns = [
     path("staff/customers/", views.staff_customer_history_api, name="api-staff-customer-history"),
     path("staff/customers/<uuid:lead_id>/recover/", views.recover_staff_lead_api, name="api-staff-lead-recover"),
     path("staff/profile/", views.staff_profile_api, name="api-staff-profile"),
+    path("staff/salary/", views.staff_salary_details_api, name="api-staff-salary-details"),
     path(
         "staff/profile/documents/<str:document_type>/",
         views.staff_profile_document_api,

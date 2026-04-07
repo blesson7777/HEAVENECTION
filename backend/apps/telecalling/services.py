@@ -23,6 +23,7 @@ from backend.apps.telecalling.models import (
     Call,
     CompanyProfile,
     Lead,
+    ReferralReward,
     Salary,
     SalaryPaymentTransaction,
     Session,
@@ -416,6 +417,58 @@ def build_staff_current_salary_summary(staff, *, today=None):
     }
 
 
+def _staff_total_active_hours(staff):
+    total_seconds = (
+        Session.objects.filter(staff=staff).aggregate(total=Sum("active_seconds")).get("total")
+        or 0
+    )
+    return _quantized_decimal(Decimal(total_seconds) / Decimal("3600"))
+
+
+def _sync_referral_reward_for_staff(staff, *, company_profile=None):
+    company_profile = company_profile or get_company_profile()
+    existing_reward = (
+        ReferralReward.objects.select_related("referrer", "referred_staff")
+        .filter(referred_staff=staff)
+        .first()
+    )
+    if existing_reward:
+        return existing_reward
+
+    if (
+        not company_profile.referral_program_enabled
+        or not staff.referred_by_id
+        or Decimal(company_profile.referral_required_hours or 0) <= Decimal("0")
+        or Decimal(company_profile.referral_reward_amount or 0) <= Decimal("0")
+    ):
+        return None
+
+    total_hours = _staff_total_active_hours(staff)
+    required_hours = _quantized_decimal(company_profile.referral_required_hours or 0)
+    if total_hours < required_hours:
+        return None
+
+    return ReferralReward.objects.create(
+        referrer=staff.referred_by,
+        referred_staff=staff,
+        required_hours=required_hours,
+        reward_amount=_money(company_profile.referral_reward_amount or 0),
+        qualified_at=timezone.now(),
+    )
+
+
+def sync_referral_rewards(company_profile=None):
+    company_profile = company_profile or get_company_profile()
+    if not company_profile.referral_program_enabled:
+        return []
+    rewards = []
+    for staff in Staff.objects.filter(role=Staff.Role.STAFF, referred_by__isnull=False).select_related("referred_by"):
+        reward = _sync_referral_reward_for_staff(staff, company_profile=company_profile)
+        if reward:
+            rewards.append(reward)
+    return rewards
+
+
 def _date_range_bounds(period_start, period_end):
     start_at = timezone.make_aware(timezone.datetime.combine(period_start, timezone.datetime.min.time()))
     end_at = timezone.make_aware(timezone.datetime.combine(period_end, timezone.datetime.max.time()))
@@ -507,6 +560,211 @@ def build_staff_salary_history_rows(staff, limit=20):
             }
         )
     return rows
+
+
+def build_staff_referral_reward_rows(staff, limit=20):
+    rewards = (
+        ReferralReward.objects.filter(referrer=staff)
+        .select_related("referred_staff")
+        .order_by("-qualified_at", "-created_at")[:limit]
+    )
+    rows = []
+    for reward in rewards:
+        rows.append(
+            {
+                "id": str(reward.id),
+                "referred_staff_name": reward.referred_staff.name,
+                "referred_staff_phone": reward.referred_staff.phone,
+                "required_hours_label": f"{float(reward.required_hours or 0):,.1f}h",
+                "reward_amount_label": _format_currency(reward.reward_amount),
+                "qualified_at_label": _format_datetime(reward.qualified_at),
+                "is_paid": reward.is_paid,
+                "paid_at_label": _format_datetime(reward.paid_at),
+                "payment_method_label": reward.get_payment_method_display() if reward.payment_method else "Manual",
+                "payment_reference": reward.payment_reference or "--",
+                "payment_note": reward.payment_note or "--",
+            }
+        )
+    return rows
+
+
+def build_staff_referral_summary(staff, *, company_profile=None):
+    company_profile = company_profile or get_company_profile()
+    if not company_profile.referral_program_enabled:
+        return {
+            "enabled": False,
+            "required_hours_label": "0.0h",
+            "reward_amount_label": _format_currency(0),
+            "referred_by_name": "",
+            "qualified_count": 0,
+            "pending_count": 0,
+            "paid_count": 0,
+            "pending_total_label": _format_currency(0),
+        }
+
+    reward_rows = ReferralReward.objects.filter(referrer=staff)
+    pending_total = (
+        reward_rows.filter(is_paid=False).aggregate(total=Sum("reward_amount")).get("total")
+        or Decimal("0.00")
+    )
+    return {
+        "enabled": True,
+        "required_hours_label": f"{float(company_profile.referral_required_hours or 0):,.1f}h",
+        "reward_amount_label": _format_currency(company_profile.referral_reward_amount or 0),
+        "referred_by_name": staff.referred_by.name if staff.referred_by else "",
+        "qualified_count": reward_rows.count(),
+        "pending_count": reward_rows.filter(is_paid=False).count(),
+        "paid_count": reward_rows.filter(is_paid=True).count(),
+        "pending_total_label": _format_currency(pending_total),
+    }
+
+
+def _staff_salary_snapshot_block(title, snapshot, *, subtitle=""):
+    return {
+        "title": title,
+        "subtitle": subtitle,
+        "period_start": snapshot["period_start"].isoformat(),
+        "period_end": snapshot["period_end"].isoformat(),
+        "period_label": snapshot["period_label"],
+        "hours_label": snapshot["hours_label"],
+        "earned_total_label": snapshot["earned_total_label"],
+        "paid_total_label": snapshot["paid_total_label"],
+        "balance_label": snapshot["balance_label"],
+        "base_pay_label": snapshot["base_pay_label"],
+        "call_earnings_label": snapshot["call_earnings_label"],
+        "bonus_earnings_label": snapshot["bonus_earnings_label"],
+    }
+
+
+def _monthly_earnings_pattern_rows(staff, *, today):
+    month_start = today.replace(day=1)
+    month_end = today
+    rows = []
+    segment_start = month_start
+    week_number = 1
+    while segment_start <= month_end:
+        segment_end = min(segment_start + timedelta(days=6), month_end)
+        snapshot = _salary_period_snapshot(
+            staff,
+            period_start=segment_start,
+            period_end=segment_end,
+            payout_cycle=Salary.PayoutCycle.CUSTOM,
+        )
+        rows.append(
+            {
+                "title": f"Week {week_number}",
+                "period_label": snapshot["period_label"],
+                "hours_label": snapshot["hours_label"],
+                "earned_total_label": snapshot["earned_total_label"],
+                "paid_total_label": snapshot["paid_total_label"],
+                "balance_label": snapshot["balance_label"],
+            }
+        )
+        segment_start = segment_end + timedelta(days=1)
+        week_number += 1
+    return rows
+
+
+def _weekly_earnings_pattern_rows(staff, *, today, count=4):
+    latest_period_start, latest_period_end = _weekly_due_period(today, staff.weekly_payout_day)
+    rows = []
+    for index in range(count):
+        period_end = latest_period_end - timedelta(days=7 * index)
+        period_start = latest_period_start - timedelta(days=7 * index)
+        snapshot = _salary_period_snapshot(
+            staff,
+            period_start=period_start,
+            period_end=period_end,
+            payout_cycle=Salary.PayoutCycle.WEEKLY,
+        )
+        rows.append(
+            {
+                "title": f"Week {index + 1}",
+                "period_label": snapshot["period_label"],
+                "hours_label": snapshot["hours_label"],
+                "earned_total_label": snapshot["earned_total_label"],
+                "paid_total_label": snapshot["paid_total_label"],
+                "balance_label": snapshot["balance_label"],
+            }
+        )
+    return rows
+
+
+def build_staff_salary_details_payload(staff):
+    today = timezone.localdate()
+    company_profile = get_company_profile()
+    sync_referral_rewards(company_profile)
+    current_period_start, current_period_end = _running_period_for_staff(staff, today)
+    current_snapshot = _salary_period_snapshot(
+        staff,
+        period_start=current_period_start,
+        period_end=current_period_end,
+        payout_cycle=_running_payout_cycle_for_staff(staff),
+    )
+    previous_month_start, previous_month_end = _previous_month_range(today)
+    previous_month_snapshot = _salary_period_snapshot(
+        staff,
+        period_start=previous_month_start,
+        period_end=previous_month_end,
+        payout_cycle=Salary.PayoutCycle.MONTHLY,
+    )
+
+    if staff.compensation_type == Staff.CompensationType.WEEKLY:
+        pattern_title = "Recent weekly earnings"
+        pattern_subtitle = (
+            f"These payout blocks close every {staff.get_weekly_payout_day_display()}."
+        )
+        pattern_rows = _weekly_earnings_pattern_rows(staff, today=today)
+    else:
+        pattern_title = "Monthly earning pattern"
+        pattern_subtitle = "See how the current month is building week by week."
+        pattern_rows = _monthly_earnings_pattern_rows(staff, today=today)
+
+    current_title = {
+        Staff.CompensationType.MONTHLY: "Current month earnings",
+        Staff.CompensationType.WEEKLY: "Current week earnings",
+        Staff.CompensationType.HOURLY: "Current earned amount",
+    }.get(staff.compensation_type, "Current earnings")
+
+    target_hours_value = (
+        staff.target_hours_per_month
+        if staff.compensation_type == Staff.CompensationType.MONTHLY
+        else staff.target_hours_per_week
+    )
+    target_hours_unit = "month" if staff.compensation_type == Staff.CompensationType.MONTHLY else "week"
+
+    return {
+        "summary": {
+            "compensation_type": staff.compensation_type,
+            "compensation_type_label": staff.get_compensation_type_display(),
+            "payout_schedule_label": _salary_schedule_label(staff),
+            "weekly_payout_day_label": staff.get_weekly_payout_day_display() if staff.weekly_payout_day else "",
+            "hourly_rate_label": _format_currency(staff.hourly_rate),
+            "call_rate_label": _format_currency(staff.call_rate),
+            "bonus_per_conversion_label": _format_currency(staff.bonus_per_conversion),
+            "target_hours_label": f"{float(target_hours_value or 0):,.1f}h per {target_hours_unit}",
+        },
+        "current_cycle": _staff_salary_snapshot_block(
+            current_title,
+            current_snapshot,
+            subtitle="This is the earning progress for the running payout cycle.",
+        ),
+        "previous_month": _staff_salary_snapshot_block(
+            "Previous month earnings",
+            previous_month_snapshot,
+            subtitle="Review the full earning and payment position from the last completed month.",
+        ),
+        "pattern": {
+            "title": pattern_title,
+            "subtitle": pattern_subtitle,
+            "rows": pattern_rows,
+        },
+        "payment_history": build_staff_salary_history_rows(staff, limit=20),
+        "referral": {
+            **build_staff_referral_summary(staff, company_profile=company_profile),
+            "history": build_staff_referral_reward_rows(staff, limit=20),
+        },
+    }
 
 
 def build_recent_salary_payment_rows(limit=40):
@@ -693,6 +951,34 @@ def queue_salary_payment_acknowledgement(salary_record):
         "queued": True,
         "message": f"Salary acknowledgement will be sent to {staff_email} shortly.",
     }
+
+
+def record_referral_reward_payment(
+    reward,
+    *,
+    payment_method="",
+    payment_reference="",
+    payment_note="",
+):
+    if reward.is_paid:
+        raise ValidationError({"reward": ["This referral reward is already paid."]})
+
+    reward.is_paid = True
+    reward.paid_at = timezone.now()
+    reward.payment_method = payment_method or ""
+    reward.payment_reference = payment_reference or ""
+    reward.payment_note = payment_note or ""
+    reward.save(
+        update_fields=[
+            "is_paid",
+            "paid_at",
+            "payment_method",
+            "payment_reference",
+            "payment_note",
+            "updated_at",
+        ]
+    )
+    return reward
 
 
 def record_staff_salary_payment(
@@ -2685,16 +2971,31 @@ def build_staff_profile_payload(request, staff):
 
 
 def build_salary_control_payload(request):
+    company_profile = get_company_profile()
+    sync_referral_rewards(company_profile)
     hourly_tracking_count = 0
     weekly_count = 0
     monthly_count = 0
     salary_rows = []
-    for staff in _staff_queryset():
+    staff_queryset = list(_staff_queryset())
+    referrer_options = [
+        {"id": str(staff.id), "name": staff.name}
+        for staff in staff_queryset
+    ]
+    for staff in staff_queryset:
         hourly_tracking_count += 1
         if staff.compensation_type == Staff.CompensationType.WEEKLY:
             weekly_count += 1
         elif staff.compensation_type == Staff.CompensationType.MONTHLY:
             monthly_count += 1
+
+        pending_referral_total = (
+            ReferralReward.objects.filter(referrer=staff, is_paid=False)
+            .aggregate(total=Sum("reward_amount"))
+            .get("total")
+            or Decimal("0.00")
+        )
+        pending_referral_count = ReferralReward.objects.filter(referrer=staff, is_paid=False).count()
 
         salary_rows.append(
             {
@@ -2730,6 +3031,10 @@ def build_salary_control_payload(request):
                 if staff.passbook_photo
                 else "",
                 "profile_url": reverse("staff-profile-page", args=[staff.id]),
+                "referred_by_id": str(staff.referred_by_id) if staff.referred_by_id else "",
+                "referred_by_name": staff.referred_by.name if staff.referred_by else "--",
+                "pending_referral_reward_count": pending_referral_count,
+                "pending_referral_reward_total": _format_currency(pending_referral_total),
             }
         )
 
@@ -2739,12 +3044,22 @@ def build_salary_control_payload(request):
             "weekly_count": weekly_count,
             "monthly_count": monthly_count,
         },
+        "referral_settings": {
+            "enabled": company_profile.referral_program_enabled,
+            "required_hours": f"{Decimal(company_profile.referral_required_hours or 0):.2f}",
+            "reward_amount": f"{Decimal(company_profile.referral_reward_amount or 0):.2f}",
+            "required_hours_label": f"{float(company_profile.referral_required_hours or 0):,.1f}h",
+            "reward_amount_label": _format_currency(company_profile.referral_reward_amount or 0),
+        },
+        "referrer_options": referrer_options,
         "salary_rows": salary_rows,
     }
 
 
 def build_salary_page_payload():
     today = timezone.localdate()
+    company_profile = get_company_profile()
+    sync_referral_rewards(company_profile)
     paid_totals_by_staff = {
         row["staff_id"]: row["paid_total"] or Decimal("0.00")
         for row in Salary.objects.filter(paid_amount__gt=Decimal("0.00")).values("staff_id").annotate(paid_total=Sum("paid_amount"))
@@ -2759,6 +3074,8 @@ def build_salary_page_payload():
     pending_staff_count = 0
     advance_total = Decimal("0.00")
     advance_staff_count = 0
+    pending_referral_total = Decimal("0.00")
+    pending_referral_count = 0
     salary_rows = []
 
     for staff in _staff_queryset():
@@ -2791,6 +3108,18 @@ def build_salary_page_payload():
         if advance_available > Decimal("0.00"):
             advance_total += advance_available
             advance_staff_count += 1
+
+        pending_referral_rewards = list(
+            ReferralReward.objects.filter(referrer=staff, is_paid=False)
+            .select_related("referred_staff")
+            .order_by("qualified_at", "created_at")
+        )
+        pending_referral_amount = sum(
+            (reward.reward_amount for reward in pending_referral_rewards),
+            Decimal("0.00"),
+        )
+        pending_referral_total += pending_referral_amount
+        pending_referral_count += len(pending_referral_rewards)
 
         salary_rows.append(
             {
@@ -2830,6 +3159,21 @@ def build_salary_page_payload():
                 "last_paid_at": _format_datetime(paid_meta_by_staff.get(staff.id)),
                 "can_pay_salary": due_snapshot["balance"] > Decimal("0.00"),
                 "can_pay_advance": advance_available > Decimal("0.00"),
+                "can_pay_referral_rewards": bool(pending_referral_rewards),
+                "pending_referral_reward_total": _format_currency(pending_referral_amount),
+                "pending_referral_reward_total_raw": f"{pending_referral_amount:.2f}",
+                "pending_referral_reward_count": len(pending_referral_rewards),
+                "pending_referral_rewards": [
+                    {
+                        "id": str(reward.id),
+                        "referred_staff_name": reward.referred_staff.name,
+                        "referred_staff_phone": reward.referred_staff.phone,
+                        "reward_amount_label": _format_currency(reward.reward_amount),
+                        "qualified_at_label": _format_datetime(reward.qualified_at),
+                        "required_hours_label": f"{float(reward.required_hours or 0):,.1f}h",
+                    }
+                    for reward in pending_referral_rewards
+                ],
             }
         )
 
@@ -2842,6 +3186,22 @@ def build_salary_page_payload():
     )
     pending_salary_rows = [row for row in salary_rows if row["can_pay_salary"] or row["can_pay_advance"]]
     recent_payment_rows = build_recent_salary_payment_rows()
+    recent_referral_reward_rows = [
+        {
+            "id": str(reward.id),
+            "referrer_name": reward.referrer.name,
+            "referred_staff_name": reward.referred_staff.name,
+            "reward_amount_label": _format_currency(reward.reward_amount),
+            "qualified_at_label": _format_datetime(reward.qualified_at),
+            "paid_at_label": _format_datetime(reward.paid_at),
+            "payment_method_label": reward.get_payment_method_display() if reward.payment_method else "Manual",
+            "payment_reference": reward.payment_reference or "--",
+            "payment_note": reward.payment_note or "--",
+        }
+        for reward in ReferralReward.objects.filter(is_paid=True)
+        .select_related("referrer", "referred_staff")
+        .order_by("-paid_at", "-created_at")[:30]
+    ]
 
     return {
         "today_label": today.strftime("%A, %d %b %Y"),
@@ -2851,11 +3211,15 @@ def build_salary_page_payload():
             "pending_staff_count": pending_staff_count,
             "advance_total": _format_currency(advance_total),
             "advance_staff_count": advance_staff_count,
+            "pending_referral_total": _format_currency(pending_referral_total),
+            "pending_referral_count": pending_referral_count,
+            "referral_enabled": company_profile.referral_program_enabled,
             "paid_transaction_count": len(recent_payment_rows),
         },
         "salary_rows": salary_rows,
         "pending_salary_rows": pending_salary_rows,
         "recent_payment_rows": recent_payment_rows,
+        "recent_referral_reward_rows": recent_referral_reward_rows,
         "payment_method_options": [
             {"value": value, "label": label}
             for value, label in Salary.PaymentMethod.choices

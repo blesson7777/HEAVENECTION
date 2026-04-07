@@ -95,6 +95,11 @@ class ApiClient {
     return StaffProfile.fromJson(_decodeMap(response.body));
   }
 
+  Future<StaffSalaryDetails> fetchStaffSalaryDetails() async {
+    final response = await _send('GET', '/api/staff/salary/');
+    return StaffSalaryDetails.fromJson(_decodeMap(response.body));
+  }
+
   Map<String, String> get authenticatedDocumentHeaders {
     if (_accessToken == null || _accessToken!.isEmpty) {
       return const {};

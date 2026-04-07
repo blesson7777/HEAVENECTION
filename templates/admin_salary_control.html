@@ -32,6 +32,47 @@
 <section class="hc-surface-card animate-on-scroll mt-4">
     <div class="mf-db2-panel-head mb-3">
         <div>
+            <span class="mf-db2-kicker">Referral Reward Program</span>
+            <h5>Enable referral rewards and define the qualifying hours and reward amount</h5>
+        </div>
+        <span class="hc-sync-pill"><i class="bi bi-diagram-3"></i> Referral Setup</span>
+    </div>
+
+    <form method="post" class="row g-3 align-items-end">
+        {% csrf_token %}
+        <input type="hidden" name="salary_control_action" value="update_referral_settings">
+        <div class="col-md-3">
+            <div class="form-check form-switch pt-4">
+                <input class="form-check-input" type="checkbox" role="switch" id="referralProgramEnabled" name="referral_program_enabled" {% if referral_settings.enabled %}checked{% endif %}>
+                <label class="form-check-label fw-semibold" for="referralProgramEnabled">Enable referral reward</label>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label fw-semibold" for="referralRequiredHours">Required Work Hours</label>
+            <input type="number" class="form-control" id="referralRequiredHours" name="referral_required_hours" step="0.01" min="0" value="{{ referral_settings.required_hours }}">
+            <div class="form-text">Reward becomes available after the referred staff completes this total work time.</div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label fw-semibold" for="referralRewardAmount">Reward Amount</label>
+            <input type="number" class="form-control" id="referralRewardAmount" name="referral_reward_amount" step="0.01" min="0" value="{{ referral_settings.reward_amount }}">
+            <div class="form-text">This extra amount is paid separately as a referral reward.</div>
+        </div>
+        <div class="col-md-3">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Current Rule</span>
+                <h6 class="mb-1">{{ referral_settings.required_hours_label }}</h6>
+                <p class="text-muted mb-0">Reward {{ referral_settings.reward_amount_label }}</p>
+            </div>
+        </div>
+        <div class="col-12 d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary">Save Referral Settings</button>
+        </div>
+    </form>
+</section>
+
+<section class="hc-surface-card animate-on-scroll mt-4">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
             <span class="mf-db2-kicker">Salary Control Panel</span>
             <h5>Configure payout settings and review payout details for each staff member</h5>
         </div>
@@ -61,6 +102,7 @@
                     <th>Hourly Rate</th>
                     <th>Work Targets</th>
                     <th>Incentives</th>
+                    <th>Referral</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -105,6 +147,11 @@
                         <div class="text-muted small">Bonus {{ row.bonus_per_conversion }}</div>
                     </td>
                     <td>
+                        <strong>{{ row.referred_by_name }}</strong>
+                        <div class="text-muted small">{{ row.pending_referral_reward_count }} pending rewards</div>
+                        <div class="text-muted small">{{ row.pending_referral_reward_total }}</div>
+                    </td>
+                    <td>
                         <div class="d-flex flex-wrap gap-2">
                             <a href="{% url 'salary-page' %}#salary-row-{{ row.id }}" class="btn btn-dark btn-sm">
                                 <i class="bi bi-wallet2"></i>
@@ -133,12 +180,13 @@
                                 data-bank-ifsc="{{ row.bank_ifsc_code }}"
                                 data-passbook-photo-url="{{ row.passbook_photo_url }}"
                                 data-profile-url="{{ row.profile_url }}"
+                                data-referred-by-id="{{ row.referred_by_id }}"
                             >View & Edit</button>
                         </div>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8" class="text-center py-4">No staff salary settings available.</td></tr>
+                <tr><td colspan="9" class="text-center py-4">No staff salary settings available.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -208,6 +256,16 @@
                         <div class="col-md-4">
                             <label class="form-label fw-semibold" for="salaryBonusRate">Bonus per Conversion</label>
                             <input type="number" class="form-control" id="salaryBonusRate" step="0.01">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="salaryReferredBy">Referred By</label>
+                            <select class="form-select" id="salaryReferredBy">
+                                <option value="">No referrer assigned</option>
+                                {% for option in referrer_options %}
+                                <option value="{{ option.id }}">{{ option.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Assign the staff member who referred this team member.</div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold" for="salaryTargetHoursWeek">Target Hours per Week</label>

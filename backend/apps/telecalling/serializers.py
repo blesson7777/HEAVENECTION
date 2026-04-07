@@ -174,6 +174,7 @@ class StaffLeadRecoverySerializer(serializers.Serializer):
 class StaffSerializer(serializers.ModelSerializer):
     compensation_type_label = serializers.CharField(source="get_compensation_type_display", read_only=True)
     weekly_payout_day_label = serializers.CharField(source="get_weekly_payout_day_display", read_only=True)
+    referred_by_name = serializers.CharField(source="referred_by.name", read_only=True)
 
     class Meta:
         model = Staff
@@ -194,6 +195,8 @@ class StaffSerializer(serializers.ModelSerializer):
             "weekly_payout_day_label",
             "call_rate",
             "bonus_per_conversion",
+            "referred_by",
+            "referred_by_name",
             "last_seen_at",
         )
 
@@ -382,6 +385,7 @@ class CreateStaffSerializer(serializers.Serializer):
         decimal_places=2,
         required=False,
     )
+    referred_by_id = serializers.UUIDField(required=False, allow_null=True)
     is_active = serializers.BooleanField(required=False, default=True)
 
     def validate_phone(self, value):
@@ -395,6 +399,12 @@ class CreateStaffSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         password = validated_data.pop("password")
+        referred_by_id = validated_data.pop("referred_by_id", None)
+        if referred_by_id:
+            validated_data["referred_by"] = Staff.objects.filter(
+                id=referred_by_id,
+                role=Staff.Role.STAFF,
+            ).first()
         return Staff.objects.create_user(
             password=password,
             role=Staff.Role.STAFF,
@@ -420,6 +430,7 @@ class UpdateStaffSerializer(serializers.Serializer):
         decimal_places=2,
         required=False,
     )
+    referred_by_id = serializers.UUIDField(required=False, allow_null=True)
     bank_account_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     bank_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     bank_account_number = serializers.CharField(max_length=50, required=False, allow_blank=True)
@@ -442,6 +453,14 @@ class UpdateStaffSerializer(serializers.Serializer):
         return phone
 
     def validate(self, attrs):
+        referred_by_id = attrs.get("referred_by_id")
+        instance = getattr(self, "instance", None)
+        if referred_by_id:
+            referred_by = Staff.objects.filter(id=referred_by_id, role=Staff.Role.STAFF).first()
+            if not referred_by:
+                raise serializers.ValidationError({"referred_by_id": "Select a valid staff member."})
+            if instance and referred_by.id == instance.id:
+                raise serializers.ValidationError({"referred_by_id": "A staff member cannot refer themselves."})
         return attrs
 
     def validate_aadhar_number(self, value):
@@ -458,6 +477,7 @@ class UpdateStaffSerializer(serializers.Serializer):
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
+        referred_by_id = validated_data.pop("referred_by_id", None)
         remove_aadhar_photo = validated_data.pop("remove_aadhar_photo", False)
         new_photo = validated_data.pop("aadhar_photo", None)
         remove_passbook_photo = validated_data.pop("remove_passbook_photo", False)
@@ -466,6 +486,11 @@ class UpdateStaffSerializer(serializers.Serializer):
         previous_passbook_photo = instance.passbook_photo if instance.passbook_photo else None
         for field, value in validated_data.items():
             setattr(instance, field, value)
+        if referred_by_id is not None:
+            instance.referred_by = Staff.objects.filter(
+                id=referred_by_id,
+                role=Staff.Role.STAFF,
+            ).first()
         if remove_aadhar_photo:
             instance.aadhar_photo = None
         elif new_photo is not None:
@@ -495,6 +520,7 @@ class UpdateStaffSerializer(serializers.Serializer):
 class SalarySettingsSerializer(serializers.ModelSerializer):
     compensation_type_label = serializers.CharField(source="get_compensation_type_display", read_only=True)
     weekly_payout_day_label = serializers.CharField(source="get_weekly_payout_day_display", read_only=True)
+    referred_by_name = serializers.CharField(source="referred_by.name", read_only=True)
 
     class Meta:
         model = Staff
@@ -513,6 +539,8 @@ class SalarySettingsSerializer(serializers.ModelSerializer):
             "weekly_payout_day_label",
             "call_rate",
             "bonus_per_conversion",
+            "referred_by",
+            "referred_by_name",
             "is_active",
         )
 
@@ -579,6 +607,9 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             "country",
             "tax_identifier",
             "lead_queue_target_per_staff",
+            "referral_program_enabled",
+            "referral_required_hours",
+            "referral_reward_amount",
             "description",
             "logo",
             "logo_url",
@@ -614,6 +645,9 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
             "country",
             "tax_identifier",
             "lead_queue_target_per_staff",
+            "referral_program_enabled",
+            "referral_required_hours",
+            "referral_reward_amount",
             "description",
             "logo",
             "remove_logo",

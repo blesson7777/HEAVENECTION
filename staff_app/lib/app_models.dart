@@ -286,6 +286,341 @@ class SalaryHistoryItem {
   }
 }
 
+class SalaryDetailSummary {
+  const SalaryDetailSummary({
+    required this.compensationType,
+    required this.compensationTypeLabel,
+    required this.payoutScheduleLabel,
+    required this.weeklyPayoutDayLabel,
+    required this.hourlyRateLabel,
+    required this.callRateLabel,
+    required this.bonusPerConversionLabel,
+    required this.targetHoursLabel,
+  });
+
+  final String compensationType;
+  final String compensationTypeLabel;
+  final String payoutScheduleLabel;
+  final String weeklyPayoutDayLabel;
+  final String hourlyRateLabel;
+  final String callRateLabel;
+  final String bonusPerConversionLabel;
+  final String targetHoursLabel;
+
+  factory SalaryDetailSummary.fromJson(Map<String, dynamic> json) {
+    return SalaryDetailSummary(
+      compensationType: json['compensation_type']?.toString() ?? '',
+      compensationTypeLabel:
+          json['compensation_type_label']?.toString() ?? 'Hourly',
+      payoutScheduleLabel:
+          json['payout_schedule_label']?.toString() ?? 'Running earned amount',
+      weeklyPayoutDayLabel:
+          json['weekly_payout_day_label']?.toString() ?? '',
+      hourlyRateLabel: json['hourly_rate_label']?.toString() ?? 'Rs. 0.00',
+      callRateLabel: json['call_rate_label']?.toString() ?? 'Rs. 0.00',
+      bonusPerConversionLabel:
+          json['bonus_per_conversion_label']?.toString() ?? 'Rs. 0.00',
+      targetHoursLabel: json['target_hours_label']?.toString() ?? '0.0h',
+    );
+  }
+}
+
+class SalaryDetailBlock {
+  const SalaryDetailBlock({
+    required this.title,
+    required this.subtitle,
+    required this.periodLabel,
+    required this.hoursLabel,
+    required this.earnedTotalLabel,
+    required this.paidTotalLabel,
+    required this.balanceLabel,
+    required this.basePayLabel,
+    required this.callEarningsLabel,
+    required this.bonusEarningsLabel,
+  });
+
+  final String title;
+  final String subtitle;
+  final String periodLabel;
+  final String hoursLabel;
+  final String earnedTotalLabel;
+  final String paidTotalLabel;
+  final String balanceLabel;
+  final String basePayLabel;
+  final String callEarningsLabel;
+  final String bonusEarningsLabel;
+
+  factory SalaryDetailBlock.fromJson(Map<String, dynamic> json) {
+    return SalaryDetailBlock(
+      title: json['title']?.toString() ?? '',
+      subtitle: json['subtitle']?.toString() ?? '',
+      periodLabel: json['period_label']?.toString() ?? '',
+      hoursLabel: json['hours_label']?.toString() ?? '0.0h',
+      earnedTotalLabel: json['earned_total_label']?.toString() ?? 'Rs. 0.00',
+      paidTotalLabel: json['paid_total_label']?.toString() ?? 'Rs. 0.00',
+      balanceLabel: json['balance_label']?.toString() ?? 'Rs. 0.00',
+      basePayLabel: json['base_pay_label']?.toString() ?? 'Rs. 0.00',
+      callEarningsLabel:
+          json['call_earnings_label']?.toString() ?? 'Rs. 0.00',
+      bonusEarningsLabel:
+          json['bonus_earnings_label']?.toString() ?? 'Rs. 0.00',
+    );
+  }
+}
+
+class SalaryPatternRow {
+  const SalaryPatternRow({
+    required this.title,
+    required this.periodLabel,
+    required this.hoursLabel,
+    required this.earnedTotalLabel,
+    required this.paidTotalLabel,
+    required this.balanceLabel,
+  });
+
+  final String title;
+  final String periodLabel;
+  final String hoursLabel;
+  final String earnedTotalLabel;
+  final String paidTotalLabel;
+  final String balanceLabel;
+
+  factory SalaryPatternRow.fromJson(Map<String, dynamic> json) {
+    return SalaryPatternRow(
+      title: json['title']?.toString() ?? '',
+      periodLabel: json['period_label']?.toString() ?? '',
+      hoursLabel: json['hours_label']?.toString() ?? '0.0h',
+      earnedTotalLabel: json['earned_total_label']?.toString() ?? 'Rs. 0.00',
+      paidTotalLabel: json['paid_total_label']?.toString() ?? 'Rs. 0.00',
+      balanceLabel: json['balance_label']?.toString() ?? 'Rs. 0.00',
+    );
+  }
+}
+
+class SalaryPatternSection {
+  const SalaryPatternSection({
+    required this.title,
+    required this.subtitle,
+    required this.rows,
+  });
+
+  final String title;
+  final String subtitle;
+  final List<SalaryPatternRow> rows;
+
+  factory SalaryPatternSection.fromJson(Map<String, dynamic> json) {
+    return SalaryPatternSection(
+      title: json['title']?.toString() ?? '',
+      subtitle: json['subtitle']?.toString() ?? '',
+      rows:
+          (json['rows'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .map(SalaryPatternRow.fromJson)
+              .toList() ??
+          const [],
+    );
+  }
+}
+
+class SalaryPaymentHistoryItem {
+  const SalaryPaymentHistoryItem({
+    required this.id,
+    required this.periodLabel,
+    required this.payoutCycleLabel,
+    required this.totalHoursLabel,
+    required this.finalSalaryLabel,
+    required this.paidAmountLabel,
+    required this.paidAtLabel,
+    required this.paymentKindLabel,
+    required this.paymentMethodLabel,
+    required this.paymentReference,
+    required this.paymentNote,
+  });
+
+  final String id;
+  final String periodLabel;
+  final String payoutCycleLabel;
+  final String totalHoursLabel;
+  final String finalSalaryLabel;
+  final String paidAmountLabel;
+  final String paidAtLabel;
+  final String paymentKindLabel;
+  final String paymentMethodLabel;
+  final String paymentReference;
+  final String paymentNote;
+
+  factory SalaryPaymentHistoryItem.fromJson(Map<String, dynamic> json) {
+    return SalaryPaymentHistoryItem(
+      id: json['id']?.toString() ?? '',
+      periodLabel: json['period_label']?.toString() ?? '',
+      payoutCycleLabel: json['payout_cycle_label']?.toString() ?? '',
+      totalHoursLabel: json['total_hours_label']?.toString() ?? '0.0h',
+      finalSalaryLabel:
+          json['final_salary']?.toString() ??
+          json['final_salary_label']?.toString() ??
+          'Rs. 0.00',
+      paidAmountLabel:
+          json['paid_amount']?.toString() ??
+          json['paid_amount_label']?.toString() ??
+          'Rs. 0.00',
+      paidAtLabel: json['paid_at']?.toString() ?? json['paid_at_label']?.toString() ?? '--',
+      paymentKindLabel:
+          json['payment_kind_label']?.toString() ?? 'Payment',
+      paymentMethodLabel:
+          json['payment_method_label']?.toString() ?? 'Manual',
+      paymentReference: json['payment_reference']?.toString() ?? '--',
+      paymentNote: json['payment_note']?.toString() ?? '--',
+    );
+  }
+}
+
+class ReferralSummary {
+  const ReferralSummary({
+    required this.enabled,
+    required this.requiredHoursLabel,
+    required this.rewardAmountLabel,
+    required this.referredByName,
+    required this.qualifiedCount,
+    required this.pendingCount,
+    required this.paidCount,
+    required this.pendingTotalLabel,
+  });
+
+  final bool enabled;
+  final String requiredHoursLabel;
+  final String rewardAmountLabel;
+  final String referredByName;
+  final int qualifiedCount;
+  final int pendingCount;
+  final int paidCount;
+  final String pendingTotalLabel;
+
+  factory ReferralSummary.fromJson(Map<String, dynamic> json) {
+    return ReferralSummary(
+      enabled: json['enabled'] == true,
+      requiredHoursLabel: json['required_hours_label']?.toString() ?? '0.0h',
+      rewardAmountLabel: json['reward_amount_label']?.toString() ?? 'Rs. 0.00',
+      referredByName: json['referred_by_name']?.toString() ?? '',
+      qualifiedCount: _asInt(json['qualified_count']),
+      pendingCount: _asInt(json['pending_count']),
+      paidCount: _asInt(json['paid_count']),
+      pendingTotalLabel: json['pending_total_label']?.toString() ?? 'Rs. 0.00',
+    );
+  }
+}
+
+class ReferralRewardHistoryItem {
+  const ReferralRewardHistoryItem({
+    required this.id,
+    required this.referredStaffName,
+    required this.referredStaffPhone,
+    required this.requiredHoursLabel,
+    required this.rewardAmountLabel,
+    required this.qualifiedAtLabel,
+    required this.isPaid,
+    required this.paidAtLabel,
+    required this.paymentMethodLabel,
+    required this.paymentReference,
+    required this.paymentNote,
+  });
+
+  final String id;
+  final String referredStaffName;
+  final String referredStaffPhone;
+  final String requiredHoursLabel;
+  final String rewardAmountLabel;
+  final String qualifiedAtLabel;
+  final bool isPaid;
+  final String paidAtLabel;
+  final String paymentMethodLabel;
+  final String paymentReference;
+  final String paymentNote;
+
+  factory ReferralRewardHistoryItem.fromJson(Map<String, dynamic> json) {
+    return ReferralRewardHistoryItem(
+      id: json['id']?.toString() ?? '',
+      referredStaffName: json['referred_staff_name']?.toString() ?? '',
+      referredStaffPhone: json['referred_staff_phone']?.toString() ?? '',
+      requiredHoursLabel:
+          json['required_hours_label']?.toString() ?? '0.0h',
+      rewardAmountLabel:
+          json['reward_amount_label']?.toString() ?? 'Rs. 0.00',
+      qualifiedAtLabel: json['qualified_at_label']?.toString() ?? '--',
+      isPaid: json['is_paid'] == true,
+      paidAtLabel: json['paid_at_label']?.toString() ?? '--',
+      paymentMethodLabel:
+          json['payment_method_label']?.toString() ?? 'Manual',
+      paymentReference: json['payment_reference']?.toString() ?? '--',
+      paymentNote: json['payment_note']?.toString() ?? '--',
+    );
+  }
+}
+
+class StaffSalaryDetails {
+  const StaffSalaryDetails({
+    required this.summary,
+    required this.currentCycle,
+    required this.previousMonth,
+    required this.pattern,
+    required this.paymentHistory,
+    required this.referralSummary,
+    required this.referralHistory,
+  });
+
+  final SalaryDetailSummary summary;
+  final SalaryDetailBlock currentCycle;
+  final SalaryDetailBlock previousMonth;
+  final SalaryPatternSection pattern;
+  final List<SalaryPaymentHistoryItem> paymentHistory;
+  final ReferralSummary referralSummary;
+  final List<ReferralRewardHistoryItem> referralHistory;
+
+  factory StaffSalaryDetails.fromJson(Map<String, dynamic> json) {
+    return StaffSalaryDetails(
+      summary: SalaryDetailSummary.fromJson(
+        json['summary'] is Map<String, dynamic>
+            ? json['summary'] as Map<String, dynamic>
+            : const {},
+      ),
+      currentCycle: SalaryDetailBlock.fromJson(
+        json['current_cycle'] is Map<String, dynamic>
+            ? json['current_cycle'] as Map<String, dynamic>
+            : const {},
+      ),
+      previousMonth: SalaryDetailBlock.fromJson(
+        json['previous_month'] is Map<String, dynamic>
+            ? json['previous_month'] as Map<String, dynamic>
+            : const {},
+      ),
+      pattern: SalaryPatternSection.fromJson(
+        json['pattern'] is Map<String, dynamic>
+            ? json['pattern'] as Map<String, dynamic>
+            : const {},
+      ),
+      paymentHistory:
+          (json['payment_history'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .map(SalaryPaymentHistoryItem.fromJson)
+              .toList() ??
+          const [],
+      referralSummary: ReferralSummary.fromJson(
+        json['referral'] is Map<String, dynamic>
+            ? json['referral'] as Map<String, dynamic>
+            : const {},
+      ),
+      referralHistory:
+          ((json['referral'] is Map<String, dynamic>
+                      ? (json['referral'] as Map<String, dynamic>)['history']
+                      : null)
+                  as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .map(ReferralRewardHistoryItem.fromJson)
+              .toList() ??
+          const [],
+    );
+  }
+}
+
 class LeadItem {
   const LeadItem({
     required this.id,

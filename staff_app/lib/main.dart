@@ -1266,6 +1266,19 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
+  Future<void> _openSalaryDetailsPage() async {
+    _registerInteraction(syncServer: false);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder:
+            (_) => StaffSalaryDetailsPage(
+              apiClient: _apiClient,
+              initialSummary: _profile?.salarySummary,
+            ),
+      ),
+    );
+  }
+
   Future<List<LeadItem>> _searchCustomerHistory(String query) async {
     try {
       return await _apiClient.searchCustomerHistory(query: query);
@@ -4404,8 +4417,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final profile = _profile;
     final salarySummary = profile?.salarySummary;
     final salaryHistory = profile?.salaryHistory ?? const <SalaryHistoryItem>[];
-    final showCreditedSalaryHistory =
-        (profile?.role ?? '') == '__show_salary_history__';
+    final showInlineSalaryHistory =
+        (profile?.role ?? '') == '__legacy_salary_history__';
     final aadharWidget = _buildDocumentPreview(
       selectedFile: _selectedAadharPhoto,
       removeDocument: _removeAadharPhoto,
@@ -4509,7 +4522,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 ],
               ),
             ),
-            if (showCreditedSalaryHistory) ...[
+            if (showInlineSalaryHistory) ...[
               const SizedBox(height: 16),
               Container(
               padding: const EdgeInsets.all(18),
@@ -4526,7 +4539,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'See your current worked hours and earned amount here.',
+                    'See your current worked hours and earned amount here, and open the full salary page when needed.',
                     style: TextStyle(fontSize: 14.5, color: Colors.black54),
                   ),
                   const SizedBox(height: 14),
@@ -4556,6 +4569,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _openSalaryDetailsPage,
+                      icon: const Icon(Icons.receipt_long_outlined),
+                      label: const Text('Salary Details'),
+                    ),
                   ),
                 ],
               ),
@@ -6238,6 +6260,791 @@ enum _PendingCallAction { markStatus, callRecent, cancel }
 enum _AppUpdateAction { download, install, later }
 
 enum _ProfileDocument { aadhar, passbook }
+
+class StaffSalaryDetailsPage extends StatefulWidget {
+  const StaffSalaryDetailsPage({
+    super.key,
+    required this.apiClient,
+    this.initialSummary,
+  });
+
+  final ApiClient apiClient;
+  final SalarySummary? initialSummary;
+
+  @override
+  State<StaffSalaryDetailsPage> createState() => _StaffSalaryDetailsPageState();
+}
+
+class _StaffSalaryDetailsPageState extends State<StaffSalaryDetailsPage> {
+  StaffSalaryDetails? _details;
+  bool _isLoading = true;
+  String _errorMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadSalaryDetails());
+  }
+
+  Future<void> _loadSalaryDetails({bool showLoader = true}) async {
+    if (showLoader && mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = '';
+      });
+    }
+    try {
+      final details = await widget.apiClient.fetchStaffSalaryDetails();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _details = details;
+        _errorMessage = '';
+      });
+    } on ApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorMessage = error.message;
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final details = _details;
+    final summary = details?.summary;
+    final fallbackSummary = widget.initialSummary;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Salary Details')),
+      body: RefreshIndicator(
+        onRefresh: () => _loadSalaryDetails(showLoader: false),
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            const Text(
+              'Salary Details',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              summary == null
+                  ? 'Review your earning pattern, payout schedule, and credited payment history here.'
+                  : 'Your earnings are tracked from worked hours and shown according to your payout setup.',
+              style: const TextStyle(fontSize: 16.5, color: Colors.black54),
+            ),
+            const SizedBox(height: 16),
+            if (_isLoading && details == null)
+              Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Center(child: CircularProgressIndicator()),
+              )
+            else if (_errorMessage.isNotEmpty && details == null)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Could not load salary details right now.',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: kPrimaryDark,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _errorMessage,
+                      style: const TextStyle(color: Colors.black54),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _loadSalaryDetails,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Try Again'),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Current progress',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'This is your live work progress for the running cycle.',
+                      style: TextStyle(fontSize: 14.5, color: Colors.black54),
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        SizedBox(
+                          width: 150,
+                          child: InfoCard(
+                            title: 'Hours',
+                            value:
+                                details?.currentCycle.hoursLabel ??
+                                fallbackSummary?.totalWorkingHoursLabel ??
+                                '0.0h',
+                            color: kPrimary,
+                            icon: Icons.timer_outlined,
+                          ),
+                        ),
+                        SizedBox(
+                          width: 150,
+                          child: InfoCard(
+                            title: 'Earned',
+                            value:
+                                details?.currentCycle.earnedTotalLabel ??
+                                fallbackSummary?.totalEarnedAmountLabel ??
+                                'Rs. 0.00',
+                            color: kGreen,
+                            icon: Icons.account_balance_wallet_outlined,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (summary != null)
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Payout overview',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _SalaryMetaChip(
+                            icon: Icons.schedule_outlined,
+                            label: summary.compensationTypeLabel,
+                          ),
+                          _SalaryMetaChip(
+                            icon: Icons.calendar_today_outlined,
+                            label: summary.payoutScheduleLabel,
+                          ),
+                          _SalaryMetaChip(
+                            icon: Icons.payments_outlined,
+                            label: 'Hourly ${summary.hourlyRateLabel}',
+                          ),
+                          _SalaryMetaChip(
+                            icon: Icons.phone_forwarded_outlined,
+                            label: 'Call ${summary.callRateLabel}',
+                          ),
+                          _SalaryMetaChip(
+                            icon: Icons.workspace_premium_outlined,
+                            label: 'Bonus ${summary.bonusPerConversionLabel}',
+                          ),
+                          _SalaryMetaChip(
+                            icon: Icons.flag_outlined,
+                            label: summary.targetHoursLabel,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              if (details != null) ...[
+                const SizedBox(height: 16),
+                _SalaryDetailCard(block: details.currentCycle),
+                const SizedBox(height: 16),
+                _SalaryDetailCard(block: details.previousMonth),
+                if (details.pattern.rows.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          details.pattern.title,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          details.pattern.subtitle,
+                          style: const TextStyle(
+                            fontSize: 14.5,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        for (final row in details.pattern.rows) ...[
+                          _SalaryPatternCard(row: row),
+                          const SizedBox(height: 10),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+                if (details.referralSummary.enabled) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Referral rewards',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          details.referralSummary.referredByName.isNotEmpty
+                              ? 'You are linked under ${details.referralSummary.referredByName}. Reward entries appear here separately after the required hours are completed.'
+                              : 'Referral rewards are enabled. Qualified reward entries appear here separately from normal salary payments.',
+                          style: const TextStyle(
+                            fontSize: 14.5,
+                            color: Colors.black54,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            _SalaryMetaChip(
+                              icon: Icons.timer_outlined,
+                              label:
+                                  'Target ${details.referralSummary.requiredHoursLabel}',
+                            ),
+                            _SalaryMetaChip(
+                              icon: Icons.card_giftcard_outlined,
+                              label:
+                                  'Reward ${details.referralSummary.rewardAmountLabel}',
+                            ),
+                            _SalaryMetaChip(
+                              icon: Icons.pending_actions_outlined,
+                              label:
+                                  '${details.referralSummary.pendingCount} pending',
+                            ),
+                            _SalaryMetaChip(
+                              icon: Icons.verified_outlined,
+                              label:
+                                  '${details.referralSummary.paidCount} paid',
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        if (details.referralHistory.isEmpty)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: kSoft,
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                            child: const Text(
+                              'No referral reward entries have been added yet.',
+                              style: TextStyle(
+                                color: kPrimaryDark,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          )
+                        else
+                          Column(
+                            children: [
+                              for (final reward in details.referralHistory) ...[
+                                _ReferralRewardHistoryCard(reward: reward),
+                                const SizedBox(height: 12),
+                              ],
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Payment history',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Review earlier credited payments and the periods they covered.',
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      if (details.paymentHistory.isEmpty)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: kSoft,
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: const Text(
+                            'No credited payment history has been added yet.',
+                            style: TextStyle(
+                              color: kPrimaryDark,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        )
+                      else
+                        Column(
+                          children: [
+                            for (final payment in details.paymentHistory) ...[
+                              _SalaryPaymentHistoryCard(payment: payment),
+                              const SizedBox(height: 12),
+                            ],
+                          ],
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SalaryMetaChip extends StatelessWidget {
+  const _SalaryMetaChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: kSoft,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: kPrimaryDark),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: kPrimaryDark,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SalaryDetailCard extends StatelessWidget {
+  const _SalaryDetailCard({required this.block});
+
+  final SalaryDetailBlock block;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            block.title,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+          ),
+          if (block.subtitle.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              block.subtitle,
+              style: const TextStyle(fontSize: 14.5, color: Colors.black54),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kSoft,
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Text(
+              block.periodLabel,
+              style: const TextStyle(
+                color: kPrimaryDark,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          _SalaryMetricRow(label: 'Worked hours', value: block.hoursLabel),
+          _SalaryMetricRow(label: 'Earned amount', value: block.earnedTotalLabel),
+          _SalaryMetricRow(label: 'Released amount', value: block.paidTotalLabel),
+          _SalaryMetricRow(label: 'Pending balance', value: block.balanceLabel),
+          const Divider(height: 28),
+          _SalaryMetricRow(label: 'Hourly earnings', value: block.basePayLabel),
+          _SalaryMetricRow(
+            label: 'Call earnings',
+            value: block.callEarningsLabel,
+          ),
+          _SalaryMetricRow(
+            label: 'Bonus earnings',
+            value: block.bonusEarningsLabel,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SalaryMetricRow extends StatelessWidget {
+  const _SalaryMetricRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 14.5, color: Colors.black54),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 14.5,
+              color: kPrimaryDark,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SalaryPatternCard extends StatelessWidget {
+  const _SalaryPatternCard({required this.row});
+
+  final SalaryPatternRow row;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: kSoft,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  row.title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: kPrimaryDark,
+                  ),
+                ),
+              ),
+              Text(
+                row.earnedTotalLabel,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: kGreen,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            row.periodLabel,
+            style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Worked ${row.hoursLabel} • Released ${row.paidTotalLabel} • Pending ${row.balanceLabel}',
+            style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SalaryPaymentHistoryCard extends StatelessWidget {
+  const _SalaryPaymentHistoryCard({required this.payment});
+
+  final SalaryPaymentHistoryItem payment;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: kSoft,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  payment.paidAmountLabel,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: kPrimaryDark,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  payment.paymentKindLabel,
+                  style: const TextStyle(
+                    color: kPrimaryDark,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            payment.periodLabel,
+            style: const TextStyle(
+              fontSize: 14.5,
+              color: Colors.black87,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Paid on ${payment.paidAtLabel} • ${payment.paymentMethodLabel}',
+            style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Worked ${payment.totalHoursLabel} • Earned ${payment.finalSalaryLabel} • ${payment.payoutCycleLabel}',
+            style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+          ),
+          if (payment.paymentReference.isNotEmpty &&
+              payment.paymentReference != '--') ...[
+            const SizedBox(height: 6),
+            Text(
+              'Transaction ID: ${payment.paymentReference}',
+              style: const TextStyle(
+                fontSize: 13.5,
+                color: Colors.black54,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          if (payment.paymentNote.isNotEmpty && payment.paymentNote != '--') ...[
+            const SizedBox(height: 6),
+            Text(
+              payment.paymentNote,
+              style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ReferralRewardHistoryCard extends StatelessWidget {
+  const _ReferralRewardHistoryCard({required this.reward});
+
+  final ReferralRewardHistoryItem reward;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: kSoft,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  reward.rewardAmountLabel,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: kPrimaryDark,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  reward.isPaid ? 'Paid' : 'Pending',
+                  style: TextStyle(
+                    color: reward.isPaid ? kGreen : kPrimaryDark,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            reward.referredStaffName,
+            style: const TextStyle(
+              fontSize: 14.5,
+              color: Colors.black87,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            reward.referredStaffPhone,
+            style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Qualified after ${reward.requiredHoursLabel} on ${reward.qualifiedAtLabel}',
+            style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+          ),
+          if (reward.isPaid) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Paid on ${reward.paidAtLabel} • ${reward.paymentMethodLabel}',
+              style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+            ),
+          ],
+          if (reward.paymentReference.isNotEmpty && reward.paymentReference != '--') ...[
+            const SizedBox(height: 6),
+            Text(
+              'Transaction ID: ${reward.paymentReference}',
+              style: const TextStyle(
+                fontSize: 13.5,
+                color: Colors.black54,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          if (reward.paymentNote.isNotEmpty && reward.paymentNote != '--') ...[
+            const SizedBox(height: 6),
+            Text(
+              reward.paymentNote,
+              style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
 class InfoCard extends StatelessWidget {
   const InfoCard({

@@ -34,6 +34,15 @@
             <p class="text-muted mb-0">{{ summary.paid_transaction_count }} recorded payment entries.</p>
         </div>
     </div>
+    {% if summary.referral_enabled %}
+    <div class="col-sm-6 col-xl-3">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Pending Referral</span>
+            <h4 class="mt-2 mb-1">{{ summary.pending_referral_total }}</h4>
+            <p class="text-muted mb-0">{{ summary.pending_referral_count }} referral rewards waiting for payment.</p>
+        </div>
+    </div>
+    {% endif %}
 </section>
 
 <section class="hc-surface-card animate-on-scroll mt-4">
@@ -206,6 +215,46 @@
                                     <div class="text-muted small mt-2">No advance can be released from the current running cycle right now.</div>
                                     {% endif %}
                                 </div>
+
+                                {% if summary.referral_enabled %}
+                                <div class="mt-3">
+                                    <div class="small fw-semibold text-uppercase text-muted">Referral Reward</div>
+                                    {% if row.can_pay_referral_rewards %}
+                                    {% for reward in row.pending_referral_rewards %}
+                                    <form method="post" class="mt-2 border rounded-3 p-3">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="payment_action" value="pay_referral_reward">
+                                        <input type="hidden" name="reward_id" value="{{ reward.id }}">
+                                        <div class="fw-semibold">{{ reward.referred_staff_name }}</div>
+                                        <div class="text-muted small">{{ reward.referred_staff_phone }}</div>
+                                        <div class="text-muted small">Qualified after {{ reward.required_hours_label }} on {{ reward.qualified_at_label }}</div>
+                                        <div class="text-muted small mb-2">Reward {{ reward.reward_amount_label }}</div>
+                                        <div class="mb-2">
+                                            <label class="form-label fw-semibold small" for="referralMethod{{ reward.id }}">Payment Method</label>
+                                            <select class="form-select form-select-sm" id="referralMethod{{ reward.id }}" name="payment_method">
+                                                {% for option in payment_method_options %}
+                                                <option value="{{ option.value }}">{{ option.label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label fw-semibold small" for="referralReference{{ reward.id }}">Transaction ID</label>
+                                            <input type="text" class="form-control form-control-sm" id="referralReference{{ reward.id }}" name="payment_reference" placeholder="Bank ref / UPI ref">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-semibold small" for="referralNote{{ reward.id }}">Note</label>
+                                            <textarea class="form-control form-control-sm" id="referralNote{{ reward.id }}" name="payment_note" rows="2" placeholder="Optional note">Referral reward</textarea>
+                                        </div>
+                                        <div class="d-grid">
+                                            <button type="submit" class="btn btn-outline-success btn-sm">Pay Referral Reward</button>
+                                        </div>
+                                    </form>
+                                    {% endfor %}
+                                    {% else %}
+                                    <div class="text-muted small mt-2">No qualified referral rewards are waiting for payment for this staff member.</div>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
                             </div>
                         </details>
                     </td>
@@ -277,4 +326,51 @@
         </table>
     </div>
 </section>
+
+{% if summary.referral_enabled %}
+<section class="hc-surface-card animate-on-scroll mt-4">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Referral Reward History</span>
+            <h5>Recent referral reward payments</h5>
+        </div>
+        <span class="hc-sync-pill"><i class="bi bi-diagram-3"></i> Referral Rewards</span>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Referrer</th>
+                    <th>Referred Staff</th>
+                    <th>Reward</th>
+                    <th>Qualified</th>
+                    <th>Paid</th>
+                    <th>Transaction</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in recent_referral_reward_rows %}
+                <tr>
+                    <td><strong>{{ row.referrer_name }}</strong></td>
+                    <td>{{ row.referred_staff_name }}</td>
+                    <td><strong>{{ row.reward_amount_label }}</strong></td>
+                    <td>{{ row.qualified_at_label }}</td>
+                    <td>
+                        <strong>{{ row.paid_at_label }}</strong>
+                        <div class="text-muted small">{{ row.payment_method_label }}</div>
+                    </td>
+                    <td>
+                        <strong>{{ row.payment_reference }}</strong>
+                        <div class="text-muted small">{{ row.payment_note }}</div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center py-4">No referral rewards have been paid yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
 {% endblock %}

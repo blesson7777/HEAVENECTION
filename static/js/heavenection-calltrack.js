@@ -857,6 +857,7 @@
         const targetMonthInput = document.getElementById("salaryTargetHoursMonth");
         const callRateInput = document.getElementById("salaryCallRate");
         const bonusRateInput = document.getElementById("salaryBonusRate");
+        const referredByInput = document.getElementById("salaryReferredBy");
         const accountHolderValue = document.getElementById("salaryControlAccountHolderValue");
         const bankNameValue = document.getElementById("salaryControlBankNameValue");
         const accountNumberValue = document.getElementById("salaryControlAccountNumberValue");
@@ -909,6 +910,9 @@
                 targetMonthInput.value = button.dataset.targetHoursMonth || "208";
                 callRateInput.value = button.dataset.callRate || "3";
                 bonusRateInput.value = button.dataset.bonus || "500";
+                if (referredByInput) {
+                    referredByInput.value = button.dataset.referredById || "";
+                }
                 setText(accountHolderValue, button.dataset.bankAccountName);
                 setText(bankNameValue, button.dataset.bankName);
                 setText(accountNumberValue, button.dataset.bankAccountNumber);
@@ -959,6 +963,7 @@
                 target_hours_per_month: targetMonthInput.value || "208",
                 call_rate: callRateInput.value || "0",
                 bonus_per_conversion: bonusRateInput.value || "0",
+                referred_by_id: referredByInput?.value || null,
             };
 
             try {

@@ -23,6 +23,7 @@ from backend.apps.telecalling.models import (
     AppRelease,
     Call,
     Lead,
+    ReferralReward,
     Salary,
     SalaryPaymentTransaction,
     Staff,
@@ -75,6 +76,7 @@ from backend.apps.telecalling.services import (
     build_lead_management_payload,
     build_recovery_lead_payload,
     build_salary_control_payload,
+    build_staff_salary_details_payload,
     build_salary_detail_payload,
     build_salary_page_payload,
     build_settings_payload,
@@ -93,6 +95,7 @@ from backend.apps.telecalling.services import (
     get_company_profile,
     publish_app_release,
     queue_salary_payment_acknowledgement,
+    record_referral_reward_payment,
     import_leads_from_upload,
     is_staff_lead_visible_now,
     mark_staff_seen,
@@ -1058,6 +1061,38 @@ def salary_page(request):
                     "payment_reference": request.POST.get("payment_reference", ""),
                     "payment_note": request.POST.get("payment_note", ""),
                 }
+        elif payment_action == "pay_referral_reward":
+            reward_id = request.POST.get("reward_id", "").strip()
+            reward = (
+                ReferralReward.objects.select_related("referrer", "referred_staff")
+                .filter(id=reward_id, is_paid=False)
+                .first()
+            )
+            if not reward:
+                messages.error(request, "Referral reward could not be found.")
+            else:
+                try:
+                    record_referral_reward_payment(
+                        reward,
+                        payment_method=request.POST.get(
+                            "payment_method",
+                            Salary.PaymentMethod.BANK_TRANSFER,
+                        ),
+                        payment_reference=request.POST.get("payment_reference", ""),
+                        payment_note=request.POST.get("payment_note", ""),
+                    )
+                except ValidationError as error:
+                    messages.error(
+                        request,
+                        " ".join(getattr(error, "messages", ["Referral reward could not be recorded."])),
+                    )
+                else:
+                    messages.success(
+                        request,
+                        f"Referral reward recorded for {reward.referrer.name}. "
+                        f"Reward {reward.reward_amount} from {reward.referred_staff.name} has been marked paid.",
+                    )
+                    return redirect("salary-page")
         else:
             messages.error(request, "Salary action could not be processed.")
 
@@ -1201,11 +1236,33 @@ def salary_detail_page(request, staff_id):
     return render(request, "admin_salary_detail.html", context)
 
 
-@require_GET
+@require_http_methods(["GET", "POST"])
 def salary_control_page(request):
     current_user = _get_admin_user_or_redirect(request)
     if not current_user:
         return redirect("web-login")
+
+    if request.method == "POST":
+        if request.POST.get("salary_control_action") == "update_referral_settings":
+            company_profile = get_company_profile()
+            serializer = CompanyProfileUpdateSerializer(
+                company_profile,
+                data={
+                    "referral_program_enabled": request.POST.get("referral_program_enabled") == "on",
+                    "referral_required_hours": request.POST.get("referral_required_hours", "0"),
+                    "referral_reward_amount": request.POST.get("referral_reward_amount", "0"),
+                },
+                partial=True,
+            )
+            if serializer.is_valid():
+                serializer.save()
+                messages.success(request, "Referral reward settings updated successfully.")
+                return redirect("salary-control-page")
+            messages.error(
+                request,
+                "Please correct the referral settings and try again. "
+                + " ".join(_normalize_errors(serializer.errors).values()),
+            )
 
     context = _admin_web_context(
         request,
@@ -1314,6 +1371,12 @@ def staff_profile_api(request):
 @permission_classes([IsCallingStaff])
 def staff_profile_document_api(request, document_type):
     return _document_response(_get_staff_document_file(request.user, document_type))
+
+
+@api_view(["GET"])
+@permission_classes([IsCallingStaff])
+def staff_salary_details_api(request):
+    return Response(build_staff_salary_details_payload(request.user))
 
 
 @api_view(["GET"])

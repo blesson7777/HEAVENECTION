@@ -77,6 +77,13 @@ class Staff(AbstractBaseUser, PermissionsMixin):
     aadhar_number = models.CharField(max_length=20, blank=True)
     aadhar_photo = models.FileField(upload_to="staff_documents/aadhar/", blank=True, null=True)
     passbook_photo = models.FileField(upload_to="staff_documents/passbook/", blank=True, null=True)
+    referred_by = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="referred_staff_members",
+    )
     auth_session_key = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
     last_seen_at = models.DateTimeField(null=True, blank=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -114,6 +121,9 @@ class CompanyProfile(models.Model):
     country = models.CharField(max_length=100, blank=True, default="India")
     tax_identifier = models.CharField(max_length=50, blank=True)
     lead_queue_target_per_staff = models.PositiveIntegerField(default=1)
+    referral_program_enabled = models.BooleanField(default=False)
+    referral_required_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    referral_reward_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     description = models.TextField(blank=True)
     logo = models.FileField(upload_to="branding/", blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -376,6 +386,38 @@ class SalaryPaymentTransaction(models.Model):
 
     class Meta:
         ordering = ("-paid_at", "-created_at")
+
+
+class ReferralReward(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    referrer = models.ForeignKey(
+        Staff,
+        on_delete=models.CASCADE,
+        related_name="referral_rewards",
+    )
+    referred_staff = models.OneToOneField(
+        Staff,
+        on_delete=models.CASCADE,
+        related_name="earned_referral_reward",
+    )
+    required_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    reward_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    qualified_at = models.DateTimeField(default=timezone.now, db_index=True)
+    is_paid = models.BooleanField(default=False, db_index=True)
+    paid_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    payment_method = models.CharField(
+        max_length=30,
+        choices=Salary.PaymentMethod.choices,
+        blank=True,
+        default="",
+    )
+    payment_reference = models.CharField(max_length=120, blank=True)
+    payment_note = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-qualified_at", "-created_at")
 
 
 class AppRelease(models.Model):
