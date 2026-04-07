@@ -1316,7 +1316,7 @@ def release_staff_queue(staff):
     return released
 
 
-def _normalize_active_queue_assignments(*, target_staff=None):
+def _normalize_active_queue_assignments(*, target_staff=None, prioritized_lead_ids=None):
     now = timezone.now()
     queue_limit = get_lead_queue_limit()
     queue_queryset = _staff_call_queue_queryset(
@@ -1327,7 +1327,12 @@ def _normalize_active_queue_assignments(*, target_staff=None):
 
     release_ids = []
     kept_counts = defaultdict(int)
-    for lead in _ordered_lead_queryset(queue_queryset, now=now, include_assignee=True):
+    for lead in _ordered_lead_queryset(
+        queue_queryset,
+        now=now,
+        include_assignee=True,
+        prioritized_lead_ids=prioritized_lead_ids,
+    ):
         assigned_staff = lead.assigned_to
         if not assigned_staff or assigned_staff.role != Staff.Role.STAFF or not assigned_staff.is_active:
             release_ids.append(lead.id)
@@ -1351,7 +1356,10 @@ def auto_allocate_leads(*, target_staff=None, prioritized_lead_ids=None):
     queue_limit = get_lead_queue_limit()
     active_staff_ids = _currently_active_staff_ids(now=now)
     _release_due_callback_leads_from_inactive_staff(now=now, active_staff_ids=active_staff_ids)
-    _normalize_active_queue_assignments(target_staff=target_staff)
+    _normalize_active_queue_assignments(
+        target_staff=target_staff,
+        prioritized_lead_ids=prioritized_lead_ids,
+    )
     staff_queryset = _staff_queryset().filter(is_active=True)
     if target_staff is not None:
         staff_queryset = staff_queryset.filter(id=target_staff.id)

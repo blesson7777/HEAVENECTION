@@ -188,8 +188,18 @@ def _refresh_queue_after_admin_lead_save(*, lead, previous_assigned_to_id=None, 
     )
 
     if explicit_assignment and lead_is_active_queue and lead.assigned_to_id:
+        target_staff = Staff.objects.filter(
+            id=lead.assigned_to_id,
+            role=Staff.Role.STAFF,
+            is_active=True,
+        ).first()
         if previous_staff:
             auto_allocate_leads(target_staff=previous_staff)
+        if target_staff:
+            auto_allocate_leads(
+                target_staff=target_staff,
+                prioritized_lead_ids=[lead.id],
+            )
         return
 
     if previous_staff:
