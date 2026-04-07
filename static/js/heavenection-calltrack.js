@@ -476,6 +476,7 @@
         const phoneInput = document.getElementById("leadPhone");
         const statusInput = document.getElementById("leadStatus");
         const callbackWindowInput = document.getElementById("leadCallbackWindow");
+        const callbackDateInput = document.getElementById("leadCallbackDate");
         const assignedToInput = document.getElementById("leadAssignedTo");
         const notesInput = document.getElementById("leadNotes");
         const feedback = document.getElementById("leadFormFeedback");
@@ -506,6 +507,7 @@
             idInput.value = "";
             statusInput.value = "new";
             callbackWindowInput.value = "";
+            callbackDateInput.value = "";
             assignedToInput.value = "";
             titleNode.textContent = "Add Lead";
             clearFeedback();
@@ -550,6 +552,7 @@
         statusInput.addEventListener("change", () => {
             if (statusInput.value !== "call_back") {
                 callbackWindowInput.value = "";
+                callbackDateInput.value = "";
             }
         });
 
@@ -608,6 +611,7 @@
                 phoneInput.value = button.dataset.phone || "";
                 statusInput.value = button.dataset.status || "new";
                 callbackWindowInput.value = button.dataset.callbackWindow || "";
+                callbackDateInput.value = button.dataset.callbackDate || "";
                 assignedToInput.value = button.dataset.assignedToId || "";
                 notesInput.value = button.dataset.notes || "";
                 titleNode.textContent = "Edit Lead";
@@ -644,6 +648,7 @@
                 phone: phoneInput.value.trim(),
                 status: statusInput.value,
                 callback_window: callbackWindowInput.value || "",
+                callback_date: callbackDateInput.value || null,
                 assigned_to: assignedToInput.value || null,
                 notes: notesInput.value.trim(),
             };

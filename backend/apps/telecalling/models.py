@@ -170,6 +170,7 @@ class Lead(models.Model):
         default="",
         db_index=True,
     )
+    callback_date = models.DateField(null=True, blank=True, db_index=True)
     last_contacted_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -202,6 +203,7 @@ class Call(models.Model):
         default="",
         db_index=True,
     )
+    callback_date = models.DateField(null=True, blank=True, db_index=True)
     is_qualifying = models.BooleanField(default=False, db_index=True)
     is_verified = models.BooleanField(default=False, db_index=True)
     verification_source = models.CharField(max_length=40, blank=True, default="")

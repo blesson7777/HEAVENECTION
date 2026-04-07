@@ -1729,6 +1729,7 @@ def recover_staff_lead_api(request, lead_id):
             lead,
             status=serializer.validated_data["status"],
             callback_window=serializer.validated_data.get("callback_window", ""),
+            callback_date=serializer.validated_data.get("callback_date"),
         )
     except PermissionError as error:
         return Response({"detail": str(error)}, status=403)
@@ -1844,7 +1845,7 @@ def start_call_api(request):
     if not is_staff_lead_visible_now(lead):
         return Response(
             {
-                "detail": "This callback lead is only available during its requested time slot.",
+                "detail": "This callback lead is only available on its requested date and time.",
                 "code": "callback_not_due",
             },
             status=409,
@@ -1882,6 +1883,7 @@ def end_call_api(request, call_id):
         ended_at=serializer.validated_data.get("ended_at"),
         source=serializer.validated_data.get("source", "app"),
         callback_window=serializer.validated_data.get("callback_window", ""),
+        callback_date=serializer.validated_data.get("callback_date"),
     )
     return Response(CallSerializer(call).data)
 
@@ -1931,6 +1933,7 @@ def update_call_status_api(request, call_id):
         call,
         serializer.validated_data["status"],
         serializer.validated_data.get("callback_window", ""),
+        serializer.validated_data.get("callback_date"),
     )
     return Response(CallSerializer(call).data)
 

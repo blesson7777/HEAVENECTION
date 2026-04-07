@@ -12,6 +12,14 @@ double _asDouble(dynamic value) {
   return double.tryParse(value?.toString() ?? '') ?? 0;
 }
 
+String _joinCallbackScheduleLabel(String dateLabel, String windowLabel) {
+  final parts = <String>[
+    if (dateLabel.trim().isNotEmpty) dateLabel.trim(),
+    if (windowLabel.trim().isNotEmpty) windowLabel.trim(),
+  ];
+  return parts.join(' • ');
+}
+
 class AppUpdateInfo {
   const AppUpdateInfo({
     required this.updateAvailable,
@@ -641,6 +649,9 @@ class LeadItem {
     required this.statusLabel,
     required this.callbackWindow,
     required this.callbackWindowLabel,
+    required this.callbackDate,
+    required this.callbackDateLabel,
+    required this.callbackScheduleLabel,
     required this.notes,
     this.assignedToName = '',
     this.lastContactedAt,
@@ -654,6 +665,9 @@ class LeadItem {
   final String statusLabel;
   final String callbackWindow;
   final String callbackWindowLabel;
+  final DateTime? callbackDate;
+  final String callbackDateLabel;
+  final String callbackScheduleLabel;
   final String notes;
   final String assignedToName;
   final DateTime? lastContactedAt;
@@ -661,8 +675,11 @@ class LeadItem {
 
   bool get isRecoveryLead =>
       status == 'no_answer' || status == 'not_interested';
+  bool get isPriorityCallback => status == 'call_back';
 
   factory LeadItem.fromJson(Map<String, dynamic> json) {
+    final callbackDateLabel = json['callback_date_label']?.toString() ?? '';
+    final callbackWindowLabel = json['callback_window_label']?.toString() ?? '';
     return LeadItem(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
@@ -670,7 +687,14 @@ class LeadItem {
       status: json['status']?.toString() ?? '',
       statusLabel: json['status_label']?.toString() ?? 'New',
       callbackWindow: json['callback_window']?.toString() ?? '',
-      callbackWindowLabel: json['callback_window_label']?.toString() ?? '',
+      callbackWindowLabel: callbackWindowLabel,
+      callbackDate: json['callback_date'] == null
+          ? null
+          : DateTime.tryParse(json['callback_date'].toString()),
+      callbackDateLabel: callbackDateLabel,
+      callbackScheduleLabel:
+          json['callback_schedule_label']?.toString() ??
+          _joinCallbackScheduleLabel(callbackDateLabel, callbackWindowLabel),
       notes: json['notes']?.toString() ?? '',
       assignedToName: json['assigned_to_name']?.toString() ?? '',
       lastContactedAt: json['last_contacted_at'] == null
@@ -785,6 +809,9 @@ class CallRecord {
     required this.id,
     required this.status,
     required this.callbackWindow,
+    required this.callbackDate,
+    required this.callbackDateLabel,
+    required this.callbackScheduleLabel,
     required this.durationSeconds,
     required this.isVerified,
   });
@@ -792,14 +819,26 @@ class CallRecord {
   final String id;
   final String status;
   final String callbackWindow;
+  final DateTime? callbackDate;
+  final String callbackDateLabel;
+  final String callbackScheduleLabel;
   final int durationSeconds;
   final bool isVerified;
 
   factory CallRecord.fromJson(Map<String, dynamic> json) {
+    final callbackDateLabel = json['callback_date_label']?.toString() ?? '';
+    final callbackWindowLabel = json['callback_window_label']?.toString() ?? '';
     return CallRecord(
       id: json['id']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
       callbackWindow: json['callback_window']?.toString() ?? '',
+      callbackDate: json['callback_date'] == null
+          ? null
+          : DateTime.tryParse(json['callback_date'].toString()),
+      callbackDateLabel: callbackDateLabel,
+      callbackScheduleLabel:
+          json['callback_schedule_label']?.toString() ??
+          _joinCallbackScheduleLabel(callbackDateLabel, callbackWindowLabel),
       durationSeconds: (json['duration_seconds'] as num?)?.toInt() ?? 0,
       isVerified: json['is_verified'] == true,
     );

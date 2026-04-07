@@ -37,6 +37,32 @@ const Duration kMinimumQualifyingCallDuration = Duration(seconds: 5);
 const int kCallLogSyncAttempts = 6;
 const Duration kCallLogSyncRetryDelay = Duration(seconds: 1);
 
+String _formatCallbackDateLabel(DateTime value) {
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  return '${value.day.toString().padLeft(2, '0')} ${months[value.month - 1]} ${value.year}';
+}
+
+String _formatCallbackScheduleLabel(String dateLabel, String windowLabel) {
+  final parts = <String>[
+    if (dateLabel.trim().isNotEmpty) dateLabel.trim(),
+    if (windowLabel.trim().isNotEmpty) windowLabel.trim(),
+  ];
+  return parts.join(' • ');
+}
+
 void main() => runApp(const HeavenectionApp());
 
 class HeavenectionApp extends StatelessWidget {
@@ -1302,19 +1328,23 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     LeadItem lead, {
     required String statusLabel,
     String callbackWindow = '',
-    String callbackWindowLabel = '',
+    String callbackScheduleLabel = '',
+    DateTime? callbackDate,
   }) async {
     try {
       final updatedLead = await _apiClient.recoverCustomerLead(
         leadId: lead.id,
         status: _statusValue(statusLabel),
         callbackWindow: callbackWindow,
+        callbackDate: callbackDate,
       );
       return RecoveredLeadResult(
         leadId: updatedLead.id,
         leadName: updatedLead.name.isNotEmpty ? updatedLead.name : lead.name,
         statusLabel: statusLabel,
-        callbackWindowLabel: callbackWindowLabel,
+        callbackScheduleLabel: updatedLead.callbackScheduleLabel.isNotEmpty
+            ? updatedLead.callbackScheduleLabel
+            : callbackScheduleLabel,
       );
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
@@ -1354,9 +1384,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     if (result.statusLabel == 'Call Back' &&
-        result.callbackWindowLabel.isNotEmpty) {
+        result.callbackScheduleLabel.isNotEmpty) {
       _showMessage(
-        '${result.leadName} moved back to your list for ${result.callbackWindowLabel}.',
+        '${result.leadName} moved back to your list for ${result.callbackScheduleLabel}.',
       );
       return;
     }
@@ -2297,6 +2327,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         ? initialStatus
         : choices.first;
     var selectedCallbackWindow = '';
+    DateTime? selectedCallbackDate;
 
     return showDialog<_CallRemarkDialogResult>(
       context: context,
@@ -2438,8 +2469,83 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                         if (selectedStatus == 'Call Back') ...[
                           const SizedBox(height: 8),
                           const Text(
-                            'Choose the callback time requested by the customer',
+                            'Choose the callback date and time requested by the customer',
                             style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 10),
+                          InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: isSaving
+                                ? null
+                                : () async {
+                                    final now = DateTime.now();
+                                    final picked = await showDatePicker(
+                                      context: dialogContext,
+                                      initialDate:
+                                          selectedCallbackDate ??
+                                          DateTime(now.year, now.month, now.day),
+                                      firstDate: DateTime(
+                                        now.year,
+                                        now.month,
+                                        now.day,
+                                      ),
+                                      lastDate: DateTime(
+                                        now.year + 1,
+                                        now.month,
+                                        now.day,
+                                      ),
+                                    );
+                                    if (picked == null) {
+                                      return;
+                                    }
+                                    setDialogState(
+                                      () => selectedCallbackDate = DateTime(
+                                        picked.year,
+                                        picked.month,
+                                        picked.day,
+                                      ),
+                                    );
+                                  },
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: selectedCallbackDate != null
+                                      ? kPrimary
+                                      : Colors.black12,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.calendar_month_rounded,
+                                    color: kPrimaryDark,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      selectedCallbackDate == null
+                                          ? 'Choose callback date'
+                                          : _formatCallbackDateLabel(
+                                              selectedCallbackDate!,
+                                            ),
+                                      style: TextStyle(
+                                        color: selectedCallbackDate == null
+                                            ? Colors.black54
+                                            : kPrimaryDark,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 10),
                           Wrap(
@@ -2492,10 +2598,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     onPressed:
                         isSaving ||
                             (selectedStatus == 'Call Back' &&
-                                selectedCallbackWindow.isEmpty)
+                                (selectedCallbackWindow.isEmpty ||
+                                    selectedCallbackDate == null))
                         ? null
                         : () async {
                             setDialogState(() => isSaving = true);
+                            final callbackDateLabel = selectedCallbackDate == null
+                                ? ''
+                                : _formatCallbackDateLabel(
+                                    selectedCallbackDate!,
+                                  );
                             Navigator.of(dialogContext).pop(
                               _CallRemarkDialogResult(
                                 statusLabel: selectedStatus,
@@ -2503,6 +2615,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                   selectedCallbackWindow,
                                 ),
                                 callbackWindowLabel: selectedCallbackWindow,
+                                callbackDate: selectedCallbackDate,
+                                callbackDateLabel: callbackDateLabel,
+                                callbackScheduleLabel: _formatCallbackScheduleLabel(
+                                  callbackDateLabel,
+                                  selectedCallbackWindow,
+                                ),
                               ),
                             );
                           },
@@ -3211,7 +3329,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   Future<bool> _submitPendingCallStatus(
     String label, {
     String callbackWindow = '',
-    String callbackWindowLabel = '',
+    DateTime? callbackDate,
+    String callbackScheduleLabel = '',
   }) async {
     final callId = _pendingStatusCallId;
     if (callId == null || callId.isEmpty) {
@@ -3223,6 +3342,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         callId: callId,
         status: _statusValue(label),
         callbackWindow: callbackWindow,
+        callbackDate: callbackDate,
       );
       if (!mounted) {
         return true;
@@ -3237,8 +3357,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       });
       await _loadDashboardData(showLoader: false, promptTrainingGate: false);
       if (mounted) {
-        if (label == 'Call Back' && callbackWindowLabel.isNotEmpty) {
-          _showMessage('Call Back scheduled for $callbackWindowLabel.');
+        if (label == 'Call Back' && callbackScheduleLabel.isNotEmpty) {
+          _showMessage('Call Back scheduled for $callbackScheduleLabel.');
         } else {
           _showMessage('Remark saved as $label.');
         }
@@ -3282,7 +3402,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final didSave = await _submitPendingCallStatus(
       selection.statusLabel,
       callbackWindow: selection.callbackWindow,
-      callbackWindowLabel: selection.callbackWindowLabel,
+      callbackDate: selection.callbackDate,
+      callbackScheduleLabel: selection.callbackScheduleLabel,
     );
     if (didSave) {
       await _focusLeadWorkflowAfterCallResultSaved();
@@ -3886,7 +4007,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           ),
           const SizedBox(height: 8),
           Text(
-            '${_leads.length} customer(s) are ready right now. Scheduled callbacks appear here at their requested time.',
+            '${_leads.length} customer(s) are ready right now. Scheduled callbacks appear here only on their requested date and time.',
             style: const TextStyle(fontSize: 16.5, color: Colors.black54),
           ),
           const SizedBox(height: 16),
@@ -3912,12 +4033,37 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               child: Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: _leads[i].isPriorityCallback
+                      ? const Color(0xFFFFF6EA)
+                      : Colors.white,
                   borderRadius: BorderRadius.circular(24),
+                  border: _leads[i].isPriorityCallback
+                      ? Border.all(color: kOrange.withValues(alpha: 0.32))
+                      : null,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (_leads[i].isPriorityCallback) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: kOrange.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Priority callback',
+                          style: TextStyle(
+                            color: kOrange,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     Row(
                       children: [
                         CircleAvatar(
@@ -3944,11 +4090,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                   color: Colors.black54,
                                 ),
                               ),
-                              if (_leads[i].callbackWindowLabel.isNotEmpty)
+                              if (_leads[i].callbackScheduleLabel.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.only(top: 6),
                                   child: Text(
-                                    'Call Back: ${_leads[i].callbackWindowLabel}',
+                                    'Call Back: ${_leads[i].callbackScheduleLabel}',
                                     style: const TextStyle(
                                       fontSize: 14.5,
                                       color: kPrimaryDark,
@@ -4213,10 +4359,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   lead.phone,
                   style: const TextStyle(fontSize: 17, color: Colors.black54),
                 ),
-                if (lead.callbackWindowLabel.isNotEmpty) ...[
+                if (lead.callbackScheduleLabel.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(
-                    'Call Back slot: ${lead.callbackWindowLabel}',
+                    'Scheduled callback: ${lead.callbackScheduleLabel}',
                     style: const TextStyle(
                       fontSize: 15,
                       color: kPrimaryDark,
@@ -5949,13 +6095,13 @@ class RecoveredLeadResult {
     required this.leadId,
     required this.leadName,
     required this.statusLabel,
-    this.callbackWindowLabel = '',
+    this.callbackScheduleLabel = '',
   });
 
   final String leadId;
   final String leadName;
   final String statusLabel;
-  final String callbackWindowLabel;
+  final String callbackScheduleLabel;
 }
 
 class CustomerRecoveryPage extends StatefulWidget {
@@ -5972,7 +6118,8 @@ class CustomerRecoveryPage extends StatefulWidget {
     LeadItem lead, {
     required String statusLabel,
     String callbackWindow,
-    String callbackWindowLabel,
+    String callbackScheduleLabel,
+    DateTime? callbackDate,
   })
   onRecover;
 
@@ -6044,6 +6191,7 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
     const callbackChoices = ['Noon', 'Evening', 'Night'];
     var selectedStatus = lead.status == 'call_back' ? 'Call Back' : 'Follow Up';
     var selectedCallbackWindow = lead.callbackWindowLabel;
+    DateTime? selectedCallbackDate = lead.callbackDate;
 
     return showDialog<_RecoverySelection>(
       context: context,
@@ -6097,8 +6245,73 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
                   if (selectedStatus == 'Call Back') ...[
                     const SizedBox(height: 16),
                     const Text(
-                      'Choose the callback time window',
+                      'Choose the callback date and time',
                       style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 10),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(18),
+                      onTap: () async {
+                        final now = DateTime.now();
+                        final picked = await showDatePicker(
+                          context: dialogContext,
+                          initialDate:
+                              selectedCallbackDate ??
+                              DateTime(now.year, now.month, now.day),
+                          firstDate: DateTime(now.year, now.month, now.day),
+                          lastDate: DateTime(now.year + 1, now.month, now.day),
+                        );
+                        if (picked == null) {
+                          return;
+                        }
+                        setDialogState(() {
+                          selectedCallbackDate = DateTime(
+                            picked.year,
+                            picked.month,
+                            picked.day,
+                          );
+                        });
+                      },
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: selectedCallbackDate != null
+                                ? kPrimary
+                                : Colors.black12,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_month_rounded,
+                              color: kPrimaryDark,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                selectedCallbackDate == null
+                                    ? 'Choose callback date'
+                                    : _formatCallbackDateLabel(
+                                        selectedCallbackDate!,
+                                      ),
+                                style: TextStyle(
+                                  color: selectedCallbackDate == null
+                                      ? Colors.black54
+                                      : kPrimaryDark,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Wrap(
@@ -6139,9 +6352,16 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
                 ElevatedButton(
                   onPressed:
                       selectedStatus == 'Call Back' &&
-                          selectedCallbackWindow.isEmpty
+                          (selectedCallbackWindow.isEmpty ||
+                              selectedCallbackDate == null)
                       ? null
                       : () {
+                          final callbackDateLabel =
+                              selectedCallbackDate == null
+                              ? ''
+                              : _formatCallbackDateLabel(
+                                  selectedCallbackDate!,
+                                );
                           Navigator.of(dialogContext).pop(
                             _RecoverySelection(
                               statusLabel: selectedStatus,
@@ -6149,6 +6369,12 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
                                 selectedCallbackWindow,
                               ),
                               callbackWindowLabel: selectedCallbackWindow,
+                              callbackDate: selectedCallbackDate,
+                              callbackDateLabel: callbackDateLabel,
+                              callbackScheduleLabel: _formatCallbackScheduleLabel(
+                                callbackDateLabel,
+                                selectedCallbackWindow,
+                              ),
                             ),
                           );
                         },
@@ -6173,7 +6399,8 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
       lead,
       statusLabel: selection.statusLabel,
       callbackWindow: selection.callbackWindow,
-      callbackWindowLabel: selection.callbackWindowLabel,
+      callbackScheduleLabel: selection.callbackScheduleLabel,
+      callbackDate: selection.callbackDate,
     );
     if (!mounted) {
       return;
@@ -6323,10 +6550,10 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
                             fontWeight: FontWeight.w600,
                           ),
                         ),
-                        if (lead.callbackWindowLabel.isNotEmpty) ...[
+                        if (lead.callbackScheduleLabel.isNotEmpty) ...[
                           const SizedBox(height: 6),
                           Text(
-                            'Current callback slot: ${lead.callbackWindowLabel}',
+                            'Current callback schedule: ${lead.callbackScheduleLabel}',
                             style: const TextStyle(
                               color: kPrimaryDark,
                               fontWeight: FontWeight.w700,
@@ -6390,11 +6617,17 @@ class _RecoverySelection {
     required this.statusLabel,
     this.callbackWindow = '',
     this.callbackWindowLabel = '',
+    this.callbackDate,
+    this.callbackDateLabel = '',
+    this.callbackScheduleLabel = '',
   });
 
   final String statusLabel;
   final String callbackWindow;
   final String callbackWindowLabel;
+  final DateTime? callbackDate;
+  final String callbackDateLabel;
+  final String callbackScheduleLabel;
 }
 
 class PendingDialerCall {
@@ -6416,12 +6649,18 @@ class _CallRemarkDialogResult {
     this.statusLabel = '',
     this.callbackWindow = '',
     this.callbackWindowLabel = '',
+    this.callbackDate,
+    this.callbackDateLabel = '',
+    this.callbackScheduleLabel = '',
     this.retryCall = false,
   });
 
   final String statusLabel;
   final String callbackWindow;
   final String callbackWindowLabel;
+  final DateTime? callbackDate;
+  final String callbackDateLabel;
+  final String callbackScheduleLabel;
   final bool retryCall;
 }
 

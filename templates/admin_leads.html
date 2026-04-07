@@ -125,8 +125,8 @@
                     <td>{{ lead.phone }}</td>
                     <td>
                         <span class="hc-status hc-status-{% if lead.status == 'new' %}new{% elif lead.status == 'call_back' %}warning{% elif lead.status == 'interested' %}success{% elif lead.status == 'converted' %}primary{% else %}muted{% endif %}">{{ lead.status_label }}</span>
-                        {% if lead.callback_window_label %}
-                        <div class="small text-muted mt-1">{{ lead.callback_window_label }}</div>
+                        {% if lead.callback_schedule_label %}
+                        <div class="small text-muted mt-1">{{ lead.callback_schedule_label }}</div>
                         {% endif %}
                     </td>
                     <td>{{ lead.assigned_to }}</td>
@@ -142,6 +142,7 @@
                                 data-phone="{{ lead.phone }}"
                                 data-status="{{ lead.status }}"
                                 data-callback-window="{{ lead.callback_window }}"
+                                data-callback-date="{{ lead.callback_date }}"
                                 data-assigned-to-id="{{ lead.assigned_to_id }}"
                                 data-notes="{{ lead.notes }}"
                             >Edit</button>
@@ -204,6 +205,10 @@
                                 <option value="evening">Evening</option>
                                 <option value="night">Night</option>
                             </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="leadCallbackDate">Call Back Date</label>
+                            <input type="date" class="form-control" id="leadCallbackDate">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold" for="leadAssignedTo">Assign To</label>

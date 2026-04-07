@@ -111,15 +111,20 @@ class EndCallSerializer(serializers.Serializer):
         required=False,
         allow_blank=False,
     )
+    callback_date = serializers.DateField(required=False)
     duration_seconds = serializers.IntegerField(min_value=0, required=False)
     ended_at = serializers.DateTimeField(required=False)
     source = serializers.CharField(max_length=50, required=False, default="app")
 
     def validate(self, attrs):
-        if attrs.get("status") == Call.Status.CALL_BACK and not attrs.get("callback_window"):
-            raise serializers.ValidationError(
-                {"callback_window": "Select Noon, Evening, or Night for a callback."}
-            )
+        if attrs.get("status") == Call.Status.CALL_BACK:
+            errors = {}
+            if not attrs.get("callback_window"):
+                errors["callback_window"] = "Select Noon, Evening, or Night for a callback."
+            if not attrs.get("callback_date"):
+                errors["callback_date"] = "Select the requested callback date."
+            if errors:
+                raise serializers.ValidationError(errors)
         if ("duration_seconds" in attrs) != ("ended_at" in attrs):
             raise serializers.ValidationError(
                 "Provide both duration and ended time for a verified call-log sync."
@@ -142,12 +147,17 @@ class CallStatusSerializer(serializers.Serializer):
         required=False,
         allow_blank=False,
     )
+    callback_date = serializers.DateField(required=False)
 
     def validate(self, attrs):
-        if attrs.get("status") == Call.Status.CALL_BACK and not attrs.get("callback_window"):
-            raise serializers.ValidationError(
-                {"callback_window": "Select Noon, Evening, or Night for a callback."}
-            )
+        if attrs.get("status") == Call.Status.CALL_BACK:
+            errors = {}
+            if not attrs.get("callback_window"):
+                errors["callback_window"] = "Select Noon, Evening, or Night for a callback."
+            if not attrs.get("callback_date"):
+                errors["callback_date"] = "Select the requested callback date."
+            if errors:
+                raise serializers.ValidationError(errors)
         return attrs
 
 
@@ -163,12 +173,17 @@ class StaffLeadRecoverySerializer(serializers.Serializer):
         required=False,
         allow_blank=False,
     )
+    callback_date = serializers.DateField(required=False)
 
     def validate(self, attrs):
-        if attrs.get("status") == Lead.Status.CALL_BACK and not attrs.get("callback_window"):
-            raise serializers.ValidationError(
-                {"callback_window": "Select Noon, Evening, or Night for a callback."}
-            )
+        if attrs.get("status") == Lead.Status.CALL_BACK:
+            errors = {}
+            if not attrs.get("callback_window"):
+                errors["callback_window"] = "Select Noon, Evening, or Night for a callback."
+            if not attrs.get("callback_date"):
+                errors["callback_date"] = "Select the requested callback date."
+            if errors:
+                raise serializers.ValidationError(errors)
         return attrs
 
 
@@ -792,6 +807,8 @@ class LeadSerializer(serializers.ModelSerializer):
         source="get_callback_window_display",
         read_only=True,
     )
+    callback_date_label = serializers.SerializerMethodField()
+    callback_schedule_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Lead
@@ -803,12 +820,28 @@ class LeadSerializer(serializers.ModelSerializer):
             "status_label",
             "callback_window",
             "callback_window_label",
+            "callback_date",
+            "callback_date_label",
+            "callback_schedule_label",
             "assigned_to",
             "assigned_to_name",
             "notes",
             "last_contacted_at",
             "updated_at",
         )
+
+    def get_callback_date_label(self, obj):
+        if not obj.callback_date:
+            return ""
+        return obj.callback_date.strftime("%d %b %Y")
+
+    def get_callback_schedule_label(self, obj):
+        parts = []
+        if obj.callback_date:
+            parts.append(obj.callback_date.strftime("%d %b %Y"))
+        if obj.callback_window:
+            parts.append(obj.get_callback_window_display())
+        return " • ".join(parts)
 
 
 class CreateLeadSerializer(serializers.ModelSerializer):
@@ -826,17 +859,23 @@ class CreateLeadSerializer(serializers.ModelSerializer):
             "phone",
             "status",
             "callback_window",
+            "callback_date",
             "assigned_to",
             "notes",
         )
 
     def validate(self, attrs):
-        if attrs.get("status") == Lead.Status.CALL_BACK and not attrs.get("callback_window"):
-            raise serializers.ValidationError(
-                {"callback_window": "Select Noon, Evening, or Night for callback leads."}
-            )
-        if attrs.get("status") != Lead.Status.CALL_BACK:
+        if attrs.get("status") == Lead.Status.CALL_BACK:
+            errors = {}
+            if not attrs.get("callback_window"):
+                errors["callback_window"] = "Select Noon, Evening, or Night for callback leads."
+            if not attrs.get("callback_date"):
+                errors["callback_date"] = "Select the requested callback date."
+            if errors:
+                raise serializers.ValidationError(errors)
+        else:
             attrs["callback_window"] = ""
+            attrs["callback_date"] = None
         return attrs
 
 
@@ -854,6 +893,7 @@ class UpdateLeadSerializer(serializers.ModelSerializer):
             "phone",
             "status",
             "callback_window",
+            "callback_date",
             "assigned_to",
             "notes",
         )
@@ -865,12 +905,21 @@ class UpdateLeadSerializer(serializers.ModelSerializer):
             "callback_window",
             getattr(instance, "callback_window", ""),
         )
-        if status == Lead.Status.CALL_BACK and not callback_window:
-            raise serializers.ValidationError(
-                {"callback_window": "Select Noon, Evening, or Night for callback leads."}
-            )
-        if status != Lead.Status.CALL_BACK:
+        callback_date = attrs.get(
+            "callback_date",
+            getattr(instance, "callback_date", None),
+        )
+        if status == Lead.Status.CALL_BACK:
+            errors = {}
+            if not callback_window:
+                errors["callback_window"] = "Select Noon, Evening, or Night for callback leads."
+            if not callback_date:
+                errors["callback_date"] = "Select the requested callback date."
+            if errors:
+                raise serializers.ValidationError(errors)
+        else:
             attrs["callback_window"] = ""
+            attrs["callback_date"] = None
         return attrs
 
 
@@ -948,6 +997,8 @@ class CallSerializer(serializers.ModelSerializer):
         source="get_callback_window_display",
         read_only=True,
     )
+    callback_date_label = serializers.SerializerMethodField()
+    callback_schedule_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Call
@@ -965,10 +1016,26 @@ class CallSerializer(serializers.ModelSerializer):
             "status_label",
             "callback_window",
             "callback_window_label",
+            "callback_date",
+            "callback_date_label",
+            "callback_schedule_label",
             "is_qualifying",
             "is_verified",
             "verification_source",
         )
+
+    def get_callback_date_label(self, obj):
+        if not obj.callback_date:
+            return ""
+        return obj.callback_date.strftime("%d %b %Y")
+
+    def get_callback_schedule_label(self, obj):
+        parts = []
+        if obj.callback_date:
+            parts.append(obj.callback_date.strftime("%d %b %Y"))
+        if obj.callback_window:
+            parts.append(obj.get_callback_window_display())
+        return " • ".join(parts)
 
 
 class SalarySerializer(serializers.ModelSerializer):

@@ -7,6 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_models.dart';
 
+String _dateOnlyString(DateTime value) {
+  final normalized = DateTime(value.year, value.month, value.day);
+  return normalized.toIso8601String().split('T').first;
+}
+
 class ApiClient {
   ApiClient({required this.baseUrl, http.Client? client})
     : _client = client ?? http.Client();
@@ -232,10 +237,14 @@ class ApiClient {
     required String leadId,
     required String status,
     String? callbackWindow,
+    DateTime? callbackDate,
   }) async {
     final body = <String, dynamic>{'status': status};
     if (callbackWindow != null && callbackWindow.isNotEmpty) {
       body['callback_window'] = callbackWindow;
+    }
+    if (callbackDate != null) {
+      body['callback_date'] = _dateOnlyString(callbackDate);
     }
     final response = await _send(
       'POST',
@@ -296,6 +305,7 @@ class ApiClient {
     required String callId,
     String? status,
     String? callbackWindow,
+    DateTime? callbackDate,
     int? durationSeconds,
     DateTime? endedAt,
     String source = 'app',
@@ -306,6 +316,9 @@ class ApiClient {
     }
     if (callbackWindow != null && callbackWindow.isNotEmpty) {
       body['callback_window'] = callbackWindow;
+    }
+    if (callbackDate != null) {
+      body['callback_date'] = _dateOnlyString(callbackDate);
     }
     if (durationSeconds != null) {
       body['duration_seconds'] = durationSeconds;
@@ -331,10 +344,14 @@ class ApiClient {
     required String callId,
     required String status,
     String? callbackWindow,
+    DateTime? callbackDate,
   }) async {
     final body = <String, dynamic>{'status': status};
     if (callbackWindow != null && callbackWindow.isNotEmpty) {
       body['callback_window'] = callbackWindow;
+    }
+    if (callbackDate != null) {
+      body['callback_date'] = _dateOnlyString(callbackDate);
     }
     final response = await _send(
       'POST',

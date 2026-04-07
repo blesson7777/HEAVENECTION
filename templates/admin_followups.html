@@ -88,6 +88,7 @@
                                 data-phone="{{ lead.phone }}"
                                 data-status="{{ lead.status }}"
                                 data-callback-window="{{ lead.callback_window }}"
+                                data-callback-date="{{ lead.callback_date }}"
                                 data-assigned-to-id="{{ lead.assigned_to_id }}"
                                 data-notes="{{ lead.notes }}"
                             >Edit</button>
@@ -177,6 +178,10 @@
                                 <option value="evening">Evening</option>
                                 <option value="night">Night</option>
                             </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="leadCallbackDate">Call Back Date</label>
+                            <input type="date" class="form-control" id="leadCallbackDate">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold" for="leadAssignedTo">Assign To</label>
