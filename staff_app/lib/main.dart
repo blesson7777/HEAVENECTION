@@ -6954,18 +6954,16 @@ class _StaffSalaryDetailsPageState extends State<StaffSalaryDetailsPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Referral rewards',
+                          'Referral tracker',
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          details.referralSummary.referredByName.isNotEmpty
-                              ? 'You are linked under ${details.referralSummary.referredByName}. Reward entries appear here separately after the required hours are completed.'
-                              : 'Referral rewards are enabled. Qualified reward entries appear here separately from normal salary payments.',
-                          style: const TextStyle(
+                        const Text(
+                          'Track each referred person here from submission to completed reward.',
+                          style: TextStyle(
                             fontSize: 14.5,
                             color: Colors.black54,
                           ),
@@ -6986,19 +6984,29 @@ class _StaffSalaryDetailsPageState extends State<StaffSalaryDetailsPage> {
                                   'Reward ${details.referralSummary.rewardAmountLabel}',
                             ),
                             _SalaryMetaChip(
-                              icon: Icons.pending_actions_outlined,
+                              icon: Icons.group_add_outlined,
                               label:
-                                  '${details.referralSummary.pendingCount} pending',
+                                  '${details.referralSummary.submittedCount} submitted',
+                            ),
+                            _SalaryMetaChip(
+                              icon: Icons.work_history_outlined,
+                              label:
+                                  '${details.referralSummary.startedWorkingCount} working',
                             ),
                             _SalaryMetaChip(
                               icon: Icons.verified_outlined,
                               label:
-                                  '${details.referralSummary.paidCount} paid',
+                                  '${details.referralSummary.completedCount} completed',
+                            ),
+                            _SalaryMetaChip(
+                              icon: Icons.pending_actions_outlined,
+                              label:
+                                  '${details.referralSummary.pendingCount} reward pending',
                             ),
                           ],
                         ),
                         const SizedBox(height: 14),
-                        if (details.referralHistory.isEmpty)
+                        if (details.referralTracking.isEmpty)
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.all(16),
@@ -7007,7 +7015,7 @@ class _StaffSalaryDetailsPageState extends State<StaffSalaryDetailsPage> {
                               borderRadius: BorderRadius.circular(18),
                             ),
                             child: const Text(
-                              'No referral reward entries have been added yet.',
+                              'No referral entries have been added yet.',
                               style: TextStyle(
                                 color: kPrimaryDark,
                                 fontWeight: FontWeight.w700,
@@ -7017,12 +7025,31 @@ class _StaffSalaryDetailsPageState extends State<StaffSalaryDetailsPage> {
                         else
                           Column(
                             children: [
+                              for (final item in details.referralTracking) ...[
+                                _ReferralTrackingCard(item: item),
+                                const SizedBox(height: 12),
+                              ],
+                            ],
+                          ),
+                        if (details.referralHistory.isNotEmpty) ...[
+                          const SizedBox(height: 18),
+                          const Text(
+                            'Reward history',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Column(
+                            children: [
                               for (final reward in details.referralHistory) ...[
                                 _ReferralRewardHistoryCard(reward: reward),
                                 const SizedBox(height: 12),
                               ],
                             ],
                           ),
+                        ],
                       ],
                     ),
                   ),
@@ -7353,6 +7380,115 @@ class _SalaryPaymentHistoryCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               payment.paymentNote,
+              style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ReferralTrackingCard extends StatelessWidget {
+  const _ReferralTrackingCard({required this.item});
+
+  final ReferralTrackingItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final stageColor = switch (item.workflowStage) {
+      'completed' => kGreen,
+      'started_working' => kOrange,
+      'joined' => kPrimary,
+      _ => kPrimaryDark,
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: kSoft,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.referredName,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: kPrimaryDark,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      item.referredPhone,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  item.workflowStageLabel,
+                  style: TextStyle(
+                    color: stageColor,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            item.progressLabel,
+            style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+          ),
+          if (item.joinedStaffName.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Joined as ${item.joinedStaffName}',
+              style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+            ),
+          ],
+          const SizedBox(height: 6),
+          Text(
+            'Submitted on ${item.createdAtLabel}',
+            style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+          ),
+          if (item.rewardAmountLabel.isNotEmpty && item.rewardAmountLabel != '--') ...[
+            const SizedBox(height: 6),
+            Text(
+              'Reward ${item.rewardAmountLabel} • ${item.rewardStatusLabel}',
+              style: const TextStyle(
+                fontSize: 13.5,
+                color: kPrimaryDark,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ] else if (item.rewardStatusLabel.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              item.rewardStatusLabel,
               style: const TextStyle(fontSize: 13.5, color: Colors.black54),
             ),
           ],

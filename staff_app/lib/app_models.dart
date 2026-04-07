@@ -499,6 +499,11 @@ class ReferralSummary {
     required this.requiredHoursLabel,
     required this.rewardAmountLabel,
     required this.referredByName,
+    required this.submittedCount,
+    required this.notJoinedCount,
+    required this.joinedCount,
+    required this.startedWorkingCount,
+    required this.completedCount,
     required this.qualifiedCount,
     required this.pendingCount,
     required this.paidCount,
@@ -509,6 +514,11 @@ class ReferralSummary {
   final String requiredHoursLabel;
   final String rewardAmountLabel;
   final String referredByName;
+  final int submittedCount;
+  final int notJoinedCount;
+  final int joinedCount;
+  final int startedWorkingCount;
+  final int completedCount;
   final int qualifiedCount;
   final int pendingCount;
   final int paidCount;
@@ -520,10 +530,62 @@ class ReferralSummary {
       requiredHoursLabel: json['required_hours_label']?.toString() ?? '0.0h',
       rewardAmountLabel: json['reward_amount_label']?.toString() ?? 'Rs. 0.00',
       referredByName: json['referred_by_name']?.toString() ?? '',
+      submittedCount: _asInt(json['submitted_count']),
+      notJoinedCount: _asInt(json['not_joined_count']),
+      joinedCount: _asInt(json['joined_count']),
+      startedWorkingCount: _asInt(json['started_working_count']),
+      completedCount: _asInt(json['completed_count']),
       qualifiedCount: _asInt(json['qualified_count']),
       pendingCount: _asInt(json['pending_count']),
       paidCount: _asInt(json['paid_count']),
       pendingTotalLabel: json['pending_total_label']?.toString() ?? 'Rs. 0.00',
+    );
+  }
+}
+
+class ReferralTrackingItem {
+  const ReferralTrackingItem({
+    required this.id,
+    required this.referredName,
+    required this.referredPhone,
+    required this.workflowStage,
+    required this.workflowStageLabel,
+    required this.progressLabel,
+    required this.activeHoursLabel,
+    required this.requiredHoursLabel,
+    required this.rewardAmountLabel,
+    required this.rewardStatusLabel,
+    required this.joinedStaffName,
+    required this.createdAtLabel,
+  });
+
+  final String id;
+  final String referredName;
+  final String referredPhone;
+  final String workflowStage;
+  final String workflowStageLabel;
+  final String progressLabel;
+  final String activeHoursLabel;
+  final String requiredHoursLabel;
+  final String rewardAmountLabel;
+  final String rewardStatusLabel;
+  final String joinedStaffName;
+  final String createdAtLabel;
+
+  factory ReferralTrackingItem.fromJson(Map<String, dynamic> json) {
+    return ReferralTrackingItem(
+      id: json['id']?.toString() ?? '',
+      referredName: json['referred_name']?.toString() ?? '',
+      referredPhone: json['referred_phone']?.toString() ?? '',
+      workflowStage: json['workflow_stage']?.toString() ?? '',
+      workflowStageLabel: json['workflow_stage_label']?.toString() ?? '',
+      progressLabel: json['progress_label']?.toString() ?? '',
+      activeHoursLabel: json['active_hours_label']?.toString() ?? '0.0h',
+      requiredHoursLabel: json['required_hours_label']?.toString() ?? '0.0h',
+      rewardAmountLabel: json['reward_amount_label']?.toString() ?? '--',
+      rewardStatusLabel: json['reward_status_label']?.toString() ?? '',
+      joinedStaffName: json['joined_staff_name']?.toString() ?? '',
+      createdAtLabel: json['created_at']?.toString() ?? '--',
     );
   }
 }
@@ -583,6 +645,7 @@ class StaffSalaryDetails {
     required this.pattern,
     required this.paymentHistory,
     required this.referralSummary,
+    required this.referralTracking,
     required this.referralHistory,
   });
 
@@ -592,6 +655,7 @@ class StaffSalaryDetails {
   final SalaryPatternSection pattern;
   final List<SalaryPaymentHistoryItem> paymentHistory;
   final ReferralSummary referralSummary;
+  final List<ReferralTrackingItem> referralTracking;
   final List<ReferralRewardHistoryItem> referralHistory;
 
   factory StaffSalaryDetails.fromJson(Map<String, dynamic> json) {
@@ -627,6 +691,15 @@ class StaffSalaryDetails {
             ? json['referral'] as Map<String, dynamic>
             : const {},
       ),
+      referralTracking:
+          ((json['referral'] is Map<String, dynamic>
+                      ? (json['referral'] as Map<String, dynamic>)['tracking_rows']
+                      : null)
+                  as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .map(ReferralTrackingItem.fromJson)
+              .toList() ??
+          const [],
       referralHistory:
           ((json['referral'] is Map<String, dynamic>
                       ? (json['referral'] as Map<String, dynamic>)['history']

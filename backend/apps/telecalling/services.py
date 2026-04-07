@@ -426,6 +426,136 @@ def _staff_total_active_hours(staff):
     return _quantized_decimal(Decimal(total_seconds) / Decimal("3600"))
 
 
+def _staff_active_hours_map(staff_ids):
+    if not staff_ids:
+        return {}
+    totals = (
+        Session.objects.filter(staff_id__in=staff_ids)
+        .values("staff_id")
+        .annotate(total=Sum("active_seconds"))
+    )
+    return {
+        row["staff_id"]: _quantized_decimal(Decimal(row["total"] or 0) / Decimal("3600"))
+        for row in totals
+    }
+
+
+def _build_referral_tracking_payload(staff, *, company_profile=None):
+    company_profile = company_profile or get_company_profile()
+    required_hours = _quantized_decimal(company_profile.referral_required_hours or 0)
+    reward_amount = _money(company_profile.referral_reward_amount or 0)
+    submissions = list(
+        ReferralSubmission.objects.filter(referrer=staff)
+        .select_related("joined_staff")
+        .order_by("-created_at")
+    )
+    joined_staff_ids = [submission.joined_staff_id for submission in submissions if submission.joined_staff_id]
+    active_hours_map = _staff_active_hours_map(joined_staff_ids)
+    rewards = {
+        reward.referred_staff_id: reward
+        for reward in ReferralReward.objects.filter(
+            referrer=staff,
+            referred_staff_id__in=joined_staff_ids,
+        ).select_related("referred_staff")
+    }
+
+    rows = []
+    summary = {
+        "enabled": company_profile.referral_program_enabled,
+        "required_hours_label": f"{float(company_profile.referral_required_hours or 0):,.1f}h",
+        "reward_amount_label": _format_currency(company_profile.referral_reward_amount or 0),
+        "referred_by_name": staff.referred_by.name if staff.referred_by else "",
+        "submitted_count": len(submissions),
+        "not_joined_count": 0,
+        "joined_count": 0,
+        "started_working_count": 0,
+        "completed_count": 0,
+        "qualified_count": 0,
+        "pending_count": 0,
+        "paid_count": 0,
+        "pending_total_label": _format_currency(0),
+    }
+    pending_total = Decimal("0.00")
+
+    for submission in submissions:
+        joined_staff = submission.joined_staff
+        active_hours = active_hours_map.get(joined_staff.id, Decimal("0.00")) if joined_staff else Decimal("0.00")
+        reward = rewards.get(joined_staff.id) if joined_staff else None
+        is_completed = bool(reward) or (
+            joined_staff is not None
+            and required_hours <= Decimal("0.00")
+        ) or (
+            joined_staff is not None
+            and required_hours > Decimal("0.00")
+            and active_hours >= required_hours
+        )
+
+        if joined_staff is None:
+            stage = "not_joined"
+            stage_label = "Not Joined"
+            progress_label = "Waiting to join the team."
+            reward_status_label = "Reward unlocks after completion"
+            reward_amount_label = "--"
+            summary["not_joined_count"] += 1
+        elif is_completed:
+            stage = "completed"
+            stage_label = "Completed"
+            progress_label = (
+                f"{float(active_hours):,.1f}h completed"
+                if required_hours <= Decimal("0.00")
+                else f"{float(active_hours):,.1f}h of {float(required_hours):,.1f}h completed"
+            )
+            reward_status_label = "Reward Paid" if reward and reward.is_paid else "Pending Reward"
+            reward_amount_label = _format_currency(reward.reward_amount if reward else reward_amount)
+            summary["completed_count"] += 1
+            summary["qualified_count"] += 1
+            if reward and reward.is_paid:
+                summary["paid_count"] += 1
+            else:
+                summary["pending_count"] += 1
+                pending_total += reward.reward_amount if reward else reward_amount
+        elif active_hours > Decimal("0.00"):
+            stage = "started_working"
+            stage_label = "Started Working"
+            progress_label = (
+                f"{float(active_hours):,.1f}h started"
+                if required_hours <= Decimal("0.00")
+                else f"{float(active_hours):,.1f}h of {float(required_hours):,.1f}h completed"
+            )
+            reward_status_label = "Reward unlocks after completion"
+            reward_amount_label = "--"
+            summary["started_working_count"] += 1
+        else:
+            stage = "joined"
+            stage_label = "Joined"
+            progress_label = "Joined the team and waiting for work hours to begin."
+            reward_status_label = "Reward unlocks after completion"
+            reward_amount_label = "--"
+            summary["joined_count"] += 1
+
+        rows.append(
+            {
+                "id": str(submission.id),
+                "referred_name": submission.referred_name,
+                "referred_phone": submission.referred_phone,
+                "status": submission.status,
+                "status_label": submission.get_status_display(),
+                "joined_staff_name": joined_staff.name if joined_staff else "",
+                "created_at": _format_datetime(submission.created_at),
+                "workflow_stage": stage,
+                "workflow_stage_label": stage_label,
+                "progress_label": progress_label,
+                "active_hours_label": f"{float(active_hours):,.1f}h",
+                "required_hours_label": f"{float(required_hours):,.1f}h",
+                "reward_amount_label": reward_amount_label,
+                "reward_status_label": reward_status_label,
+            }
+        )
+
+    summary["pending_total_label"] = _format_currency(pending_total)
+    return {"summary": summary, "rows": rows}
+
+
 def _sync_referral_reward_for_staff(staff, *, company_profile=None):
     company_profile = company_profile or get_company_profile()
     existing_reward = (
@@ -590,54 +720,12 @@ def build_staff_referral_reward_rows(staff, limit=20):
 
 
 def build_staff_referral_submission_rows(staff, limit=20):
-    submissions = (
-        ReferralSubmission.objects.filter(referrer=staff)
-        .select_related("joined_staff")
-        .order_by("-created_at")[:limit]
-    )
-    return [
-        {
-            "id": str(submission.id),
-            "referred_name": submission.referred_name,
-            "referred_phone": submission.referred_phone,
-            "status": submission.status,
-            "status_label": submission.get_status_display(),
-            "joined_staff_name": submission.joined_staff.name if submission.joined_staff else "",
-            "created_at": _format_datetime(submission.created_at),
-        }
-        for submission in submissions
-    ]
+    return _build_referral_tracking_payload(staff)["rows"][:limit]
 
 
 def build_staff_referral_summary(staff, *, company_profile=None):
     company_profile = company_profile or get_company_profile()
-    if not company_profile.referral_program_enabled:
-        return {
-            "enabled": False,
-            "required_hours_label": "0.0h",
-            "reward_amount_label": _format_currency(0),
-            "referred_by_name": "",
-            "qualified_count": 0,
-            "pending_count": 0,
-            "paid_count": 0,
-            "pending_total_label": _format_currency(0),
-        }
-
-    reward_rows = ReferralReward.objects.filter(referrer=staff)
-    pending_total = (
-        reward_rows.filter(is_paid=False).aggregate(total=Sum("reward_amount")).get("total")
-        or Decimal("0.00")
-    )
-    return {
-        "enabled": True,
-        "required_hours_label": f"{float(company_profile.referral_required_hours or 0):,.1f}h",
-        "reward_amount_label": _format_currency(company_profile.referral_reward_amount or 0),
-        "referred_by_name": staff.referred_by.name if staff.referred_by else "",
-        "qualified_count": reward_rows.count(),
-        "pending_count": reward_rows.filter(is_paid=False).count(),
-        "paid_count": reward_rows.filter(is_paid=True).count(),
-        "pending_total_label": _format_currency(pending_total),
-    }
+    return _build_referral_tracking_payload(staff, company_profile=company_profile)["summary"]
 
 
 def _staff_salary_snapshot_block(title, snapshot, *, subtitle=""):
@@ -715,6 +803,10 @@ def build_staff_salary_details_payload(staff):
     today = timezone.localdate()
     company_profile = get_company_profile()
     sync_referral_rewards(company_profile)
+    referral_tracking = _build_referral_tracking_payload(
+        staff,
+        company_profile=company_profile,
+    )
     current_period_start, current_period_end = _running_period_for_staff(staff, today)
     current_snapshot = _salary_period_snapshot(
         staff,
@@ -782,7 +874,8 @@ def build_staff_salary_details_payload(staff):
         },
         "payment_history": build_staff_salary_history_rows(staff, limit=20),
         "referral": {
-            **build_staff_referral_summary(staff, company_profile=company_profile),
+            **referral_tracking["summary"],
+            "tracking_rows": referral_tracking["rows"][:20],
             "history": build_staff_referral_reward_rows(staff, limit=20),
         },
     }
@@ -2888,6 +2981,12 @@ def build_team_management_payload():
 
 
 def build_staff_profile_payload(request, staff):
+    company_profile = get_company_profile()
+    sync_referral_rewards(company_profile)
+    referral_tracking = _build_referral_tracking_payload(
+        staff,
+        company_profile=company_profile,
+    )
     today, start, end = _today_range()
     active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
     open_session = get_open_session(staff, reconcile=True)
@@ -3007,10 +3106,9 @@ def build_staff_profile_payload(request, staff):
             else "",
         },
         "referral_summary": {
-            "enabled": get_company_profile().referral_program_enabled,
-            "submitted_count": ReferralSubmission.objects.filter(referrer=staff).count(),
+            **referral_tracking["summary"],
         },
-        "referral_submission_rows": build_staff_referral_submission_rows(staff, limit=20),
+        "referral_submission_rows": referral_tracking["rows"][:20],
         "assigned_lead_rows": assigned_lead_rows,
         "recent_call_rows": recent_call_rows,
         "recent_session_rows": recent_session_rows,

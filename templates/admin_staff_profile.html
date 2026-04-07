@@ -396,6 +396,12 @@
             {{ referral_summary.submitted_count }} submitted
         </span>
     </div>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="hc-sync-pill"><i class="bi bi-person-dash"></i>{{ referral_summary.not_joined_count }} not joined</span>
+        <span class="hc-sync-pill"><i class="bi bi-person-check"></i>{{ referral_summary.joined_count }} joined</span>
+        <span class="hc-sync-pill"><i class="bi bi-briefcase"></i>{{ referral_summary.started_working_count }} started working</span>
+        <span class="hc-sync-pill"><i class="bi bi-award"></i>{{ referral_summary.completed_count }} completed</span>
+    </div>
     {% if not referral_summary.enabled %}
     <div class="hc-empty-state">
         <p class="mb-0">Referral rewards are currently disabled, but any saved entries will still appear here.</p>
@@ -407,7 +413,9 @@
                 <tr>
                     <th>Name</th>
                     <th>Phone</th>
-                    <th>Status</th>
+                    <th>Stage</th>
+                    <th>Progress</th>
+                    <th>Reward</th>
                     <th>Joined Staff</th>
                     <th>Submitted</th>
                 </tr>
@@ -417,12 +425,21 @@
                 <tr>
                     <td><strong>{{ referral.referred_name }}</strong></td>
                     <td>{{ referral.referred_phone }}</td>
-                    <td>{{ referral.status_label }}</td>
+                    <td>{{ referral.workflow_stage_label }}</td>
+                    <td>{{ referral.progress_label }}</td>
+                    <td>
+                        {% if referral.reward_amount_label != '--' %}
+                        <strong>{{ referral.reward_amount_label }}</strong>
+                        <div class="small text-muted">{{ referral.reward_status_label }}</div>
+                        {% else %}
+                        <span class="text-muted">{{ referral.reward_status_label }}</span>
+                        {% endif %}
+                    </td>
                     <td>{{ referral.joined_staff_name|default:"--" }}</td>
                     <td>{{ referral.created_at }}</td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="5" class="text-center py-4">No referral entries submitted yet.</td></tr>
+                <tr><td colspan="7" class="text-center py-4">No referral entries submitted yet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
