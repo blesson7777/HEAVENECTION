@@ -1,9 +1,10 @@
+import calendar
 import csv
 import io
 import logging
 import re
 from collections import Counter, defaultdict
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.conf import settings
@@ -288,6 +289,131 @@ def _quantized_decimal(value):
     return Decimal(value or 0).quantize(TWOPLACES)
 
 
+WEEKLY_PAYOUT_DAY_INDEX = {
+    Staff.WeeklyPayoutDay.MONDAY: 0,
+    Staff.WeeklyPayoutDay.TUESDAY: 1,
+    Staff.WeeklyPayoutDay.WEDNESDAY: 2,
+    Staff.WeeklyPayoutDay.THURSDAY: 3,
+    Staff.WeeklyPayoutDay.FRIDAY: 4,
+    Staff.WeeklyPayoutDay.SATURDAY: 5,
+    Staff.WeeklyPayoutDay.SUNDAY: 6,
+}
+
+
+def _month_last_day(value):
+    return date(value.year, value.month, calendar.monthrange(value.year, value.month)[1])
+
+
+def _previous_month_range(value):
+    previous_month_last_day = value.replace(day=1) - timedelta(days=1)
+    return previous_month_last_day.replace(day=1), previous_month_last_day
+
+
+def _weekly_due_period(value, payout_day):
+    target_index = WEEKLY_PAYOUT_DAY_INDEX.get(
+        payout_day or Staff.WeeklyPayoutDay.WEDNESDAY,
+        WEEKLY_PAYOUT_DAY_INDEX[Staff.WeeklyPayoutDay.WEDNESDAY],
+    )
+    end = value - timedelta(days=(value.weekday() - target_index) % 7)
+    start = end - timedelta(days=6)
+    return start, end
+
+
+def _weekly_running_period(value, payout_day):
+    due_start, due_end = _weekly_due_period(value, payout_day)
+    if value.weekday() == WEEKLY_PAYOUT_DAY_INDEX.get(
+        payout_day or Staff.WeeklyPayoutDay.WEDNESDAY,
+        WEEKLY_PAYOUT_DAY_INDEX[Staff.WeeklyPayoutDay.WEDNESDAY],
+    ):
+        return due_start, value
+    return due_end + timedelta(days=1), value
+
+
+def _monthly_due_period(value):
+    current_month_end = _month_last_day(value)
+    if value == current_month_end:
+        return value.replace(day=1), value
+    return _previous_month_range(value)
+
+
+def _monthly_running_period(value):
+    return value.replace(day=1), value
+
+
+def _running_payout_cycle_for_staff(staff):
+    if staff.compensation_type == Staff.CompensationType.WEEKLY:
+        return Salary.PayoutCycle.WEEKLY
+    if staff.compensation_type == Staff.CompensationType.MONTHLY:
+        return Salary.PayoutCycle.MONTHLY
+    return Salary.PayoutCycle.CUSTOM
+
+
+def _due_period_for_staff(staff, today):
+    if staff.compensation_type == Staff.CompensationType.WEEKLY:
+        return _weekly_due_period(today, staff.weekly_payout_day), Salary.PayoutCycle.WEEKLY
+    if staff.compensation_type == Staff.CompensationType.MONTHLY:
+        return _monthly_due_period(today), Salary.PayoutCycle.MONTHLY
+    return _monthly_running_period(today), Salary.PayoutCycle.CUSTOM
+
+
+def _running_period_for_staff(staff, today):
+    if staff.compensation_type == Staff.CompensationType.WEEKLY:
+        return _weekly_running_period(today, staff.weekly_payout_day)
+    return _monthly_running_period(today)
+
+
+def _salary_period_snapshot(staff, *, period_start, period_end, payout_cycle):
+    breakdown = calculate_staff_payout_for_dates(staff, period_start, period_end)
+    record = Salary.objects.filter(
+        staff=staff,
+        period_start=period_start,
+        period_end=period_end,
+    ).first()
+    paid_total = _salary_record_paid_total(record) if record else Decimal("0.00")
+    earned_total = _money(breakdown["total_pay"])
+    balance = max(earned_total - paid_total, Decimal("0.00"))
+    return {
+        "period_start": period_start,
+        "period_end": period_end,
+        "period_label": f"{period_start.strftime('%d %b %Y')} to {period_end.strftime('%d %b %Y')}",
+        "payout_cycle": payout_cycle,
+        "hours": breakdown["active_hours"],
+        "hours_label": f"{round(float(breakdown['active_hours']), 1)}h",
+        "earned_total": earned_total,
+        "earned_total_label": _format_currency(earned_total),
+        "paid_total": paid_total,
+        "paid_total_label": _format_currency(paid_total),
+        "balance": _money(balance),
+        "balance_label": _format_currency(balance),
+        "base_pay_label": _format_currency(breakdown["base_pay"]),
+        "call_earnings_label": _format_currency(breakdown["call_earnings"]),
+        "bonus_earnings_label": _format_currency(breakdown["bonus_earnings"]),
+        "record": record,
+    }
+
+
+def _salary_schedule_label(staff):
+    if staff.compensation_type == Staff.CompensationType.WEEKLY:
+        return f"Every {staff.get_weekly_payout_day_display()}"
+    if staff.compensation_type == Staff.CompensationType.MONTHLY:
+        return "Last day of every month"
+    return "Running earned amount"
+
+
+def build_staff_current_salary_summary(staff, *, today=None):
+    today = today or timezone.localdate()
+    period_start, period_end = _running_period_for_staff(staff, today)
+    breakdown = calculate_staff_payout_for_dates(staff, period_start, period_end)
+    total_hours = breakdown["active_hours"]
+    total_earned = breakdown["total_pay"]
+    return {
+        "total_working_hours": float(total_hours),
+        "total_working_hours_label": f"{float(total_hours):,.1f}h",
+        "total_earned_amount": float(total_earned),
+        "total_earned_amount_label": f"Rs. {float(total_earned):,.2f}",
+    }
+
+
 def _date_range_bounds(period_start, period_end):
     start_at = timezone.make_aware(timezone.datetime.combine(period_start, timezone.datetime.min.time()))
     end_at = timezone.make_aware(timezone.datetime.combine(period_end, timezone.datetime.max.time()))
@@ -368,6 +494,8 @@ def build_staff_salary_history_rows(staff, limit=20):
                 "paid_amount": _format_currency(transaction.amount),
                 "is_paid": record.is_paid,
                 "paid_at": _format_datetime(transaction.paid_at),
+                "payment_kind": transaction.payment_kind,
+                "payment_kind_label": transaction.get_payment_kind_display(),
                 "payment_method": transaction.payment_method,
                 "payment_method_label": transaction.get_payment_method_display()
                 if transaction.payment_method
@@ -397,6 +525,7 @@ def build_recent_salary_payment_rows(limit=40):
                 "payout_cycle_label": record.get_payout_cycle_display(),
                 "paid_amount": _format_currency(transaction.amount),
                 "paid_at": _format_datetime(transaction.paid_at),
+                "payment_kind_label": transaction.get_payment_kind_display(),
                 "payment_method_label": transaction.get_payment_method_display()
                 if transaction.payment_method
                 else "Manual",
@@ -536,6 +665,7 @@ def record_staff_salary_payment(
     period_start,
     period_end,
     paid_amount,
+    payment_kind=SalaryPaymentTransaction.PaymentKind.SALARY,
     payment_method="",
     payment_reference="",
     payment_note="",
@@ -591,6 +721,7 @@ def record_staff_salary_payment(
     transaction = SalaryPaymentTransaction.objects.create(
         salary_record=salary_record,
         amount=paid_amount_value,
+        payment_kind=payment_kind,
         payment_method=payment_method,
         payment_reference=payment_reference.strip(),
         payment_note=payment_note.strip(),
@@ -2545,6 +2676,9 @@ def build_salary_control_payload(request):
                 "monthly_salary_raw": str(staff.monthly_salary),
                 "target_hours_per_week": float(staff.target_hours_per_week),
                 "target_hours_per_month": float(staff.target_hours_per_month),
+                "weekly_payout_day": staff.weekly_payout_day,
+                "weekly_payout_day_label": staff.get_weekly_payout_day_display(),
+                "monthly_payout_label": "Last day of month",
                 "call_rate": _format_currency(staff.call_rate),
                 "call_rate_raw": str(staff.call_rate),
                 "bonus_per_conversion": _format_currency(staff.bonus_per_conversion),
@@ -2574,10 +2708,6 @@ def build_salary_control_payload(request):
 
 def build_salary_page_payload():
     today = timezone.localdate()
-    week_start, week_end = _week_range()
-    month_start, month_end = _month_range()
-    week_session_totals, week_call_totals, week_converted = _staff_period_totals(week_start, week_end)
-    month_session_totals, month_call_totals, month_converted = _staff_period_totals(month_start, month_end)
     paid_totals_by_staff = {
         row["staff_id"]: row["paid_total"] or Decimal("0.00")
         for row in Salary.objects.filter(paid_amount__gt=Decimal("0.00")).values("staff_id").annotate(paid_total=Sum("paid_amount"))
@@ -2589,62 +2719,41 @@ def build_salary_page_payload():
 
     pending_total = Decimal("0.00")
     credited_total = Decimal("0.00")
-    weekly_hours_total = Decimal("0.00")
-    monthly_hours_total = Decimal("0.00")
     pending_staff_count = 0
+    advance_total = Decimal("0.00")
+    advance_staff_count = 0
     salary_rows = []
 
     for staff in _staff_queryset():
-        weekly_breakdown = calculate_staff_payout(
+        (due_start, due_end), due_cycle = _due_period_for_staff(staff, today)
+        due_snapshot = _salary_period_snapshot(
             staff,
-            active_seconds=week_session_totals.get(staff.id, 0),
-            call_seconds=week_call_totals.get(staff.id, 0),
-            converted_leads=week_converted.get(staff.id, 0),
+            period_start=due_start,
+            period_end=due_end,
+            payout_cycle=due_cycle,
         )
-        monthly_breakdown = calculate_staff_payout(
+        running_start, running_end = _running_period_for_staff(staff, today)
+        running_snapshot = _salary_period_snapshot(
             staff,
-            active_seconds=month_session_totals.get(staff.id, 0),
-            call_seconds=month_call_totals.get(staff.id, 0),
-            converted_leads=month_converted.get(staff.id, 0),
+            period_start=running_start,
+            period_end=running_end,
+            payout_cycle=_running_payout_cycle_for_staff(staff),
         )
-        current_payable, cycle_label = _current_cycle_payout(staff, weekly_breakdown, monthly_breakdown)
-        week_record = Salary.objects.filter(
-            staff=staff,
-            period_start=timezone.localtime(week_start).date(),
-            period_end=today,
-        ).first()
-        month_record = Salary.objects.filter(
-            staff=staff,
-            period_start=timezone.localtime(month_start).date(),
-            period_end=today,
-        ).first()
-        week_paid = _salary_record_paid_total(week_record) if week_record else Decimal("0.00")
-        month_paid = _salary_record_paid_total(month_record) if month_record else Decimal("0.00")
-        if staff.compensation_type == Staff.CompensationType.WEEKLY:
-            current_cycle_code = Salary.PayoutCycle.WEEKLY
-            current_cycle_label = "This Week"
-            current_period_start = timezone.localtime(week_start).date()
-            current_period_end = today
-            current_earned_total = _money(weekly_breakdown["total_pay"])
-            current_paid_total = week_paid
-        else:
-            current_cycle_code = Salary.PayoutCycle.MONTHLY
-            current_cycle_label = "This Month"
-            current_period_start = timezone.localtime(month_start).date()
-            current_period_end = today
-            current_earned_total = _money(monthly_breakdown["total_pay"])
-            current_paid_total = month_paid
-        current_balance = current_earned_total - current_paid_total
-        if current_balance < Decimal("0.00"):
-            current_balance = Decimal("0.00")
-        current_payable = _money(current_balance)
+        advance_available = running_snapshot["balance"]
+        same_period_as_due = (
+            due_snapshot["period_start"] == running_snapshot["period_start"]
+            and due_snapshot["period_end"] == running_snapshot["period_end"]
+        )
+        if same_period_as_due:
+            advance_available = Decimal("0.00")
 
-        pending_total += current_payable
+        pending_total += due_snapshot["balance"]
         credited_total += paid_totals_by_staff.get(staff.id, Decimal("0.00"))
-        weekly_hours_total += weekly_breakdown["active_hours"]
-        monthly_hours_total += monthly_breakdown["active_hours"]
-        if current_payable > Decimal("0.00"):
+        if due_snapshot["balance"] > Decimal("0.00"):
             pending_staff_count += 1
+        if advance_available > Decimal("0.00"):
+            advance_total += advance_available
+            advance_staff_count += 1
 
         salary_rows.append(
             {
@@ -2654,38 +2763,47 @@ def build_salary_page_payload():
                 "email": staff.email or "",
                 "compensation_type": staff.compensation_type,
                 "compensation_type_label": _payout_cycle_label(staff),
+                "schedule_label": _salary_schedule_label(staff),
+                "weekly_payout_day_label": staff.get_weekly_payout_day_display(),
                 "hourly_rate": _format_currency(staff.hourly_rate),
                 "bank_name": staff.bank_name or "Bank details not added",
                 "bank_account_number": staff.bank_account_number or "Account number not added",
-                "weekly_hours": round(float(weekly_breakdown["active_hours"]), 2),
-                "monthly_hours": round(float(monthly_breakdown["active_hours"]), 2),
-                "weekly_hours_label": f"{round(float(weekly_breakdown['active_hours']), 1)}h",
-                "monthly_hours_label": f"{round(float(monthly_breakdown['active_hours']), 1)}h",
-                "weekly_base": _format_currency(weekly_breakdown["base_pay"]),
-                "weekly_call": _format_currency(weekly_breakdown["call_earnings"]),
-                "weekly_bonus": _format_currency(weekly_breakdown["bonus_earnings"]),
-                "weekly_total": _format_currency(weekly_breakdown["total_pay"]),
-                "monthly_base": _format_currency(monthly_breakdown["base_pay"]),
-                "monthly_call": _format_currency(monthly_breakdown["call_earnings"]),
-                "monthly_bonus": _format_currency(monthly_breakdown["bonus_earnings"]),
-                "monthly_total": _format_currency(monthly_breakdown["total_pay"]),
-                "current_cycle_label": current_cycle_label,
-                "current_payout_cycle": current_cycle_code,
-                "current_period_start": current_period_start.isoformat(),
-                "current_period_end": current_period_end.isoformat(),
-                "current_period_label": f"{current_period_start.strftime('%d %b %Y')} to {current_period_end.strftime('%d %b %Y')}",
-                "current_earned_total": _format_currency(current_earned_total),
-                "current_paid_total": _format_currency(current_paid_total),
-                "current_balance_raw": f"{current_payable:.2f}",
-                "current_payable": _format_currency(current_payable),
+                "due_payout_cycle": due_cycle,
+                "due_period_start": due_snapshot["period_start"].isoformat(),
+                "due_period_end": due_snapshot["period_end"].isoformat(),
+                "due_period_label": due_snapshot["period_label"],
+                "due_hours_label": due_snapshot["hours_label"],
+                "due_earned_total": due_snapshot["earned_total_label"],
+                "due_paid_total": due_snapshot["paid_total_label"],
+                "due_balance_raw": f"{due_snapshot['balance']:.2f}",
+                "due_balance": due_snapshot["balance_label"],
+                "due_base_pay": due_snapshot["base_pay_label"],
+                "due_call_earnings": due_snapshot["call_earnings_label"],
+                "due_bonus_earnings": due_snapshot["bonus_earnings_label"],
+                "running_payout_cycle": running_snapshot["payout_cycle"],
+                "running_period_start": running_snapshot["period_start"].isoformat(),
+                "running_period_end": running_snapshot["period_end"].isoformat(),
+                "running_period_label": running_snapshot["period_label"],
+                "running_hours_label": running_snapshot["hours_label"],
+                "running_earned_total": running_snapshot["earned_total_label"],
+                "running_paid_total": running_snapshot["paid_total_label"],
+                "advance_available_raw": f"{_money(advance_available):.2f}",
+                "advance_available": _format_currency(advance_available),
                 "credited_total": _format_currency(paid_totals_by_staff.get(staff.id, Decimal("0.00"))),
                 "last_paid_at": _format_datetime(paid_meta_by_staff.get(staff.id)),
-                "can_pay": current_payable > Decimal("0.00"),
+                "can_pay_salary": due_snapshot["balance"] > Decimal("0.00"),
+                "can_pay_advance": advance_available > Decimal("0.00"),
             }
         )
 
-    salary_rows.sort(key=lambda row: (-Decimal(row["current_balance_raw"]), row["name"].lower()))
-    pending_salary_rows = [row for row in salary_rows if row["can_pay"]]
+    salary_rows.sort(
+        key=lambda row: (
+            -Decimal(row["due_balance_raw"]),
+            -Decimal(row["advance_available_raw"]),
+            row["name"].lower(),
+        )
+    )
+    pending_salary_rows = [row for row in salary_rows if row["can_pay_salary"] or row["can_pay_advance"]]
     recent_payment_rows = build_recent_salary_payment_rows()
 
     return {
@@ -2693,9 +2811,9 @@ def build_salary_page_payload():
         "summary": {
             "pending_total": _format_currency(pending_total),
             "credited_total": _format_currency(credited_total),
-            "weekly_hours_total": f"{round(float(weekly_hours_total), 1)}h",
-            "monthly_hours_total": f"{round(float(monthly_hours_total), 1)}h",
             "pending_staff_count": pending_staff_count,
+            "advance_total": _format_currency(advance_total),
+            "advance_staff_count": advance_staff_count,
             "paid_transaction_count": len(recent_payment_rows),
         },
         "salary_rows": salary_rows,

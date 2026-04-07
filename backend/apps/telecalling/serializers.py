@@ -18,7 +18,7 @@ from backend.apps.telecalling.models import (
     StaffAction,
     TrainingLesson,
 )
-from backend.apps.telecalling.services import calculate_staff_payout_for_dates
+from backend.apps.telecalling.services import build_staff_current_salary_summary
 
 
 class LoginSerializer(serializers.Serializer):
@@ -173,6 +173,7 @@ class StaffLeadRecoverySerializer(serializers.Serializer):
 
 class StaffSerializer(serializers.ModelSerializer):
     compensation_type_label = serializers.CharField(source="get_compensation_type_display", read_only=True)
+    weekly_payout_day_label = serializers.CharField(source="get_weekly_payout_day_display", read_only=True)
 
     class Meta:
         model = Staff
@@ -189,6 +190,8 @@ class StaffSerializer(serializers.ModelSerializer):
             "monthly_salary",
             "target_hours_per_week",
             "target_hours_per_month",
+            "weekly_payout_day",
+            "weekly_payout_day_label",
             "call_rate",
             "bonus_per_conversion",
             "last_seen_at",
@@ -255,20 +258,7 @@ class StaffProfileSerializer(serializers.ModelSerializer):
         return Path(obj.passbook_photo.name).name
 
     def get_salary_summary(self, obj):
-        today = timezone.localdate()
-        if obj.compensation_type == Staff.CompensationType.WEEKLY:
-            period_start = today - timedelta(days=today.weekday())
-        else:
-            period_start = today.replace(day=1)
-        breakdown = calculate_staff_payout_for_dates(obj, period_start, today)
-        total_hours = breakdown["active_hours"]
-        total_earned = breakdown["total_pay"]
-        return {
-            "total_working_hours": float(total_hours),
-            "total_working_hours_label": f"{float(total_hours):,.1f}h",
-            "total_earned_amount": float(total_earned),
-            "total_earned_amount_label": f"Rs. {float(total_earned):,.2f}",
-        }
+        return build_staff_current_salary_summary(obj)
 
 
 class StaffProfileUpdateSerializer(serializers.Serializer):
@@ -385,6 +375,7 @@ class CreateStaffSerializer(serializers.Serializer):
     monthly_salary = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
     target_hours_per_week = serializers.DecimalField(max_digits=6, decimal_places=2, required=False)
     target_hours_per_month = serializers.DecimalField(max_digits=6, decimal_places=2, required=False)
+    weekly_payout_day = serializers.ChoiceField(choices=Staff.WeeklyPayoutDay.choices, required=False)
     call_rate = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
     bonus_per_conversion = serializers.DecimalField(
         max_digits=10,
@@ -422,6 +413,7 @@ class UpdateStaffSerializer(serializers.Serializer):
     monthly_salary = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
     target_hours_per_week = serializers.DecimalField(max_digits=6, decimal_places=2, required=False)
     target_hours_per_month = serializers.DecimalField(max_digits=6, decimal_places=2, required=False)
+    weekly_payout_day = serializers.ChoiceField(choices=Staff.WeeklyPayoutDay.choices, required=False)
     call_rate = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
     bonus_per_conversion = serializers.DecimalField(
         max_digits=10,
@@ -502,6 +494,7 @@ class UpdateStaffSerializer(serializers.Serializer):
 
 class SalarySettingsSerializer(serializers.ModelSerializer):
     compensation_type_label = serializers.CharField(source="get_compensation_type_display", read_only=True)
+    weekly_payout_day_label = serializers.CharField(source="get_weekly_payout_day_display", read_only=True)
 
     class Meta:
         model = Staff
@@ -516,6 +509,8 @@ class SalarySettingsSerializer(serializers.ModelSerializer):
             "monthly_salary",
             "target_hours_per_week",
             "target_hours_per_month",
+            "weekly_payout_day",
+            "weekly_payout_day_label",
             "call_rate",
             "bonus_per_conversion",
             "is_active",
@@ -897,6 +892,7 @@ class SalaryHistorySerializer(serializers.ModelSerializer):
     final_salary_label = serializers.SerializerMethodField()
     paid_amount_label = serializers.SerializerMethodField()
     paid_at_label = serializers.SerializerMethodField()
+    payment_kind_label = serializers.CharField(source="get_payment_kind_display", read_only=True)
 
     class Meta:
         model = SalaryPaymentTransaction
@@ -915,6 +911,8 @@ class SalaryHistorySerializer(serializers.ModelSerializer):
             "paid_amount_label",
             "paid_at",
             "paid_at_label",
+            "payment_kind",
+            "payment_kind_label",
             "payment_method",
             "payment_method_label",
             "payment_reference",
@@ -947,6 +945,11 @@ class SalaryPaymentSerializer(serializers.Serializer):
     period_start = serializers.DateField()
     period_end = serializers.DateField()
     paid_amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
+    payment_kind = serializers.ChoiceField(
+        choices=SalaryPaymentTransaction.PaymentKind.choices,
+        required=False,
+        default=SalaryPaymentTransaction.PaymentKind.SALARY,
+    )
     payment_method = serializers.ChoiceField(choices=Salary.PaymentMethod.choices, required=False, allow_blank=True)
     payment_reference = serializers.CharField(max_length=120, required=False, allow_blank=True)
     payment_note = serializers.CharField(required=False, allow_blank=True)

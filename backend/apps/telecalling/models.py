@@ -37,6 +37,15 @@ class Staff(AbstractBaseUser, PermissionsMixin):
         WEEKLY = "weekly", "Weekly"
         MONTHLY = "monthly", "Monthly"
 
+    class WeeklyPayoutDay(models.TextChoices):
+        MONDAY = "monday", "Monday"
+        TUESDAY = "tuesday", "Tuesday"
+        WEDNESDAY = "wednesday", "Wednesday"
+        THURSDAY = "thursday", "Thursday"
+        FRIDAY = "friday", "Friday"
+        SATURDAY = "saturday", "Saturday"
+        SUNDAY = "sunday", "Sunday"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=150)
     phone = models.CharField(max_length=20, unique=True, db_index=True)
@@ -54,6 +63,11 @@ class Staff(AbstractBaseUser, PermissionsMixin):
     monthly_salary = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     target_hours_per_week = models.DecimalField(max_digits=6, decimal_places=2, default=48)
     target_hours_per_month = models.DecimalField(max_digits=6, decimal_places=2, default=208)
+    weekly_payout_day = models.CharField(
+        max_length=12,
+        choices=WeeklyPayoutDay.choices,
+        default=WeeklyPayoutDay.WEDNESDAY,
+    )
     call_rate = models.DecimalField(max_digits=10, decimal_places=2, default=3)
     bonus_per_conversion = models.DecimalField(max_digits=10, decimal_places=2, default=500)
     bank_account_name = models.CharField(max_length=150, blank=True)
@@ -331,6 +345,10 @@ class Salary(models.Model):
 
 
 class SalaryPaymentTransaction(models.Model):
+    class PaymentKind(models.TextChoices):
+        SALARY = "salary", "Salary"
+        ADVANCE = "advance", "Advance"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     salary_record = models.ForeignKey(
         Salary,
@@ -338,6 +356,12 @@ class SalaryPaymentTransaction(models.Model):
         related_name="payment_transactions",
     )
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    payment_kind = models.CharField(
+        max_length=20,
+        choices=PaymentKind.choices,
+        default=PaymentKind.SALARY,
+        db_index=True,
+    )
     payment_method = models.CharField(
         max_length=30,
         choices=Salary.PaymentMethod.choices,

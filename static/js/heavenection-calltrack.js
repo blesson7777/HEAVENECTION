@@ -852,6 +852,7 @@
         const emailInput = document.getElementById("salaryControlEmail");
         const compensationTypeInput = document.getElementById("salaryCompensationType");
         const hourlyRateInput = document.getElementById("salaryHourlyRate");
+        const weeklyPayoutDayInput = document.getElementById("salaryWeeklyPayoutDay");
         const targetWeekInput = document.getElementById("salaryTargetHoursWeek");
         const targetMonthInput = document.getElementById("salaryTargetHoursMonth");
         const callRateInput = document.getElementById("salaryCallRate");
@@ -901,6 +902,9 @@
                 }
                 compensationTypeInput.value = button.dataset.compensationType || "hourly";
                 hourlyRateInput.value = button.dataset.hourlyRate || "150";
+                if (weeklyPayoutDayInput) {
+                    weeklyPayoutDayInput.value = button.dataset.weeklyPayoutDay || "wednesday";
+                }
                 targetWeekInput.value = button.dataset.targetHoursWeek || "48";
                 targetMonthInput.value = button.dataset.targetHoursMonth || "208";
                 callRateInput.value = button.dataset.callRate || "3";
@@ -950,6 +954,7 @@
             const payload = {
                 compensation_type: compensationTypeInput.value,
                 hourly_rate: hourlyRateInput.value || "0",
+                weekly_payout_day: weeklyPayoutDayInput?.value || "wednesday",
                 target_hours_per_week: targetWeekInput.value || "48",
                 target_hours_per_month: targetMonthInput.value || "208",
                 call_rate: callRateInput.value || "0",

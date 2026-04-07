@@ -57,9 +57,9 @@
                     <th>Staff</th>
                     <th>Payment Details</th>
                     <th>Payout Cycle</th>
+                    <th>Payout Schedule</th>
                     <th>Hourly Rate</th>
-                    <th>Weekly Hours Target</th>
-                    <th>Monthly Hours Target</th>
+                    <th>Work Targets</th>
                     <th>Incentives</th>
                     <th>Actions</th>
                 </tr>
@@ -82,9 +82,24 @@
                         </div>
                     </td>
                     <td><span class="hc-status {% if row.compensation_type == 'hourly' %}hc-status-new{% elif row.compensation_type == 'weekly' %}hc-status-warning{% else %}hc-status-primary{% endif %}">{{ row.compensation_type_label }}</span></td>
+                    <td>
+                        {% if row.compensation_type == 'weekly' %}
+                        <strong>{{ row.weekly_payout_day_label }}</strong>
+                        <div class="text-muted small">Weekly payout day</div>
+                        {% elif row.compensation_type == 'monthly' %}
+                        <strong>{{ row.monthly_payout_label }}</strong>
+                        <div class="text-muted small">Monthly payout day</div>
+                        {% else %}
+                        <strong>Running</strong>
+                        <div class="text-muted small">No fixed payout date</div>
+                        {% endif %}
+                    </td>
                     <td>{{ row.hourly_rate }}</td>
-                    <td>{{ row.target_hours_per_week }} h</td>
-                    <td>{{ row.target_hours_per_month }} h</td>
+                    <td>
+                        <strong>{{ row.target_hours_per_week }} h</strong>
+                        <div class="text-muted small">Week target</div>
+                        <div class="text-muted small">{{ row.target_hours_per_month }} h month target</div>
+                    </td>
                     <td>
                         <strong>{{ row.call_rate }}</strong>
                         <div class="text-muted small">Bonus {{ row.bonus_per_conversion }}</div>
@@ -108,6 +123,8 @@
                                 data-monthly-salary="{{ row.monthly_salary_raw }}"
                                 data-target-hours-week="{{ row.target_hours_per_week }}"
                                 data-target-hours-month="{{ row.target_hours_per_month }}"
+                                data-weekly-payout-day="{{ row.weekly_payout_day }}"
+                                data-weekly-payout-day-label="{{ row.weekly_payout_day_label }}"
                                 data-call-rate="{{ row.call_rate_raw }}"
                                 data-bonus="{{ row.bonus_per_conversion_raw }}"
                                 data-bank-account-name="{{ row.bank_account_name }}"
@@ -165,6 +182,24 @@
                         <div class="col-md-4">
                             <label class="form-label fw-semibold" for="salaryHourlyRate">Hourly Rate</label>
                             <input type="number" class="form-control" id="salaryHourlyRate" step="0.01">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="salaryWeeklyPayoutDay">Weekly Payout Day</label>
+                            <select class="form-select" id="salaryWeeklyPayoutDay">
+                                <option value="monday">Monday</option>
+                                <option value="tuesday">Tuesday</option>
+                                <option value="wednesday">Wednesday</option>
+                                <option value="thursday">Thursday</option>
+                                <option value="friday">Friday</option>
+                                <option value="saturday">Saturday</option>
+                                <option value="sunday">Sunday</option>
+                            </select>
+                            <div class="form-text">Used when payout cycle is weekly.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Monthly Payout Day</label>
+                            <input type="text" class="form-control" value="Last day of month" readonly>
+                            <div class="form-text">Monthly payout is prepared from the previous completed month.</div>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold" for="salaryCallRate">Call Rate</label>

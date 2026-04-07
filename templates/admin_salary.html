@@ -10,28 +10,28 @@
         <div class="hc-surface-card">
             <span class="mf-db2-kicker">Pending Salary</span>
             <h4 class="mt-2 mb-1">{{ summary.pending_total }}</h4>
-            <p class="text-muted mb-0">Earned salary that is still waiting to be paid.</p>
+            <p class="text-muted mb-0">Due unpaid salary from completed payout periods.</p>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
         <div class="hc-surface-card">
-            <span class="mf-db2-kicker">Paid Salary</span>
-            <h4 class="mt-2 mb-1">{{ summary.credited_total }}</h4>
-            <p class="text-muted mb-0">Total credited salary already recorded.</p>
+            <span class="mf-db2-kicker">Advance Available</span>
+            <h4 class="mt-2 mb-1">{{ summary.advance_total }}</h4>
+            <p class="text-muted mb-0">Current earned amount that can be released as advance.</p>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
         <div class="hc-surface-card">
             <span class="mf-db2-kicker">Pending Staff</span>
             <h4 class="mt-2 mb-1">{{ summary.pending_staff_count }}</h4>
-            <p class="text-muted mb-0">Staff members with an unpaid earned balance.</p>
+            <p class="text-muted mb-0">Staff members with due unpaid salary.</p>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
         <div class="hc-surface-card">
-            <span class="mf-db2-kicker">Recorded Payments</span>
-            <h4 class="mt-2 mb-1">{{ summary.paid_transaction_count }}</h4>
-            <p class="text-muted mb-0">Saved payment transactions visible below.</p>
+            <span class="mf-db2-kicker">Paid Salary</span>
+            <h4 class="mt-2 mb-1">{{ summary.credited_total }}</h4>
+            <p class="text-muted mb-0">{{ summary.paid_transaction_count }} recorded payment entries.</p>
         </div>
     </div>
 </section>
@@ -39,8 +39,8 @@
 <section class="hc-surface-card animate-on-scroll mt-4">
     <div class="mf-db2-panel-head mb-3">
         <div>
-            <span class="mf-db2-kicker">Pending Salary Queue</span>
-            <h5>Earned salary waiting for payment</h5>
+            <span class="mf-db2-kicker">Salary Payment Workflow</span>
+            <h5>Pay only the due balance or release an advance from the current earned amount</h5>
         </div>
         <span class="hc-sync-pill"><i class="bi bi-calendar2-week"></i> {{ today_label }}</span>
     </div>
@@ -62,10 +62,9 @@
             <thead>
                 <tr>
                     <th>Staff</th>
-                    <th>Payout Cycle</th>
-                    <th>Earned Salary</th>
-                    <th>Already Paid</th>
-                    <th>Pending Salary</th>
+                    <th>Payout Schedule</th>
+                    <th>Due Salary</th>
+                    <th>Advance Window</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -80,73 +79,139 @@
                     </td>
                     <td>
                         <span class="hc-status {% if row.compensation_type == 'hourly' %}hc-status-new{% elif row.compensation_type == 'weekly' %}hc-status-warning{% else %}hc-status-primary{% endif %}">{{ row.compensation_type_label }}</span>
-                        <div class="text-muted small mt-2">{{ row.current_cycle_label }}</div>
-                        <div class="text-muted small">{{ row.current_period_label }}</div>
+                        <div class="text-muted small mt-2">{{ row.schedule_label }}</div>
+                        {% if row.compensation_type == 'weekly' %}
+                        <div class="text-muted small">Weekly salary is prepared on {{ row.weekly_payout_day_label }}</div>
+                        {% elif row.compensation_type == 'monthly' %}
+                        <div class="text-muted small">Monthly salary is prepared on the last day of the month</div>
+                        {% else %}
+                        <div class="text-muted small">Running pay without a fixed payout date</div>
+                        {% endif %}
                     </td>
                     <td>
-                        <strong>{{ row.current_earned_total }}</strong>
-                        <div class="text-muted small">{{ row.weekly_hours_label }} this week</div>
-                        <div class="text-muted small">{{ row.monthly_hours_label }} this month</div>
+                        <strong>{{ row.due_balance }}</strong>
+                        <div class="text-muted small">{{ row.due_period_label }}</div>
+                        <div class="text-muted small">Earned {{ row.due_earned_total }} | Paid {{ row.due_paid_total }}</div>
+                        <div class="text-muted small">Hours {{ row.due_hours_label }}</div>
+                        <div class="text-muted small">Base {{ row.due_base_pay }} | Calls {{ row.due_call_earnings }} | Bonus {{ row.due_bonus_earnings }}</div>
                     </td>
                     <td>
-                        <strong>{{ row.current_paid_total }}</strong>
-                        <div class="text-muted small">Total credited {{ row.credited_total }}</div>
-                        <div class="text-muted small">Last paid {{ row.last_paid_at }}</div>
-                    </td>
-                    <td>
-                        <strong>{{ row.current_payable }}</strong>
-                        <div class="text-muted small">This is the earned balance available to pay now.</div>
+                        <strong>{{ row.advance_available }}</strong>
+                        <div class="text-muted small">{{ row.running_period_label }}</div>
+                        <div class="text-muted small">Current earned {{ row.running_earned_total }} | Already released {{ row.running_paid_total }}</div>
+                        <div class="text-muted small">Hours {{ row.running_hours_label }}</div>
                     </td>
                     <td class="text-end">
                         <details class="hc-inline-pay-card">
-                            <summary class="btn btn-dark btn-sm">Pay Salary</summary>
-                            <form method="post" class="hc-inline-pay-form mt-3 text-start">
-                                {% csrf_token %}
-                                <input type="hidden" name="payment_action" value="pay_current_salary">
-                                <input type="hidden" name="staff_id" value="{{ row.id }}">
-                                <input type="hidden" name="payout_cycle" value="{{ row.current_payout_cycle }}">
-                                <input type="hidden" name="period_start" value="{{ row.current_period_start }}">
-                                <input type="hidden" name="period_end" value="{{ row.current_period_end }}">
-                                <div class="mb-2">
-                                    <label class="form-label fw-semibold small" for="salaryAmount{{ row.id }}">Amount</label>
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        min="0.01"
-                                        max="{{ row.current_balance_raw }}"
-                                        class="form-control form-control-sm{% if row.payment_errors.paid_amount %} is-invalid{% endif %}"
-                                        id="salaryAmount{{ row.id }}"
-                                        name="paid_amount"
-                                        value="{{ row.payment_form.paid_amount }}"
-                                    >
-                                    {% if row.payment_errors.paid_amount %}<div class="invalid-feedback">{{ row.payment_errors.paid_amount }}</div>{% endif %}
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label fw-semibold small" for="salaryMethod{{ row.id }}">Payment Method</label>
-                                    <select class="form-select form-select-sm" id="salaryMethod{{ row.id }}" name="payment_method">
-                                        {% for option in payment_method_options %}
-                                        <option value="{{ option.value }}"{% if row.payment_form.payment_method == option.value %} selected{% endif %}>{{ option.label }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label fw-semibold small" for="salaryReference{{ row.id }}">Transaction ID</label>
-                                    <input type="text" class="form-control form-control-sm" id="salaryReference{{ row.id }}" name="payment_reference" value="{{ row.payment_form.payment_reference }}" placeholder="Bank ref / UPI ref">
-                                </div>
+                            <summary class="btn btn-dark btn-sm">Open Payment</summary>
+                            <div class="hc-inline-pay-form mt-3 text-start">
                                 <div class="mb-3">
-                                    <label class="form-label fw-semibold small" for="salaryNote{{ row.id }}">Note</label>
-                                    <textarea class="form-control form-control-sm" id="salaryNote{{ row.id }}" name="payment_note" rows="2" placeholder="Optional note">{{ row.payment_form.payment_note }}</textarea>
+                                    <div class="small fw-semibold text-uppercase text-muted">Due Salary</div>
+                                    {% if row.can_pay_salary %}
+                                    <form method="post" class="mt-2">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="payment_action" value="pay_current_salary">
+                                        <input type="hidden" name="staff_id" value="{{ row.id }}">
+                                        <input type="hidden" name="payout_cycle" value="{{ row.due_payout_cycle }}">
+                                        <input type="hidden" name="period_start" value="{{ row.due_period_start }}">
+                                        <input type="hidden" name="period_end" value="{{ row.due_period_end }}">
+                                        <input type="hidden" name="payment_kind" value="salary">
+                                        <div class="mb-2">
+                                            <label class="form-label fw-semibold small" for="salaryAmount{{ row.id }}">Amount</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0.01"
+                                                max="{{ row.due_balance_raw }}"
+                                                class="form-control form-control-sm{% if row.payment_errors.paid_amount and row.payment_form.payment_kind != 'advance' %} is-invalid{% endif %}"
+                                                id="salaryAmount{{ row.id }}"
+                                                name="paid_amount"
+                                                value="{% if row.payment_form.payment_kind == 'advance' %}{{ row.due_balance_raw }}{% else %}{{ row.payment_form.paid_amount }}{% endif %}"
+                                            >
+                                            {% if row.payment_errors.paid_amount and row.payment_form.payment_kind != 'advance' %}<div class="invalid-feedback">{{ row.payment_errors.paid_amount }}</div>{% endif %}
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label fw-semibold small" for="salaryMethod{{ row.id }}">Payment Method</label>
+                                            <select class="form-select form-select-sm" id="salaryMethod{{ row.id }}" name="payment_method">
+                                                {% for option in payment_method_options %}
+                                                <option value="{{ option.value }}"{% if row.payment_form.payment_method == option.value %} selected{% endif %}>{{ option.label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label fw-semibold small" for="salaryReference{{ row.id }}">Transaction ID</label>
+                                            <input type="text" class="form-control form-control-sm" id="salaryReference{{ row.id }}" name="payment_reference" value="{{ row.payment_form.payment_reference }}" placeholder="Bank ref / UPI ref">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-semibold small" for="salaryNote{{ row.id }}">Note</label>
+                                            <textarea class="form-control form-control-sm" id="salaryNote{{ row.id }}" name="payment_note" rows="2" placeholder="Optional note">{{ row.payment_form.payment_note }}</textarea>
+                                        </div>
+                                        <div class="d-grid">
+                                            <button type="submit" class="btn btn-primary btn-sm">Pay Due Salary</button>
+                                        </div>
+                                        <div class="text-muted small mt-2">Only the due unpaid balance can be paid here.</div>
+                                    </form>
+                                    {% else %}
+                                    <div class="text-muted small mt-2">No due salary is waiting for this payout period.</div>
+                                    {% endif %}
                                 </div>
-                                <div class="d-grid">
-                                    <button type="submit" class="btn btn-primary btn-sm">Save Payment</button>
+
+                                <div>
+                                    <div class="small fw-semibold text-uppercase text-muted">Advance Payment</div>
+                                    {% if row.can_pay_advance %}
+                                    <form method="post" class="mt-2">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="payment_action" value="pay_current_salary">
+                                        <input type="hidden" name="staff_id" value="{{ row.id }}">
+                                        <input type="hidden" name="payout_cycle" value="{{ row.running_payout_cycle }}">
+                                        <input type="hidden" name="period_start" value="{{ row.running_period_start }}">
+                                        <input type="hidden" name="period_end" value="{{ row.running_period_end }}">
+                                        <input type="hidden" name="payment_kind" value="advance">
+                                        <div class="mb-2">
+                                            <label class="form-label fw-semibold small" for="advanceAmount{{ row.id }}">Amount</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0.01"
+                                                max="{{ row.advance_available_raw }}"
+                                                class="form-control form-control-sm{% if row.payment_errors.paid_amount and row.payment_form.payment_kind == 'advance' %} is-invalid{% endif %}"
+                                                id="advanceAmount{{ row.id }}"
+                                                name="paid_amount"
+                                                value="{% if row.payment_form.payment_kind == 'advance' %}{{ row.payment_form.paid_amount }}{% else %}{{ row.advance_available_raw }}{% endif %}"
+                                            >
+                                            {% if row.payment_errors.paid_amount and row.payment_form.payment_kind == 'advance' %}<div class="invalid-feedback">{{ row.payment_errors.paid_amount }}</div>{% endif %}
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label fw-semibold small" for="advanceMethod{{ row.id }}">Payment Method</label>
+                                            <select class="form-select form-select-sm" id="advanceMethod{{ row.id }}" name="payment_method">
+                                                {% for option in payment_method_options %}
+                                                <option value="{{ option.value }}"{% if row.payment_form.payment_method == option.value %} selected{% endif %}>{{ option.label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label fw-semibold small" for="advanceReference{{ row.id }}">Transaction ID</label>
+                                            <input type="text" class="form-control form-control-sm" id="advanceReference{{ row.id }}" name="payment_reference" value="{{ row.payment_form.payment_reference }}" placeholder="Bank ref / UPI ref">
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label fw-semibold small" for="advanceNote{{ row.id }}">Note</label>
+                                            <textarea class="form-control form-control-sm" id="advanceNote{{ row.id }}" name="payment_note" rows="2" placeholder="Optional note">Advance released{% if row.payment_form.payment_kind == 'advance' and row.payment_form.payment_note %} - {{ row.payment_form.payment_note }}{% endif %}</textarea>
+                                        </div>
+                                        <div class="d-grid">
+                                            <button type="submit" class="btn btn-outline-primary btn-sm">Pay Advance</button>
+                                        </div>
+                                        <div class="text-muted small mt-2">Advance payment cannot exceed the current earned amount.</div>
+                                    </form>
+                                    {% else %}
+                                    <div class="text-muted small mt-2">No advance can be released from the current running cycle right now.</div>
+                                    {% endif %}
                                 </div>
-                                <div class="text-muted small mt-2">Only the earned unpaid balance can be recorded here.</div>
-                            </form>
+                            </div>
                         </details>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" class="text-center py-4">All current earned salary is already paid.</td></tr>
+                <tr><td colspan="5" class="text-center py-4">No due salary or advance payment is available right now.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -168,6 +233,7 @@
                 <tr>
                     <th>Staff</th>
                     <th>Period</th>
+                    <th>Type</th>
                     <th>Paid Amount</th>
                     <th>Method</th>
                     <th>Transaction</th>
@@ -187,6 +253,7 @@
                         <div class="text-muted small">{{ row.payout_cycle_label }} | Worked {{ row.total_hours_label }}</div>
                         <div class="text-muted small">Calculated {{ row.final_salary }}</div>
                     </td>
+                    <td>{{ row.payment_kind_label }}</td>
                     <td><strong>{{ row.paid_amount }}</strong></td>
                     <td>{{ row.payment_method_label }}</td>
                     <td>
@@ -204,7 +271,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" class="text-center py-4">No paid salary records have been saved yet.</td></tr>
+                <tr><td colspan="8" class="text-center py-4">No paid salary records have been saved yet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

@@ -1003,6 +1003,7 @@ def salary_page(request):
                     "period_start": request.POST.get("period_start"),
                     "period_end": request.POST.get("period_end"),
                     "paid_amount": request.POST.get("paid_amount"),
+                    "payment_kind": request.POST.get("payment_kind", SalaryPaymentTransaction.PaymentKind.SALARY),
                     "payment_method": request.POST.get("payment_method", Salary.PaymentMethod.BANK_TRANSFER),
                     "payment_reference": request.POST.get("payment_reference", ""),
                     "payment_note": request.POST.get("payment_note", ""),
@@ -1019,20 +1020,31 @@ def salary_page(request):
                         )
                         messages.error(request, "Please correct the salary payment details and try again.")
                     else:
-                        email_result = send_salary_payment_acknowledgement(record)
+                        payment_kind = serializer.validated_data.get(
+                            "payment_kind",
+                            SalaryPaymentTransaction.PaymentKind.SALARY,
+                        )
+                        email_result = {"sent": False, "message": ""}
+                        if payment_kind == SalaryPaymentTransaction.PaymentKind.SALARY:
+                            email_result = send_salary_payment_acknowledgement(record)
                         remaining_balance = max(
                             float(record.final_salary or 0) - float(record.paid_amount or 0),
                             0.0,
                         )
+                        entry_label = (
+                            "Advance recorded"
+                            if payment_kind == SalaryPaymentTransaction.PaymentKind.ADVANCE
+                            else "Salary recorded"
+                        )
                         messages.success(
                             request,
-                            f"Salary recorded for {staff.name}. "
+                            f"{entry_label} for {staff.name}. "
                             f"Credited Rs. {float(transaction.amount):,.2f} for {record.period_start} to {record.period_end}. "
                             f"Remaining balance Rs. {remaining_balance:,.2f}.",
                         )
                         if email_result["sent"]:
                             messages.success(request, email_result["message"])
-                        else:
+                        elif email_result["message"]:
                             messages.warning(request, email_result["message"])
                         return redirect("salary-page")
                 else:
@@ -1041,6 +1053,7 @@ def salary_page(request):
 
                 payment_form_values_by_staff[str(staff.id)] = {
                     "paid_amount": request.POST.get("paid_amount", ""),
+                    "payment_kind": request.POST.get("payment_kind", SalaryPaymentTransaction.PaymentKind.SALARY),
                     "payment_method": request.POST.get("payment_method", Salary.PaymentMethod.BANK_TRANSFER),
                     "payment_reference": request.POST.get("payment_reference", ""),
                     "payment_note": request.POST.get("payment_note", ""),
@@ -1052,7 +1065,8 @@ def salary_page(request):
     for row in payload["pending_salary_rows"]:
         row["payment_errors"] = payment_errors_by_staff.get(row["id"], {})
         row["payment_form"] = {
-            "paid_amount": row["current_balance_raw"],
+            "paid_amount": row["due_balance_raw"],
+            "payment_kind": SalaryPaymentTransaction.PaymentKind.SALARY,
             "payment_method": Salary.PaymentMethod.BANK_TRANSFER,
             "payment_reference": "",
             "payment_note": "",
