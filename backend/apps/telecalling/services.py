@@ -48,7 +48,7 @@ IDLE_WARNING_AFTER_SECONDS = 5 * 60
 IDLE_WARNING_GRACE_SECONDS = 5 * 60
 IDLE_OFFLINE_AFTER_SECONDS = IDLE_WARNING_AFTER_SECONDS + IDLE_WARNING_GRACE_SECONDS
 LIVE_CALL_STALE_SECONDS = 3 * 60 * 60
-VERIFIED_CALL_ACTIVITY_TIMEOUT_SECONDS = 5 * 60
+VERIFIED_CALL_ACTIVITY_TIMEOUT_SECONDS = 90
 VERIFIED_CALL_TIME_SKEW_SECONDS = 2 * 60
 VERIFIED_CALL_SOURCES = {
     "call_log",
@@ -1232,11 +1232,11 @@ def _active_elapsed_until(session, now, *, has_live_customer_call=False):
     if session.last_known_state != Session.AppState.FOREGROUND:
         return 0
 
-    if not has_live_customer_call and not _session_has_recent_verified_activity(session, now):
+    if not _session_has_recent_verified_activity(session, now):
         return 0
 
     active_until = now
-    if not has_live_customer_call and session.last_verified_call_at:
+    if session.last_verified_call_at:
         verified_cutoff = session.last_verified_call_at + timedelta(
             seconds=VERIFIED_CALL_ACTIVITY_TIMEOUT_SECONDS
         )
@@ -1301,11 +1301,12 @@ def _credit_call_duration_to_session(
         return session
 
     session = _mark_session_foreground(session, call_end_time, metadata=metadata)
+    qualifying_verified_call = mark_verified and int(call_duration_seconds or 0) >= SHORT_CALL_SECONDS
     update_fields = []
     if call_duration_seconds:
         session.active_seconds += max(0, int(call_duration_seconds))
         update_fields.append("active_seconds")
-    if mark_verified and session.last_verified_call_at != call_end_time:
+    if qualifying_verified_call and session.last_verified_call_at != call_end_time:
         session.last_verified_call_at = call_end_time
         update_fields.append("last_verified_call_at")
     if update_fields:
