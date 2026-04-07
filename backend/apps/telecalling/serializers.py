@@ -1,7 +1,7 @@
+from datetime import timedelta
 from pathlib import Path
 from decimal import Decimal
 
-from django.db.models import Sum
 from django.urls import reverse
 from rest_framework import serializers
 from django.utils import timezone
@@ -18,6 +18,7 @@ from backend.apps.telecalling.models import (
     StaffAction,
     TrainingLesson,
 )
+from backend.apps.telecalling.services import calculate_staff_payout_for_dates
 
 
 class LoginSerializer(serializers.Serializer):
@@ -201,7 +202,6 @@ class StaffProfileSerializer(serializers.ModelSerializer):
     passbook_photo_url = serializers.SerializerMethodField()
     passbook_photo_name = serializers.SerializerMethodField()
     salary_summary = serializers.SerializerMethodField()
-    salary_history = serializers.SerializerMethodField()
 
     class Meta:
         model = Staff
@@ -224,7 +224,6 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             "passbook_photo_name",
             "last_seen_at",
             "salary_summary",
-            "salary_history",
         )
 
     def get_aadhar_photo_url(self, obj):
@@ -255,40 +254,20 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             return ""
         return Path(obj.passbook_photo.name).name
 
-    def get_salary_history(self, obj):
-        transactions = (
-            SalaryPaymentTransaction.objects.filter(salary_record__staff=obj)
-            .select_related("salary_record")
-            .order_by("-paid_at", "-created_at")[:20]
-        )
-        return SalaryHistorySerializer(transactions, many=True).data
-
     def get_salary_summary(self, obj):
-        totals = obj.salary_records.filter(paid_amount__gt=Decimal("0.00")).aggregate(
-            total_hours=Sum("total_hours"),
-            total_earned=Sum("final_salary"),
-            total_paid=Sum("paid_amount"),
-        )
-        latest_transaction = (
-            SalaryPaymentTransaction.objects.filter(salary_record__staff=obj)
-            .select_related("salary_record")
-            .order_by("-paid_at", "-created_at")
-            .first()
-        )
-        total_hours = totals.get("total_hours") or 0
-        total_earned = totals.get("total_earned") or 0
-        total_paid = totals.get("total_paid") or 0
+        today = timezone.localdate()
+        if obj.compensation_type == Staff.CompensationType.WEEKLY:
+            period_start = today - timedelta(days=today.weekday())
+        else:
+            period_start = today.replace(day=1)
+        breakdown = calculate_staff_payout_for_dates(obj, period_start, today)
+        total_hours = breakdown["active_hours"]
+        total_earned = breakdown["total_pay"]
         return {
             "total_working_hours": float(total_hours),
             "total_working_hours_label": f"{float(total_hours):,.1f}h",
             "total_earned_amount": float(total_earned),
             "total_earned_amount_label": f"Rs. {float(total_earned):,.2f}",
-            "total_paid_amount": float(total_paid),
-            "total_paid_amount_label": f"Rs. {float(total_paid):,.2f}",
-            "latest_transaction_id": latest_transaction.payment_reference if latest_transaction and latest_transaction.payment_reference else "",
-            "latest_paid_at_label": timezone.localtime(latest_transaction.paid_at).strftime("%d %b %Y, %I:%M %p")
-            if latest_transaction and latest_transaction.paid_at
-            else "--",
         }
 
 

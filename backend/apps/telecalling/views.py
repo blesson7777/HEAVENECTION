@@ -967,11 +967,97 @@ def learning_page(request):
     return render(request, "admin_learning.html", context)
 
 
-@require_GET
+@require_http_methods(["GET", "POST"])
 def salary_page(request):
     current_user = _get_admin_user_or_redirect(request)
     if not current_user:
         return redirect("web-login")
+
+    payment_errors_by_staff = {}
+    payment_form_values_by_staff = {}
+
+    if request.method == "POST":
+        payment_action = request.POST.get("payment_action", "").strip()
+
+        if payment_action == "delete_payment_transaction":
+            transaction_id = request.POST.get("transaction_id", "").strip()
+            transaction = (
+                SalaryPaymentTransaction.objects.select_related("salary_record", "salary_record__staff")
+                .filter(id=transaction_id)
+                .first()
+            )
+            if not transaction:
+                messages.error(request, "Payment transaction not found.")
+            else:
+                delete_salary_payment_transaction(transaction)
+                messages.success(request, "Payment transaction deleted successfully.")
+                return redirect("salary-page")
+        elif payment_action == "pay_current_salary":
+            staff_id = request.POST.get("staff_id", "").strip()
+            staff = Staff.objects.filter(id=staff_id, role=Staff.Role.STAFF).first()
+            if not staff:
+                messages.error(request, "Staff member not found.")
+            else:
+                form_data = {
+                    "payout_cycle": request.POST.get("payout_cycle"),
+                    "period_start": request.POST.get("period_start"),
+                    "period_end": request.POST.get("period_end"),
+                    "paid_amount": request.POST.get("paid_amount"),
+                    "payment_method": request.POST.get("payment_method", Salary.PaymentMethod.BANK_TRANSFER),
+                    "payment_reference": request.POST.get("payment_reference", ""),
+                    "payment_note": request.POST.get("payment_note", ""),
+                }
+                serializer = SalaryPaymentSerializer(data=form_data)
+                if serializer.is_valid():
+                    try:
+                        record, transaction, created = record_staff_salary_payment(
+                            staff, **serializer.validated_data
+                        )
+                    except ValidationError as error:
+                        payment_errors_by_staff[str(staff.id)] = _normalize_errors(
+                            getattr(error, "message_dict", {"paid_amount": error.messages})
+                        )
+                        messages.error(request, "Please correct the salary payment details and try again.")
+                    else:
+                        email_result = send_salary_payment_acknowledgement(record)
+                        remaining_balance = max(
+                            float(record.final_salary or 0) - float(record.paid_amount or 0),
+                            0.0,
+                        )
+                        messages.success(
+                            request,
+                            f"Salary recorded for {staff.name}. "
+                            f"Credited Rs. {float(transaction.amount):,.2f} for {record.period_start} to {record.period_end}. "
+                            f"Remaining balance Rs. {remaining_balance:,.2f}.",
+                        )
+                        if email_result["sent"]:
+                            messages.success(request, email_result["message"])
+                        else:
+                            messages.warning(request, email_result["message"])
+                        return redirect("salary-page")
+                else:
+                    payment_errors_by_staff[str(staff.id)] = _normalize_errors(serializer.errors)
+                    messages.error(request, "Please correct the salary payment details and try again.")
+
+                payment_form_values_by_staff[str(staff.id)] = {
+                    "paid_amount": request.POST.get("paid_amount", ""),
+                    "payment_method": request.POST.get("payment_method", Salary.PaymentMethod.BANK_TRANSFER),
+                    "payment_reference": request.POST.get("payment_reference", ""),
+                    "payment_note": request.POST.get("payment_note", ""),
+                }
+        else:
+            messages.error(request, "Salary action could not be processed.")
+
+    payload = build_salary_page_payload()
+    for row in payload["pending_salary_rows"]:
+        row["payment_errors"] = payment_errors_by_staff.get(row["id"], {})
+        row["payment_form"] = {
+            "paid_amount": row["current_balance_raw"],
+            "payment_method": Salary.PaymentMethod.BANK_TRANSFER,
+            "payment_reference": "",
+            "payment_note": "",
+        }
+        row["payment_form"].update(payment_form_values_by_staff.get(row["id"], {}))
 
     context = _admin_web_context(
         request,
@@ -979,8 +1065,8 @@ def salary_page(request):
         active_page="salary",
         page_title="Salary Overview",
         page_heading="Salary Overview",
-        page_subtitle="Review weekly and monthly payouts based on tracked working hours, calls, and bonuses.",
-        extra_context=build_salary_page_payload(),
+        page_subtitle="Review earned salary as pending balance, pay the remaining amount, and keep paid salary visible in one place.",
+        extra_context=payload,
     )
     return render(request, "admin_salary.html", context)
 

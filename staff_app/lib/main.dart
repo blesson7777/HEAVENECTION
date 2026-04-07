@@ -4404,6 +4404,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final profile = _profile;
     final salarySummary = profile?.salarySummary;
     final salaryHistory = profile?.salaryHistory ?? const <SalaryHistoryItem>[];
+    final showCreditedSalaryHistory =
+        (profile?.role ?? '') == '__show_salary_history__';
     final aadharWidget = _buildDocumentPreview(
       selectedFile: _selectedAadharPhoto,
       removeDocument: _removeAadharPhoto,
@@ -4507,8 +4509,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            Container(
+            if (showCreditedSalaryHistory) ...[
+              const SizedBox(height: 16),
+              Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -4938,7 +4941,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     ),
                 ],
               ),
-            ),
+              ),
+            ],
             const SizedBox(height: 18),
             ElevatedButton.icon(
               onPressed: _isProfileSaving ? null : _saveProfile,

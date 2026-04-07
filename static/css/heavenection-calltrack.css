@@ -1275,6 +1275,27 @@
     background: linear-gradient(145deg, rgba(77, 92, 144, 0.06), rgba(255, 255, 255, 0.96));
 }
 
+.hc-inline-pay-card {
+    width: min(320px, 100%);
+    margin-left: auto;
+}
+
+.hc-inline-pay-card summary {
+    list-style: none;
+}
+
+.hc-inline-pay-card summary::-webkit-details-marker {
+    display: none;
+}
+
+.hc-inline-pay-form {
+    padding: 0.95rem;
+    border-radius: 18px;
+    border: 1px solid #dfe5f3;
+    background: linear-gradient(155deg, #ffffff 0%, #f7f9ff 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
 @media (max-width: 767.98px) {
     .hc-header-actions {
         width: 100%;
