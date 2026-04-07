@@ -232,6 +232,8 @@ def _get_staff_document_file(staff, document_type):
     file_field = getattr(staff, field_name, None)
     if not file_field:
         raise Http404("Document not found.")
+    if not file_field.name or not file_field.storage.exists(file_field.name):
+        raise Http404("Document not found.")
     return file_field
 
 
@@ -242,6 +244,10 @@ def _document_response(file_field, *, content_type=None, as_attachment=False):
     disposition = "attachment" if as_attachment else "inline"
     response = FileResponse(file_field.open("rb"), content_type=resolved_content_type)
     response["Content-Disposition"] = f'{disposition}; filename="{filename}"'
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0, private"
+    response["Pragma"] = "no-cache"
+    response["Expires"] = "0"
+    response["X-Content-Type-Options"] = "nosniff"
     return response
 
 

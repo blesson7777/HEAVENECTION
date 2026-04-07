@@ -210,6 +210,27 @@ def _format_datetime(value, fallback="--"):
     return timezone.localtime(value).strftime("%d %b %Y, %I:%M %p")
 
 
+def build_staff_document_url(staff, document_type, *, request=None, route_name="staff-document-page"):
+    field_name = f"{document_type}_photo"
+    file_field = getattr(staff, field_name, None)
+    if not file_field:
+        return ""
+    if not file_field.name or not file_field.storage.exists(file_field.name):
+        return ""
+
+    if route_name == "api-staff-profile-document":
+        url = reverse(route_name, args=[document_type])
+    else:
+        url = reverse(route_name, args=[staff.id, document_type])
+
+    if request:
+        url = request.build_absolute_uri(url)
+
+    version = int((staff.updated_at or timezone.now()).timestamp())
+    separator = "&" if "?" in url else "?"
+    return f"{url}{separator}v={version}"
+
+
 def _week_range(now=None):
     now = now or timezone.now()
     local_now = timezone.localtime(now)
@@ -3099,12 +3120,8 @@ def build_staff_profile_payload(request, staff):
             "bank_account_number": staff.bank_account_number or "--",
             "bank_ifsc_code": staff.bank_ifsc_code or "--",
             "aadhar_number": staff.aadhar_number or "--",
-            "aadhar_photo_url": reverse("staff-document-page", args=[staff.id, "aadhar"])
-            if staff.aadhar_photo
-            else "",
-            "passbook_photo_url": reverse("staff-document-page", args=[staff.id, "passbook"])
-            if staff.passbook_photo
-            else "",
+            "aadhar_photo_url": build_staff_document_url(staff, "aadhar"),
+            "passbook_photo_url": build_staff_document_url(staff, "passbook"),
         },
         "referral_summary": {
             **referral_tracking["summary"],
@@ -3173,9 +3190,7 @@ def build_salary_control_payload(request):
                 "bank_account_number": staff.bank_account_number or "--",
                 "bank_ifsc_code": staff.bank_ifsc_code or "--",
                 "has_passbook_photo": bool(staff.passbook_photo),
-                "passbook_photo_url": reverse("staff-document-page", args=[staff.id, "passbook"])
-                if staff.passbook_photo
-                else "",
+                "passbook_photo_url": build_staff_document_url(staff, "passbook"),
                 "profile_url": reverse("staff-profile-page", args=[staff.id]),
                 "referred_by_id": str(staff.referred_by_id) if staff.referred_by_id else "",
                 "referred_by_name": staff.referred_by.name if staff.referred_by else "--",

@@ -19,7 +19,10 @@ from backend.apps.telecalling.models import (
     StaffAction,
     TrainingLesson,
 )
-from backend.apps.telecalling.services import build_staff_current_salary_summary
+from backend.apps.telecalling.services import (
+    build_staff_current_salary_summary,
+    build_staff_document_url,
+)
 
 
 class LoginSerializer(serializers.Serializer):
@@ -256,21 +259,21 @@ class StaffProfileSerializer(serializers.ModelSerializer):
 
     def get_aadhar_photo_url(self, obj):
         request = self.context.get("request")
-        if not obj.aadhar_photo:
-            return ""
-        url = reverse("api-staff-profile-document", args=["aadhar"])
-        if request:
-            return request.build_absolute_uri(url)
-        return url
+        return build_staff_document_url(
+            obj,
+            "aadhar",
+            request=request,
+            route_name="api-staff-profile-document",
+        )
 
     def get_passbook_photo_url(self, obj):
         request = self.context.get("request")
-        if not obj.passbook_photo:
-            return ""
-        url = reverse("api-staff-profile-document", args=["passbook"])
-        if request:
-            return request.build_absolute_uri(url)
-        return url
+        return build_staff_document_url(
+            obj,
+            "passbook",
+            request=request,
+            route_name="api-staff-profile-document",
+        )
 
     def get_aadhar_photo_name(self, obj):
         if not obj.aadhar_photo:
