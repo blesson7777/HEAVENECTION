@@ -6,10 +6,12 @@ import re
 from collections import Counter, defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
+from threading import Thread
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
+from django.db import close_old_connections
 from django.db.models import Case, Count, IntegerField, Max, Q, Sum, Value, When
 from django.template.loader import render_to_string
 from django.db.models.functions import Coalesce, TruncDate
@@ -655,6 +657,41 @@ def send_salary_payment_acknowledgement(salary_record):
     return {
         "sent": True,
         "message": f"Salary acknowledgement email sent to {staff.email}.",
+    }
+
+
+def queue_salary_payment_acknowledgement(salary_record):
+    staff = salary_record.staff
+    if not staff.email:
+        return {"queued": False, "message": f"{staff.name} does not have an email address saved."}
+
+    email_ready, reason = _payroll_email_is_ready()
+    if not email_ready:
+        return {"queued": False, "message": reason}
+
+    salary_record_id = salary_record.id
+    staff_id = staff.id
+    staff_email = staff.email
+
+    def _send_in_background():
+        close_old_connections()
+        try:
+            queued_record = Salary.objects.select_related("staff").get(id=salary_record_id)
+            send_salary_payment_acknowledgement(queued_record)
+        except Exception:  # pragma: no cover - depends on runtime thread scheduling
+            logger.exception("Queued salary payment acknowledgement email failed for staff %s", staff_id)
+        finally:
+            close_old_connections()
+
+    Thread(
+        target=_send_in_background,
+        name=f"salary-ack-{salary_record_id}",
+        daemon=True,
+    ).start()
+
+    return {
+        "queued": True,
+        "message": f"Salary acknowledgement will be sent to {staff_email} shortly.",
     }
 
 

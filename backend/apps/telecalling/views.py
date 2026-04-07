@@ -92,6 +92,7 @@ from backend.apps.telecalling.services import (
     get_pending_status_call,
     get_company_profile,
     publish_app_release,
+    queue_salary_payment_acknowledgement,
     import_leads_from_upload,
     is_staff_lead_visible_now,
     mark_staff_seen,
@@ -102,7 +103,6 @@ from backend.apps.telecalling.services import (
     reactivate_oldest_recovery_leads,
     set_active_app_release,
     retry_pending_staff_call,
-    send_salary_payment_acknowledgement,
     search_staff_customer_history,
     start_staff_call,
     start_staff_session,
@@ -1024,9 +1024,9 @@ def salary_page(request):
                             "payment_kind",
                             SalaryPaymentTransaction.PaymentKind.SALARY,
                         )
-                        email_result = {"sent": False, "message": ""}
+                        email_result = {"queued": False, "message": ""}
                         if payment_kind == SalaryPaymentTransaction.PaymentKind.SALARY:
-                            email_result = send_salary_payment_acknowledgement(record)
+                            email_result = queue_salary_payment_acknowledgement(record)
                         remaining_balance = max(
                             float(record.final_salary or 0) - float(record.paid_amount or 0),
                             0.0,
@@ -1042,7 +1042,7 @@ def salary_page(request):
                             f"Credited Rs. {float(transaction.amount):,.2f} for {record.period_start} to {record.period_end}. "
                             f"Remaining balance Rs. {remaining_balance:,.2f}.",
                         )
-                        if email_result["sent"]:
+                        if email_result["queued"]:
                             messages.success(request, email_result["message"])
                         elif email_result["message"]:
                             messages.warning(request, email_result["message"])
@@ -1155,7 +1155,7 @@ def salary_detail_page(request, staff_id):
                     payment_errors = _normalize_errors(getattr(error, "message_dict", {"paid_amount": error.messages}))
                     messages.error(request, "Please correct the salary payment details and try again.")
                 else:
-                    email_result = send_salary_payment_acknowledgement(record)
+                    email_result = queue_salary_payment_acknowledgement(record)
                     remaining_balance = max(
                         float(record.final_salary or 0) - float(record.paid_amount or 0),
                         0.0,
@@ -1166,7 +1166,7 @@ def salary_detail_page(request, staff_id):
                         f"Credited Rs. {float(transaction.amount):,.2f} for {record.period_start} to {record.period_end}. "
                         f"Remaining balance Rs. {remaining_balance:,.2f}.",
                     )
-                    if email_result["sent"]:
+                    if email_result["queued"]:
                         messages.success(request, email_result["message"])
                     else:
                         messages.warning(request, email_result["message"])
