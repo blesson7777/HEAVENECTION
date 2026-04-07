@@ -132,6 +132,9 @@ class StaffProfile {
     required this.lastSeenAt,
     required this.salarySummary,
     required this.salaryHistory,
+    required this.referralProgramEnabled,
+    required this.referralRequiredHoursLabel,
+    required this.referralRewardAmountLabel,
   });
 
   final String id;
@@ -153,6 +156,9 @@ class StaffProfile {
   final DateTime? lastSeenAt;
   final SalarySummary salarySummary;
   final List<SalaryHistoryItem> salaryHistory;
+  final bool referralProgramEnabled;
+  final String referralRequiredHoursLabel;
+  final String referralRewardAmountLabel;
 
   bool get hasAadharPhoto => aadharPhotoUrl.trim().isNotEmpty;
   bool get hasPassbookPhoto => passbookPhotoUrl.trim().isNotEmpty;
@@ -189,6 +195,11 @@ class StaffProfile {
               .map(SalaryHistoryItem.fromJson)
               .toList() ??
           const [],
+      referralProgramEnabled: json['referral_program_enabled'] == true,
+      referralRequiredHoursLabel:
+          json['referral_required_hours_label']?.toString() ?? '0.0h',
+      referralRewardAmountLabel:
+          json['referral_reward_amount_label']?.toString() ?? 'Rs. 0.00',
     );
   }
 }

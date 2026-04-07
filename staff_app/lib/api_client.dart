@@ -100,6 +100,20 @@ class ApiClient {
     return StaffSalaryDetails.fromJson(_decodeMap(response.body));
   }
 
+  Future<void> submitReferral({
+    required String referredName,
+    required String referredPhone,
+  }) async {
+    await _send(
+      'POST',
+      '/api/staff/referrals/',
+      body: {
+        'referred_name': referredName,
+        'referred_phone': referredPhone,
+      },
+    );
+  }
+
   Map<String, String> get authenticatedDocumentHeaders {
     if (_accessToken == null || _accessToken!.isEmpty) {
       return const {};

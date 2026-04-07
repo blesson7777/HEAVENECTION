@@ -420,6 +420,40 @@ class ReferralReward(models.Model):
         ordering = ("-qualified_at", "-created_at")
 
 
+class ReferralSubmission(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        REVIEWED = "reviewed", "Reviewed"
+        JOINED = "joined", "Joined"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    referrer = models.ForeignKey(
+        Staff,
+        on_delete=models.CASCADE,
+        related_name="referral_submissions",
+    )
+    referred_name = models.CharField(max_length=150)
+    referred_phone = models.CharField(max_length=20, unique=True, db_index=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    joined_staff = models.ForeignKey(
+        Staff,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="referral_submission_matches",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+
 class AppRelease(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     version_name = models.CharField(max_length=40)

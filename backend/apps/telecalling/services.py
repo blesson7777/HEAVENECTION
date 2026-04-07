@@ -23,6 +23,7 @@ from backend.apps.telecalling.models import (
     Call,
     CompanyProfile,
     Lead,
+    ReferralSubmission,
     ReferralReward,
     Salary,
     SalaryPaymentTransaction,
@@ -586,6 +587,26 @@ def build_staff_referral_reward_rows(staff, limit=20):
             }
         )
     return rows
+
+
+def build_staff_referral_submission_rows(staff, limit=20):
+    submissions = (
+        ReferralSubmission.objects.filter(referrer=staff)
+        .select_related("joined_staff")
+        .order_by("-created_at")[:limit]
+    )
+    return [
+        {
+            "id": str(submission.id),
+            "referred_name": submission.referred_name,
+            "referred_phone": submission.referred_phone,
+            "status": submission.status,
+            "status_label": submission.get_status_display(),
+            "joined_staff_name": submission.joined_staff.name if submission.joined_staff else "",
+            "created_at": _format_datetime(submission.created_at),
+        }
+        for submission in submissions
+    ]
 
 
 def build_staff_referral_summary(staff, *, company_profile=None):
@@ -2964,6 +2985,11 @@ def build_staff_profile_payload(request, staff):
             if staff.passbook_photo
             else "",
         },
+        "referral_summary": {
+            "enabled": get_company_profile().referral_program_enabled,
+            "submitted_count": ReferralSubmission.objects.filter(referrer=staff).count(),
+        },
+        "referral_submission_rows": build_staff_referral_submission_rows(staff, limit=20),
         "assigned_lead_rows": assigned_lead_rows,
         "recent_call_rows": recent_call_rows,
         "recent_session_rows": recent_session_rows,

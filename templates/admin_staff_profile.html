@@ -388,6 +388,50 @@
 <section class="hc-surface-card mt-4">
     <div class="mf-db2-panel-head mb-3">
         <div>
+            <span class="mf-db2-kicker">Referral Entries</span>
+            <h5>Friends referred by this staff member</h5>
+        </div>
+        <span class="hc-sync-pill">
+            <i class="bi bi-people"></i>
+            {{ referral_summary.submitted_count }} submitted
+        </span>
+    </div>
+    {% if not referral_summary.enabled %}
+    <div class="hc-empty-state">
+        <p class="mb-0">Referral rewards are currently disabled, but any saved entries will still appear here.</p>
+    </div>
+    {% endif %}
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Phone</th>
+                    <th>Status</th>
+                    <th>Joined Staff</th>
+                    <th>Submitted</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for referral in referral_submission_rows %}
+                <tr>
+                    <td><strong>{{ referral.referred_name }}</strong></td>
+                    <td>{{ referral.referred_phone }}</td>
+                    <td>{{ referral.status_label }}</td>
+                    <td>{{ referral.joined_staff_name|default:"--" }}</td>
+                    <td>{{ referral.created_at }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center py-4">No referral entries submitted yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="hc-surface-card mt-4">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
             <span class="mf-db2-kicker">Recent Sessions</span>
             <h5>Work login history</h5>
         </div>

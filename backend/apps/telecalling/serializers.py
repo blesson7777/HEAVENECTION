@@ -11,6 +11,7 @@ from backend.apps.telecalling.models import (
     Call,
     CompanyProfile,
     Lead,
+    ReferralSubmission,
     Salary,
     SalaryPaymentTransaction,
     Session,
@@ -208,6 +209,9 @@ class StaffProfileSerializer(serializers.ModelSerializer):
     passbook_photo_url = serializers.SerializerMethodField()
     passbook_photo_name = serializers.SerializerMethodField()
     salary_summary = serializers.SerializerMethodField()
+    referral_program_enabled = serializers.SerializerMethodField()
+    referral_required_hours_label = serializers.SerializerMethodField()
+    referral_reward_amount_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Staff
@@ -230,6 +234,9 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             "passbook_photo_name",
             "last_seen_at",
             "salary_summary",
+            "referral_program_enabled",
+            "referral_required_hours_label",
+            "referral_reward_amount_label",
         )
 
     def get_aadhar_photo_url(self, obj):
@@ -262,6 +269,84 @@ class StaffProfileSerializer(serializers.ModelSerializer):
 
     def get_salary_summary(self, obj):
         return build_staff_current_salary_summary(obj)
+
+    def get_referral_program_enabled(self, obj):
+        return CompanyProfile.objects.filter(pk=1).values_list(
+            "referral_program_enabled",
+            flat=True,
+        ).first() is True
+
+    def get_referral_required_hours_label(self, obj):
+        required_hours = CompanyProfile.objects.filter(pk=1).values_list(
+            "referral_required_hours",
+            flat=True,
+        ).first()
+        return f"{float(required_hours or 0):,.1f}h"
+
+    def get_referral_reward_amount_label(self, obj):
+        reward_amount = CompanyProfile.objects.filter(pk=1).values_list(
+            "referral_reward_amount",
+            flat=True,
+        ).first()
+        return f"Rs. {Decimal(reward_amount or 0):,.2f}"
+
+
+class StaffReferralSubmissionSerializer(serializers.ModelSerializer):
+    status_label = serializers.CharField(source="get_status_display", read_only=True)
+    joined_staff_name = serializers.CharField(source="joined_staff.name", read_only=True)
+
+    class Meta:
+        model = ReferralSubmission
+        fields = (
+            "id",
+            "referred_name",
+            "referred_phone",
+            "status",
+            "status_label",
+            "joined_staff",
+            "joined_staff_name",
+            "created_at",
+        )
+
+
+class CreateStaffReferralSubmissionSerializer(serializers.Serializer):
+    referred_name = serializers.CharField(max_length=150)
+    referred_phone = serializers.CharField(max_length=20)
+
+    def validate_referred_name(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("Enter your friend's name.")
+        return name
+
+    def validate_referred_phone(self, value):
+        phone = value.strip()
+        if not phone:
+            raise serializers.ValidationError("Enter your friend's phone number.")
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if user and phone == user.phone:
+            raise serializers.ValidationError("You cannot refer your own phone number.")
+        if Staff.objects.filter(phone=phone).exists():
+            raise serializers.ValidationError("This phone number already belongs to a team member.")
+        if ReferralSubmission.objects.filter(referred_phone=phone).exists():
+            raise serializers.ValidationError("This phone number has already been referred.")
+        return phone
+
+    def validate(self, attrs):
+        if not CompanyProfile.objects.filter(pk=1, referral_program_enabled=True).exists():
+            raise serializers.ValidationError(
+                {"referred_phone": "Referral program is not enabled right now."}
+            )
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        return ReferralSubmission.objects.create(
+            referrer=request.user,
+            referred_name=validated_data["referred_name"],
+            referred_phone=validated_data["referred_phone"],
+        )
 
 
 class StaffProfileUpdateSerializer(serializers.Serializer):
@@ -405,11 +490,20 @@ class CreateStaffSerializer(serializers.Serializer):
                 id=referred_by_id,
                 role=Staff.Role.STAFF,
             ).first()
-        return Staff.objects.create_user(
+        staff = Staff.objects.create_user(
             password=password,
             role=Staff.Role.STAFF,
             **validated_data,
         )
+        if staff.referred_by_id:
+            ReferralSubmission.objects.filter(
+                referrer=staff.referred_by,
+                referred_phone=staff.phone,
+            ).update(
+                status=ReferralSubmission.Status.JOINED,
+                joined_staff=staff,
+            )
+        return staff
 
 
 class UpdateStaffSerializer(serializers.Serializer):
@@ -502,6 +596,14 @@ class UpdateStaffSerializer(serializers.Serializer):
         if password:
             instance.set_password(password)
         instance.save()
+        if instance.referred_by_id:
+            ReferralSubmission.objects.filter(
+                referrer=instance.referred_by,
+                referred_phone=instance.phone,
+            ).update(
+                status=ReferralSubmission.Status.JOINED,
+                joined_staff=instance,
+            )
         if remove_aadhar_photo and previous_photo:
             previous_photo.delete(save=False)
         elif new_photo is not None and previous_photo and previous_photo.name != instance.aadhar_photo.name:

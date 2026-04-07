@@ -38,6 +38,7 @@ from backend.apps.telecalling.serializers import (
     CompanyProfileSerializer,
     CompanyProfileUpdateSerializer,
     CallStatusSerializer,
+    CreateStaffReferralSubmissionSerializer,
     CreateAppReleaseSerializer,
     CreateLeadSerializer,
     CreateStaffSerializer,
@@ -53,6 +54,7 @@ from backend.apps.telecalling.serializers import (
     SessionSerializer,
     StaffActionSerializer,
     StaffLeadRecoverySerializer,
+    StaffReferralSubmissionSerializer,
     StaffSerializer,
     StartCallSerializer,
     StaffProfileSerializer,
@@ -1377,6 +1379,28 @@ def staff_profile_document_api(request, document_type):
 @permission_classes([IsCallingStaff])
 def staff_salary_details_api(request):
     return Response(build_staff_salary_details_payload(request.user))
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsCallingStaff])
+def staff_referrals_api(request):
+    if request.method == "GET":
+        submissions = (
+            request.user.referral_submissions.select_related("joined_staff")
+            .order_by("-created_at")[:20]
+        )
+        return Response(StaffReferralSubmissionSerializer(submissions, many=True).data)
+
+    serializer = CreateStaffReferralSubmissionSerializer(
+        data=request.data,
+        context={"request": request},
+    )
+    serializer.is_valid(raise_exception=True)
+    submission = serializer.save()
+    return Response(
+        StaffReferralSubmissionSerializer(submission).data,
+        status=201,
+    )
 
 
 @api_view(["GET"])

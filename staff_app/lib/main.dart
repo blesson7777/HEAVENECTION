@@ -1813,6 +1813,141 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
+  Future<void> _openReferralDialog() async {
+    final profile = _profile;
+    if (profile == null || !profile.referralProgramEnabled || !mounted) {
+      return;
+    }
+
+    final referredNameController = TextEditingController();
+    final referredPhoneController = TextEditingController();
+    String? errorText;
+    var isSubmitting = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> submitReferral() async {
+              final referredName = referredNameController.text.trim();
+              final referredPhone = referredPhoneController.text.trim();
+              if (referredName.isEmpty || referredPhone.isEmpty) {
+                setDialogState(() {
+                  errorText = 'Enter your friend\'s name and phone number.';
+                });
+                return;
+              }
+              setDialogState(() {
+                errorText = null;
+                isSubmitting = true;
+              });
+              try {
+                await _apiClient.submitReferral(
+                  referredName: referredName,
+                  referredPhone: referredPhone,
+                );
+                if (dialogContext.mounted) {
+                  Navigator.of(dialogContext).pop();
+                }
+                _showMessage('Referral submitted successfully.');
+              } on ApiException catch (error) {
+                if (dialogContext.mounted) {
+                  setDialogState(() {
+                    errorText = error.message;
+                    isSubmitting = false;
+                  });
+                }
+                if (error.statusCode == 401) {
+                  await _handleForcedLogout();
+                } else if (error.code == 'network_error') {
+                  _showNetworkError(
+                    'Unable to submit the referral right now. Please try again when the connection is stable.',
+                  );
+                }
+              }
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: const Text('Earn more? Refer a friend'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Refer a friend to the team. When they complete ${profile.referralRequiredHoursLabel}, you can earn ${profile.referralRewardAmountLabel}.',
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        color: Colors.black54,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: referredNameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Friend Name',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: referredPhoneController,
+                      keyboardType: TextInputType.phone,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      decoration: const InputDecoration(
+                        labelText: 'Phone Number',
+                        prefixIcon: Icon(Icons.phone_outlined),
+                      ),
+                    ),
+                    if (errorText != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        errorText!,
+                        style: const TextStyle(
+                          color: kRed,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting ? null : submitReferral,
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('Submit Referral'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    referredNameController.dispose();
+    referredPhoneController.dispose();
+  }
+
   Future<void> _startWork({bool fromTraining = false}) async {
     if (_isSessionBusy) {
       return;
@@ -4576,6 +4711,47 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                       label: const Text('Salary Details'),
                     ),
                   ),
+                  if (profile?.referralProgramEnabled == true) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: kSoft,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Earn more?',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: kPrimaryDark,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Refer a friend. When they complete ${profile!.referralRequiredHoursLabel}, you can earn ${profile.referralRewardAmountLabel}.',
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: _openReferralDialog,
+                              icon: const Icon(Icons.group_add_outlined),
+                              label: const Text('Refer a Friend'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
