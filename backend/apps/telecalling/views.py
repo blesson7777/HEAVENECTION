@@ -172,6 +172,38 @@ def _apply_staff_post_save_actions(staff, was_active):
     return released_count
 
 
+def _refresh_queue_after_admin_lead_save(*, lead, previous_assigned_to_id=None, explicit_assignment=False):
+    previous_staff = None
+    if previous_assigned_to_id and previous_assigned_to_id != lead.assigned_to_id:
+        previous_staff = Staff.objects.filter(
+            id=previous_assigned_to_id,
+            role=Staff.Role.STAFF,
+            is_active=True,
+        ).first()
+
+    lead_is_active_queue = lead.status in (
+        Lead.Status.NEW,
+        Lead.Status.CALL_BACK,
+        Lead.Status.INTERESTED,
+    )
+
+    if explicit_assignment and lead_is_active_queue and lead.assigned_to_id:
+        if previous_staff:
+            auto_allocate_leads(target_staff=previous_staff)
+        return
+
+    if previous_staff:
+        auto_allocate_leads(target_staff=previous_staff)
+        if lead.assigned_to_id and lead_is_active_queue:
+            return
+
+    if lead.assigned_to_id is None and lead_is_active_queue:
+        auto_allocate_leads()
+        return
+
+    auto_allocate_leads()
+
+
 _PROFILE_DOCUMENT_FIELDS = {
     "aadhar": "aadhar_photo",
     "passbook": "passbook_photo",
@@ -1237,12 +1269,11 @@ def leads_api(request):
     serializer = CreateLeadSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     lead = serializer.save()
-    if lead.assigned_to_id is None and lead.status in (
-        Lead.Status.NEW,
-        Lead.Status.CALL_BACK,
-        Lead.Status.INTERESTED,
-    ):
-        auto_allocate_leads()
+    explicit_assignment = "assigned_to" in request.data
+    _refresh_queue_after_admin_lead_save(
+        lead=lead,
+        explicit_assignment=explicit_assignment,
+    )
     return Response(LeadSerializer(lead).data, status=201)
 
 
@@ -1277,10 +1308,16 @@ def lead_detail_api(request, lead_id):
             auto_allocate_leads()
         return Response(status=204)
 
+    previous_assigned_to_id = lead.assigned_to_id
     serializer = UpdateLeadSerializer(lead, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     lead = serializer.save()
-    auto_allocate_leads()
+    explicit_assignment = "assigned_to" in request.data
+    _refresh_queue_after_admin_lead_save(
+        lead=lead,
+        previous_assigned_to_id=previous_assigned_to_id,
+        explicit_assignment=explicit_assignment,
+    )
     return Response(LeadSerializer(lead).data)
 
 
