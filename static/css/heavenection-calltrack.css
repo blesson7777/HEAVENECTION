@@ -828,6 +828,21 @@
     margin-top: 0.25rem;
 }
 
+.hc-card-scroll-table {
+    overflow-y: auto;
+}
+
+.hc-card-scroll-table-10 {
+    max-height: 41rem;
+}
+
+.hc-card-scroll-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f8faff;
+}
+
 .hc-alert-stack {
     display: flex;
     flex-direction: column;
