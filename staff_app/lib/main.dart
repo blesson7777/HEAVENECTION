@@ -3338,18 +3338,19 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     try {
-      await _apiClient.updateCallStatus(
+      final savedCall = await _apiClient.updateCallStatus(
         callId: callId,
         status: _statusValue(label),
         callbackWindow: callbackWindow,
         callbackDate: callbackDate,
       );
+      final savedLabel = _statusLabelFromValue(savedCall.status);
       if (!mounted) {
         return true;
       }
 
       setState(() {
-        _callStatus = label;
+        _callStatus = savedLabel;
         _lastCallActivityAt = DateTime.now();
         _clearPendingCallStatus();
         _tab = 1;
@@ -3357,10 +3358,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       });
       await _loadDashboardData(showLoader: false, promptTrainingGate: false);
       if (mounted) {
-        if (label == 'Call Back' && callbackScheduleLabel.isNotEmpty) {
+        if (savedLabel == 'Call Back' && callbackScheduleLabel.isNotEmpty) {
           _showMessage('Call Back scheduled for $callbackScheduleLabel.');
+        } else if (label == 'Rejected' && savedLabel != label) {
+          _showMessage('No real connected call was found, so the remark was saved as $savedLabel.');
         } else {
-          _showMessage('Remark saved as $label.');
+          _showMessage('Remark saved as $savedLabel.');
         }
       }
       return true;
@@ -3496,6 +3499,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       'Call Back' => 'call_back',
       'Converted' => 'converted',
       _ => 'interested',
+    };
+  }
+
+  String _statusLabelFromValue(String value) {
+    return switch (value) {
+      'interested' => 'Follow Up',
+      'not_interested' => 'Rejected',
+      'no_answer' => 'No Response',
+      'call_back' => 'Call Back',
+      'converted' => 'Converted',
+      _ => 'Follow Up',
     };
   }
 

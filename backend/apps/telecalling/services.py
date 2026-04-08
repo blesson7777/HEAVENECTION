@@ -1922,6 +1922,13 @@ def _staff_call_queue_queryset(queryset=None):
     return _visible_staff_lead_queryset(base_queryset)
 
 
+def _active_started_call_lead_ids(*, target_staff=None):
+    queryset = Call.objects.filter(status=Call.Status.STARTED, end_time__isnull=True)
+    if target_staff is not None:
+        queryset = queryset.filter(staff=target_staff)
+    return set(queryset.values_list("lead_id", flat=True))
+
+
 def _recovery_lead_queryset():
     return Lead.objects.filter(status__in=RECOVERY_LEAD_STATUSES)
 
@@ -2542,6 +2549,7 @@ def release_staff_queue(staff):
 def _normalize_active_queue_assignments(*, target_staff=None, prioritized_lead_ids=None):
     now = timezone.now()
     queue_limit = get_lead_queue_limit()
+    protected_lead_ids = _active_started_call_lead_ids(target_staff=target_staff)
     queue_queryset = _staff_call_queue_queryset(
         _lead_queue_queryset().select_related("assigned_to")
     ).exclude(assigned_to=None)
@@ -2559,6 +2567,10 @@ def _normalize_active_queue_assignments(*, target_staff=None, prioritized_lead_i
         assigned_staff = lead.assigned_to
         if not assigned_staff or assigned_staff.role != Staff.Role.STAFF or not assigned_staff.is_active:
             release_ids.append(lead.id)
+            continue
+
+        if lead.id in protected_lead_ids:
+            kept_counts[assigned_staff.id] += 1
             continue
 
         kept_counts[assigned_staff.id] += 1
