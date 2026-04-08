@@ -136,10 +136,16 @@
                             </div>
                             <small>{{ staff.quality_note }}</small>
                             <div class="hc-quality-card-meta">
-                                <span>Outcome {{ staff.outcome_consistency_label }}</span>
-                                <span>Follow-Up {{ staff.followup_completion_label }}</span>
-                                <span>Missed {{ staff.missed_callbacks }}</span>
+                                <span>Call Record {{ staff.outcome_consistency_label }}</span>
+                                <span>Real Calls {{ staff.attempt_review_label }}</span>
+                                <span>Away {{ staff.away_review_label }}</span>
                             </div>
+                            {% if staff.suspicious_block_count or staff.zero_only_block_count %}
+                            <div class="hc-quality-card-meta">
+                                <span>{{ staff.suspicious_block_count }} block(s) need call review</span>
+                                <span>{{ staff.zero_only_block_count }} zero-talk block(s)</span>
+                            </div>
+                            {% endif %}
                         </div>
                     </td>
                     <td>

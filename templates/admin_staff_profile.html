@@ -85,29 +85,39 @@
                     </div>
                     <span class="hc-status hc-status-{{ summary.quality_tone }}">{{ summary.quality_score }} / 100</span>
                 </div>
-                <div class="hc-profile-meta-grid">
-                    <div class="hc-profile-meta-card">
-                        <span class="hc-profile-meta-label">Call Outcome Consistency</span>
-                        <strong>{{ summary.outcome_consistency_label }}</strong>
-                        <small>Recorded over the last {{ summary.quality_lookback_days }} days.</small>
+                    <div class="hc-profile-meta-grid">
+                        <div class="hc-profile-meta-card">
+                            <span class="hc-profile-meta-label">Call Outcome Consistency</span>
+                            <strong>{{ summary.outcome_consistency_label }}</strong>
+                            <small>Recorded over the last {{ summary.quality_lookback_days }} days.</small>
                     </div>
                     <div class="hc-profile-meta-card">
                         <span class="hc-profile-meta-label">Follow-Up Completion</span>
                         <strong>{{ summary.followup_completion_label }}</strong>
                         <small>{{ summary.followup_closed_count }} completed from {{ summary.followup_started_count }} started.</small>
                     </div>
-                    <div class="hc-profile-meta-card">
-                        <span class="hc-profile-meta-label">Callback Discipline</span>
-                        <strong>{{ summary.callback_discipline_label }}</strong>
-                        <small>{{ summary.missed_callbacks }} missed from {{ summary.callback_total }} active callbacks.</small>
-                    </div>
-                    <div class="hc-profile-meta-card">
-                        <span class="hc-profile-meta-label">No Response Today</span>
-                        <strong>{{ summary.no_answer_today }}</strong>
-                        <small>{{ summary.status_label }}</small>
+                        <div class="hc-profile-meta-card">
+                            <span class="hc-profile-meta-label">Callback Discipline</span>
+                            <strong>{{ summary.callback_discipline_label }}</strong>
+                            <small>{{ summary.missed_callbacks }} missed from {{ summary.callback_total }} active callbacks.</small>
+                        </div>
+                        <div class="hc-profile-meta-card">
+                            <span class="hc-profile-meta-label">Calling Pattern Review</span>
+                            <strong>{{ summary.attempt_review_label }}</strong>
+                            <small>{{ summary.zero_second_attempt_count }} zero-second attempts from {{ summary.verified_attempt_count }} verified attempts.</small>
+                        </div>
+                        <div class="hc-profile-meta-card">
+                            <span class="hc-profile-meta-label">Away Review</span>
+                            <strong>{{ summary.away_review_label }}</strong>
+                            <small>{{ summary.long_away_count }} away period(s) longer than 10 minutes.</small>
+                        </div>
+                        <div class="hc-profile-meta-card">
+                            <span class="hc-profile-meta-label">Today Review</span>
+                            <strong>{{ summary.no_answer_today }}</strong>
+                            <small>{{ summary.status_label }}</small>
+                        </div>
                     </div>
                 </div>
-            </div>
 
             <div class="hc-summary-card">
                 <div class="d-flex align-items-start justify-content-between gap-3">

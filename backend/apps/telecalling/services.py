@@ -50,6 +50,8 @@ IDLE_OFFLINE_AFTER_SECONDS = IDLE_WARNING_AFTER_SECONDS + IDLE_WARNING_GRACE_SEC
 LIVE_CALL_STALE_SECONDS = 3 * 60 * 60
 VERIFIED_CALL_ACTIVITY_TIMEOUT_SECONDS = 90
 VERIFIED_CALL_TIME_SKEW_SECONDS = 2 * 60
+CALL_ACTIVITY_IDLE_BREAK_SECONDS = 3 * 60
+MIN_REAL_CALLS_PER_ATTEMPT_BLOCK = 10
 VERIFIED_CALL_SOURCES = {
     "call_log",
     "call_log_short_resolution",
@@ -204,6 +206,199 @@ def _format_duration(total_seconds):
     return f"{minutes:02d}:{seconds:02d}"
 
 
+def _split_call_activity_blocks(calls):
+    blocks = []
+    block_calls = []
+    block_start = None
+    block_end = None
+
+    for call in calls:
+        start_time = call.get("start_time") if isinstance(call, dict) else getattr(call, "start_time", None)
+        if not call or not start_time:
+            continue
+        end_time = (
+            call.get("end_time")
+            if isinstance(call, dict)
+            else getattr(call, "end_time", None)
+        ) or start_time
+        if end_time < start_time:
+            end_time = start_time
+
+        if block_start is None:
+            block_calls = [call]
+            block_start = start_time
+            block_end = end_time
+            continue
+
+        gap_seconds = max(0, int((start_time - block_end).total_seconds()))
+        if gap_seconds > CALL_ACTIVITY_IDLE_BREAK_SECONDS:
+            blocks.append((block_calls, block_start, block_end))
+            block_calls = [call]
+            block_start = start_time
+            block_end = end_time
+            continue
+
+        block_calls.append(call)
+        if end_time > block_end:
+            block_end = end_time
+
+    if block_calls:
+        blocks.append((block_calls, block_start, block_end))
+    return blocks
+
+
+def _call_activity_block_summary(calls):
+    total_seconds = 0
+    attempt_count = 0
+    real_call_count = 0
+    suspicious_block_count = 0
+    zero_only_block_count = 0
+    suspicious_attempt_count = 0
+    zero_second_attempt_count = 0
+    real_call_attempt_count = 0
+
+    for block_calls, block_start, block_end in _split_call_activity_blocks(calls):
+        attempt_count += len(block_calls)
+        connected_seconds = 0
+        real_calls_in_block = 0
+        zero_seconds_in_block = 0
+        for call in block_calls:
+            duration_value = call.get("duration_seconds") if isinstance(call, dict) else getattr(call, "duration_seconds", 0)
+            duration_seconds = max(0, int(duration_value or 0))
+            if duration_seconds > 0:
+                real_calls_in_block += 1
+                connected_seconds += duration_seconds
+            else:
+                zero_seconds_in_block += 1
+
+        zero_second_attempt_count += zero_seconds_in_block
+        real_call_attempt_count += real_calls_in_block
+
+        if real_calls_in_block <= 0:
+            zero_only_block_count += 1
+            continue
+
+        block_seconds = max(0, int((block_end - block_start).total_seconds()))
+        if (
+            len(block_calls) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
+            and (real_calls_in_block * MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) < len(block_calls)
+        ):
+            suspicious_block_count += 1
+            suspicious_attempt_count += len(block_calls)
+            total_seconds += connected_seconds
+            continue
+
+        total_seconds += max(block_seconds, connected_seconds)
+
+    return {
+        "active_seconds": total_seconds,
+        "attempt_count": attempt_count,
+        "real_call_count": real_call_attempt_count,
+        "zero_second_attempt_count": zero_second_attempt_count,
+        "suspicious_block_count": suspicious_block_count,
+        "zero_only_block_count": zero_only_block_count,
+        "suspicious_attempt_count": suspicious_attempt_count,
+    }
+
+
+def _effective_active_seconds_map(*, start_at=None, end_at=None, staff_ids=None):
+    call_queryset = Call.objects.filter(end_time__isnull=False, is_verified=True)
+
+    if start_at is not None and end_at is not None:
+        call_queryset = call_queryset.filter(start_time__range=(start_at, end_at))
+
+    if staff_ids is not None:
+        staff_ids = list(staff_ids)
+        call_queryset = call_queryset.filter(staff_id__in=staff_ids)
+
+    calls_by_staff_day = defaultdict(list)
+    for call in call_queryset.annotate(activity_day=TruncDate("start_time")).only(
+        "staff_id",
+        "start_time",
+        "end_time",
+        "duration_seconds",
+        "is_verified",
+    ).order_by("staff_id", "start_time", "end_time", "id"):
+        calls_by_staff_day[(call.staff_id, getattr(call, "activity_day", None))].append(call)
+
+    totals_by_staff = defaultdict(int)
+    for day_key, calls in calls_by_staff_day.items():
+        totals_by_staff[day_key[0]] += _call_activity_block_summary(calls)["active_seconds"]
+
+    if staff_ids is not None:
+        for staff_id in staff_ids:
+            totals_by_staff.setdefault(staff_id, 0)
+
+    return dict(totals_by_staff)
+
+
+def _effective_active_insights_map(*, start_at=None, end_at=None, staff_ids=None):
+    call_queryset = Call.objects.filter(end_time__isnull=False, is_verified=True)
+
+    if start_at is not None and end_at is not None:
+        call_queryset = call_queryset.filter(start_time__range=(start_at, end_at))
+
+    if staff_ids is not None:
+        staff_ids = list(staff_ids)
+        call_queryset = call_queryset.filter(staff_id__in=staff_ids)
+
+    calls_by_staff_day = defaultdict(list)
+    for call in (
+        call_queryset.annotate(activity_day=TruncDate("start_time"))
+        .only(
+            "staff_id",
+            "start_time",
+            "end_time",
+            "duration_seconds",
+            "is_verified",
+        )
+        .order_by("staff_id", "start_time", "end_time", "id")
+    ):
+        calls_by_staff_day[(call.staff_id, getattr(call, "activity_day", None))].append(call)
+
+    insights_by_staff = defaultdict(
+        lambda: {
+            "active_seconds": 0,
+            "attempt_count": 0,
+            "real_call_count": 0,
+            "zero_second_attempt_count": 0,
+            "suspicious_block_count": 0,
+            "zero_only_block_count": 0,
+            "suspicious_attempt_count": 0,
+        }
+    )
+    for day_key, calls in calls_by_staff_day.items():
+        summary = _call_activity_block_summary(calls)
+        staff_summary = insights_by_staff[day_key[0]]
+        for field_name, value in summary.items():
+            staff_summary[field_name] += value
+
+    if staff_ids is not None:
+        for staff_id in staff_ids:
+            insights_by_staff.setdefault(
+                staff_id,
+                {
+                    "active_seconds": 0,
+                    "attempt_count": 0,
+                    "real_call_count": 0,
+                    "zero_second_attempt_count": 0,
+                    "suspicious_block_count": 0,
+                    "zero_only_block_count": 0,
+                    "suspicious_attempt_count": 0,
+                },
+            )
+
+    return dict(insights_by_staff)
+
+
+def _effective_active_seconds_for_staff(*, staff, start_at=None, end_at=None):
+    return _effective_active_seconds_map(
+        start_at=start_at,
+        end_at=end_at,
+        staff_ids=[staff.id],
+    ).get(staff.id, 0)
+
+
 def _format_datetime(value, fallback="--"):
     if not value:
         return fallback
@@ -260,12 +455,7 @@ def _money(value):
 
 
 def _staff_period_totals(start, end):
-    session_totals = {
-        row["staff_id"]: row["total"] or 0
-        for row in Session.objects.filter(login_time__range=(start, end))
-        .values("staff_id")
-        .annotate(total=Sum("active_seconds"))
-    }
+    session_totals = _effective_active_seconds_map(start_at=start, end_at=end)
     call_totals = {
         row["staff_id"]: row["total"] or 0
         for row in Call.objects.filter(start_time__range=(start, end), is_qualifying=True)
@@ -493,24 +683,16 @@ def build_staff_current_salary_summary(staff, *, today=None):
 
 
 def _staff_total_active_hours(staff):
-    total_seconds = (
-        Session.objects.filter(staff=staff).aggregate(total=Sum("active_seconds")).get("total")
-        or 0
-    )
+    total_seconds = _effective_active_seconds_for_staff(staff=staff)
     return _quantized_decimal(Decimal(total_seconds) / Decimal("3600"))
 
 
 def _staff_active_hours_map(staff_ids):
     if not staff_ids:
         return {}
-    totals = (
-        Session.objects.filter(staff_id__in=staff_ids)
-        .values("staff_id")
-        .annotate(total=Sum("active_seconds"))
-    )
     return {
-        row["staff_id"]: _quantized_decimal(Decimal(row["total"] or 0) / Decimal("3600"))
-        for row in totals
+        staff_id: _quantized_decimal(Decimal(total_seconds or 0) / Decimal("3600"))
+        for staff_id, total_seconds in _effective_active_seconds_map(staff_ids=staff_ids).items()
     }
 
 
@@ -683,9 +865,10 @@ def _date_range_bounds(period_start, period_end):
 def calculate_staff_payout_for_dates(staff, period_start, period_end):
     start_at, end_at = _date_range_bounds(period_start, period_end)
     company_profile = get_company_profile()
-    active_seconds = (
-        Session.objects.filter(staff=staff, login_time__range=(start_at, end_at)).aggregate(total=Sum("active_seconds")).get("total")
-        or 0
+    active_seconds = _effective_active_seconds_for_staff(
+        staff=staff,
+        start_at=start_at,
+        end_at=end_at,
     )
     call_seconds = (
         Call.objects.filter(staff=staff, start_time__range=(start_at, end_at), is_qualifying=True)
@@ -1793,7 +1976,31 @@ def _quality_label(score, *, has_activity):
     return "Review Needed"
 
 
-def _build_quality_note(*, followup_started_count, followup_closed_count, missed_callback_count):
+def _build_quality_note(
+    *,
+    followup_started_count,
+    followup_closed_count,
+    missed_callback_count,
+    suspicious_block_count,
+    suspicious_attempt_count,
+    zero_only_block_count,
+    long_away_count,
+):
+    if suspicious_block_count:
+        return (
+            f"Review calling pattern: {suspicious_attempt_count} attempts across "
+            f"{suspicious_block_count} block(s) had too few real conversations."
+        )
+    if zero_only_block_count:
+        return (
+            f"{zero_only_block_count} calling block(s) had only unanswered attempts, "
+            "so no work hours were added for those periods."
+        )
+    if long_away_count:
+        return (
+            f"{long_away_count} away-from-app period(s) ran longer than 10 minutes "
+            "and need review."
+        )
     if followup_started_count and followup_closed_count:
         return f"{followup_closed_count} of {followup_started_count} follow-up leads completed."
     if followup_started_count:
@@ -1814,7 +2021,16 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
     recent_calls = Call.objects.filter(
         staff_id__in=staff_ids,
         start_time__gte=lookback_start,
-    ).values("staff_id", "lead_id", "status", "is_verified")
+    ).annotate(activity_day=TruncDate("start_time")).values(
+        "staff_id",
+        "lead_id",
+        "status",
+        "is_verified",
+        "duration_seconds",
+        "activity_day",
+        "start_time",
+        "end_time",
+    )
 
     callback_rows = Lead.objects.filter(
         assigned_to_id__in=staff_ids,
@@ -1830,9 +2046,17 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
             "followup_closed_leads": set(),
             "callback_total": 0,
             "missed_callbacks": 0,
+            "verified_attempt_count": 0,
+            "real_call_count": 0,
+            "zero_second_attempt_count": 0,
+            "suspicious_block_count": 0,
+            "zero_only_block_count": 0,
+            "suspicious_attempt_count": 0,
+            "long_away_count": 0,
         }
         for staff_id in staff_ids
     }
+    calls_by_staff_day = defaultdict(list)
 
     for row in recent_calls:
         staff_id = row["staff_id"]
@@ -1849,6 +2073,20 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
             metrics[staff_id]["followup_started_leads"].add(str(row["lead_id"]))
         if status in {Call.Status.CONVERTED, Call.Status.NOT_INTERESTED}:
             metrics[staff_id]["followup_closed_leads"].add(str(row["lead_id"]))
+        if row["is_verified"] and status != Call.Status.STARTED:
+            metrics[staff_id]["verified_attempt_count"] += 1
+            duration_seconds = max(0, int(row["duration_seconds"] or 0))
+            if duration_seconds > 0:
+                metrics[staff_id]["real_call_count"] += 1
+            else:
+                metrics[staff_id]["zero_second_attempt_count"] += 1
+            calls_by_staff_day[(staff_id, row["activity_day"])].append(
+                {
+                    "start_time": row["start_time"],
+                    "end_time": row["end_time"],
+                    "duration_seconds": duration_seconds,
+                }
+            )
 
     for row in callback_rows:
         staff_id = row["assigned_to_id"]
@@ -1858,6 +2096,54 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
         last_contacted_at = row["last_contacted_at"]
         if not last_contacted_at or timezone.localtime(last_contacted_at) <= missed_callback_cutoff:
             metrics[staff_id]["missed_callbacks"] += 1
+
+    away_end_actions = {
+        StaffAction.ActionType.APP_FOREGROUNDED,
+        StaffAction.ActionType.RETURNED_ONLINE,
+        StaffAction.ActionType.MARKED_OFFLINE,
+        StaffAction.ActionType.SESSION_ENDED,
+        StaffAction.ActionType.SESSION_AUTO_ENDED,
+    }
+    away_rows = (
+        StaffAction.objects.filter(
+            staff_id__in=staff_ids,
+            created_at__gte=lookback_start - timedelta(days=1),
+            action_type__in={StaffAction.ActionType.APP_BACKGROUNDED, *away_end_actions},
+        )
+        .values("staff_id", "action_type", "created_at")
+        .order_by("staff_id", "created_at")
+    )
+    open_away_since = {}
+    for row in away_rows:
+        staff_id = row["staff_id"]
+        if staff_id not in metrics:
+            continue
+        action_type = row["action_type"]
+        action_time = row["created_at"]
+        if action_type == StaffAction.ActionType.APP_BACKGROUNDED:
+            open_away_since[staff_id] = action_time
+            continue
+        away_started_at = open_away_since.pop(staff_id, None)
+        if not away_started_at:
+            continue
+        overlap_start = max(away_started_at, lookback_start)
+        away_seconds = max(0, int((action_time - overlap_start).total_seconds()))
+        if away_seconds >= 10 * 60:
+            metrics[staff_id]["long_away_count"] += 1
+
+    for staff_id, away_started_at in open_away_since.items():
+        if staff_id not in metrics:
+            continue
+        overlap_start = max(away_started_at, lookback_start)
+        away_seconds = max(0, int((current_time - overlap_start).total_seconds()))
+        if away_seconds >= 10 * 60:
+            metrics[staff_id]["long_away_count"] += 1
+
+    for (staff_id, _day), day_calls in calls_by_staff_day.items():
+        summary = _call_activity_block_summary(day_calls)
+        metrics[staff_id]["suspicious_block_count"] += summary["suspicious_block_count"]
+        metrics[staff_id]["zero_only_block_count"] += summary["zero_only_block_count"]
+        metrics[staff_id]["suspicious_attempt_count"] += summary["suspicious_attempt_count"]
 
     quality_payload = {}
     for staff_id, staff_metrics in metrics.items():
@@ -1871,6 +2157,13 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
         )
         callback_total = staff_metrics["callback_total"]
         missed_callback_count = staff_metrics["missed_callbacks"]
+        verified_attempt_count = staff_metrics["verified_attempt_count"]
+        real_call_count = staff_metrics["real_call_count"]
+        zero_second_attempt_count = staff_metrics["zero_second_attempt_count"]
+        suspicious_block_count = staff_metrics["suspicious_block_count"]
+        zero_only_block_count = staff_metrics["zero_only_block_count"]
+        suspicious_attempt_count = staff_metrics["suspicious_attempt_count"]
+        long_away_count = staff_metrics["long_away_count"]
 
         weighted_total = Decimal("0")
         total_weight = Decimal("0")
@@ -1902,12 +2195,33 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
             weighted_total += callback_score * Decimal("0.20")
             total_weight += Decimal("0.20")
 
-        has_activity = total_completed_calls > 0 or followup_started_count > 0 or callback_total > 0
-        overall_score = int((weighted_total / total_weight).quantize(Decimal("1"))) if total_weight > 0 else 0
+        if total_weight > 0:
+            overall_score = int((weighted_total / total_weight).quantize(Decimal("1")))
+        else:
+            overall_score = 0
+
+        penalty_points = min((suspicious_block_count * 12) + (zero_only_block_count * 10), 40)
+        penalty_points += min(long_away_count * 5, 20)
+        overall_score = max(overall_score - penalty_points, 0)
+
+        has_activity = (
+            total_completed_calls > 0
+            or verified_attempt_count > 0
+            or followup_started_count > 0
+            or callback_total > 0
+        )
 
         outcome_value = int(outcome_score.quantize(Decimal("1"))) if outcome_score is not None else None
         followup_value = int(followup_score.quantize(Decimal("1"))) if followup_score is not None else None
         callback_value = int(callback_score.quantize(Decimal("1"))) if callback_score is not None else None
+        if verified_attempt_count > 0:
+            attempt_review_label = f"{real_call_count} real from {verified_attempt_count} attempts"
+        else:
+            attempt_review_label = "--"
+        if long_away_count > 0:
+            away_review_label = f"{long_away_count} long away periods"
+        else:
+            away_review_label = "Within limit"
 
         quality_payload[staff_id] = {
             "score": overall_score,
@@ -1917,6 +2231,10 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
                 followup_started_count=followup_started_count,
                 followup_closed_count=followup_closed_count,
                 missed_callback_count=missed_callback_count,
+                suspicious_block_count=suspicious_block_count,
+                suspicious_attempt_count=suspicious_attempt_count,
+                zero_only_block_count=zero_only_block_count,
+                long_away_count=long_away_count,
             ),
             "has_activity": has_activity,
             "outcome_consistency": outcome_value,
@@ -1929,6 +2247,15 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
             "followup_closed_count": followup_closed_count,
             "callback_total": callback_total,
             "missed_callbacks": missed_callback_count,
+            "verified_attempt_count": verified_attempt_count,
+            "real_call_count": real_call_count,
+            "zero_second_attempt_count": zero_second_attempt_count,
+            "suspicious_block_count": suspicious_block_count,
+            "zero_only_block_count": zero_only_block_count,
+            "suspicious_attempt_count": suspicious_attempt_count,
+            "attempt_review_label": attempt_review_label,
+            "away_review_label": away_review_label,
+            "long_away_count": long_away_count,
             "lookback_days": QUALITY_SCORE_LOOKBACK_DAYS,
         }
 
@@ -2787,16 +3114,13 @@ def build_dashboard_payload():
     work_coverage_pct = round((active_staff / total_staff) * 100) if total_staff else 0
     short_calls_blocked = calls_today.filter(status=Call.Status.INVALID_SHORT).count()
 
-    active_seconds_today = sessions_today.aggregate(total=Sum("active_seconds")).get("total") or 0
+    session_totals = _effective_active_seconds_map(start_at=start, end_at=end, staff_ids=staff_ids)
+    active_seconds_today = sum(session_totals.values())
     salary_ready = sessions_today.values("staff_id").distinct().count()
 
     converted_counter = Counter(
         calls_today.filter(status=Call.Status.CONVERTED).values_list("staff_id", flat=True)
     )
-    session_totals = {
-        row["staff_id"]: row["total"] or 0
-        for row in sessions_today.values("staff_id").annotate(total=Sum("active_seconds"))
-    }
     call_totals = {
         row["staff_id"]: row["total"] or 0
         for row in qualifying_calls_today.values("staff_id").annotate(total=Sum("duration_seconds"))
@@ -3026,12 +3350,7 @@ def build_team_management_payload():
         .values("staff_id")
         .annotate(count=Count("id"))
     }
-    active_totals = {
-        row["staff_id"]: row["total"] or 0
-        for row in Session.objects.filter(login_time__range=(start, end))
-        .values("staff_id")
-        .annotate(total=Sum("active_seconds"))
-    }
+    active_totals = _effective_active_seconds_map(start_at=start, end_at=end, staff_ids=staff_ids)
     assigned_totals = {
         row["assigned_to"]: row["count"]
         for row in _lead_queue_queryset().exclude(assigned_to=None)
@@ -3111,6 +3430,12 @@ def build_team_management_payload():
                 "outcome_consistency_label": quality.get("outcome_consistency_label", "--"),
                 "followup_completion_label": quality.get("followup_completion_label", "--"),
                 "missed_callbacks": quality.get("missed_callbacks", 0),
+                "attempt_review_label": quality.get("attempt_review_label", "--"),
+                "away_review_label": quality.get("away_review_label", "Within limit"),
+                "suspicious_block_count": quality.get("suspicious_block_count", 0),
+                "zero_only_block_count": quality.get("zero_only_block_count", 0),
+                "zero_second_attempt_count": quality.get("zero_second_attempt_count", 0),
+                "real_call_count": quality.get("real_call_count", 0),
             }
         )
 
@@ -3152,7 +3477,11 @@ def build_staff_profile_payload(request, staff):
     )
     quality = _build_staff_quality_metrics([staff.id]).get(staff.id, {})
 
-    active_seconds_today = sessions_today.aggregate(total=Sum("active_seconds")).get("total") or 0
+    active_seconds_today = _effective_active_seconds_for_staff(
+        staff=staff,
+        start_at=start,
+        end_at=end,
+    )
     converted_today = qualifying_calls_today.filter(status=Call.Status.CONVERTED).count()
     no_answer_today = qualifying_calls_today.filter(status=Call.Status.NO_ANSWER).count()
 
@@ -3239,6 +3568,14 @@ def build_staff_profile_payload(request, staff):
             "followup_closed_count": quality.get("followup_closed_count", 0),
             "callback_total": quality.get("callback_total", 0),
             "missed_callbacks": quality.get("missed_callbacks", 0),
+            "attempt_review_label": quality.get("attempt_review_label", "--"),
+            "away_review_label": quality.get("away_review_label", "Within limit"),
+            "suspicious_block_count": quality.get("suspicious_block_count", 0),
+            "zero_only_block_count": quality.get("zero_only_block_count", 0),
+            "zero_second_attempt_count": quality.get("zero_second_attempt_count", 0),
+            "real_call_count": quality.get("real_call_count", 0),
+            "verified_attempt_count": quality.get("verified_attempt_count", 0),
+            "long_away_count": quality.get("long_away_count", 0),
         },
         "identity_details": {
             "email": staff.email or "--",
@@ -4067,10 +4404,12 @@ def build_work_hours_payload():
     live_call_staff_ids = _live_call_staff_ids()
 
     sessions_today = Session.objects.filter(login_time__range=(start, end)).select_related("staff").order_by("-login_time")
-    totals = {
-        row["staff_id"]: row["total"] or 0
-        for row in sessions_today.values("staff_id").annotate(total=Sum("active_seconds"))
-    }
+    staff_list = list(_staff_queryset())
+    totals = _effective_active_seconds_map(
+        start_at=start,
+        end_at=end,
+        staff_ids=[staff.id for staff in staff_list],
+    )
     session_counts = {
         row["staff_id"]: row["count"]
         for row in sessions_today.values("staff_id").annotate(count=Count("id"))
@@ -4089,7 +4428,7 @@ def build_work_hours_payload():
             )
 
     summary_rows = []
-    for staff in _staff_queryset():
+    for staff in staff_list:
         session = open_sessions.get(staff.id)
         summary_rows.append(
             {
@@ -4309,7 +4648,11 @@ def build_staff_today_payload(staff):
     learning_payload = build_staff_learning_payload(staff)
     pending_status_call = get_pending_status_call(staff)
 
-    active_seconds = sessions_today.aggregate(total=Sum("active_seconds")).get("total") or 0
+    active_seconds = _effective_active_seconds_for_staff(
+        staff=staff,
+        start_at=start,
+        end_at=end,
+    )
     calls_count = qualifying_calls.count()
     follow_up_count = positive_leads.count()
     callback_count = callback_leads.count()
