@@ -3498,7 +3498,7 @@ def build_staff_profile_payload(request, staff):
     recent_sessions = Session.objects.filter(staff=staff).order_by("-login_time")[:12]
     calls_today = Call.objects.filter(staff=staff, start_time__range=(start, end))
     qualifying_calls_today = calls_today.filter(is_qualifying=True)
-    recent_calls = Call.objects.filter(staff=staff).select_related("lead").order_by("-start_time")[:20]
+    recent_calls = Call.objects.filter(staff=staff).select_related("lead").order_by("-start_time")
     assigned_leads = _ordered_lead_queryset(
         Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES).select_related("assigned_to"),
         now=timezone.now(),

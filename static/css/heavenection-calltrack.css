@@ -1116,6 +1116,38 @@
     gap: 0.65rem;
 }
 
+.hc-staff-call-log-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.9rem;
+}
+
+.hc-staff-call-log-note {
+    color: #667792;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.hc-staff-call-log-search {
+    max-width: 280px;
+    border-radius: 14px;
+}
+
+.hc-staff-call-log-scroller {
+    max-height: 35rem;
+    overflow-y: auto;
+    border-radius: 18px;
+}
+
+.hc-staff-call-log-scroller thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f7f9fd;
+}
+
 .hc-staff-profile-watch-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1576,6 +1608,15 @@
 
     .hc-staff-profile-hero-main {
         flex-direction: column;
+    }
+
+    .hc-staff-call-log-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .hc-staff-call-log-search {
+        max-width: none;
     }
 
     .hc-staff-profile-note {

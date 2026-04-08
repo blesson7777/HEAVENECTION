@@ -26,6 +26,35 @@
         }
       });
     });
+
+    const callSearchInput = document.getElementById('staffCallActivitySearch');
+    const callRows = Array.from(
+      document.querySelectorAll('#staffCallActivityBody tr[data-search-text]')
+    );
+    const callEmptyState = document.getElementById('staffCallActivityEmpty');
+
+    if (callSearchInput && callRows.length) {
+      const applyCallSearch = () => {
+        const query = callSearchInput.value.trim().toLowerCase();
+        let visibleCount = 0;
+
+        callRows.forEach((row) => {
+          const haystack = row.dataset.searchText || '';
+          const matches = !query || haystack.includes(query);
+          row.classList.toggle('d-none', !matches);
+          if (matches) {
+            visibleCount += 1;
+          }
+        });
+
+        if (callEmptyState) {
+          callEmptyState.classList.toggle('d-none', visibleCount !== 0);
+        }
+      };
+
+      callSearchInput.addEventListener('input', applyCallSearch);
+      applyCallSearch();
+    }
   })();
 </script>
 {% endblock %}
@@ -418,11 +447,23 @@
         <div class="hc-surface-card h-100 animate-on-scroll">
             <div class="mf-db2-panel-head mb-3">
                 <div>
-                    <span class="mf-db2-kicker">Recent Calls</span>
-                    <h5>Latest call activity</h5>
+                    <span class="mf-db2-kicker">Call Activity</span>
+                    <h5>View all call activity</h5>
                 </div>
             </div>
-            <div class="table-responsive">
+            <div class="hc-staff-call-log-toolbar">
+                <div class="hc-staff-call-log-note">
+                    Search by customer, phone number, time, duration, or result.
+                </div>
+                <input
+                    type="search"
+                    id="staffCallActivitySearch"
+                    class="form-control form-control-sm hc-staff-call-log-search"
+                    placeholder="Search call activity"
+                    autocomplete="off"
+                />
+            </div>
+            <div class="table-responsive hc-staff-call-log-scroller">
                 <table class="table hc-table align-middle mb-0">
                     <thead>
                         <tr>
@@ -432,9 +473,9 @@
                             <th>Status</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="staffCallActivityBody">
                         {% for call in recent_call_rows %}
-                        <tr>
+                        <tr data-search-text="{{ call.lead_name|lower }} {{ call.lead_phone|lower }} {{ call.start_time|lower }} {{ call.duration_label|lower }} {{ call.status_label|lower }} {{ call.callback_schedule_label|lower }}">
                             <td>
                                 <strong>{{ call.lead_name }}</strong>
                                 <div class="text-muted small">{{ call.lead_phone }}</div>
@@ -448,6 +489,9 @@
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+            <div id="staffCallActivityEmpty" class="hc-empty-state d-none mt-3">
+                <p class="mb-0">No call activity matches this search.</p>
             </div>
         </div>
     </div>
