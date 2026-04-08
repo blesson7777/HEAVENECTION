@@ -3106,6 +3106,7 @@ def _release_due_callback_leads_from_inactive_staff(*, now=None, active_staff_id
 def build_dashboard_payload():
     today, start, end = _today_range()
     staff_queryset = Staff.objects.filter(is_active=True, role=Staff.Role.STAFF)
+    staff_ids = list(staff_queryset.values_list("id", flat=True))
     active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
     week_start, week_end = _week_range()
     month_start, month_end = _month_range()
