@@ -31,14 +31,61 @@
 {% endblock %}
 
 {% block admin_content %}
-<section class="row g-4">
+<section class="hc-surface-card hc-staff-profile-hero animate-on-scroll">
+    <div class="hc-staff-profile-hero-main">
+        <div class="hc-staff-profile-persona">
+            <span class="hc-staff-profile-avatar">{{ staff_member.name|slice:":1"|upper }}</span>
+            <div class="hc-staff-profile-persona-copy">
+                <span class="mf-db2-kicker">Staff Profile</span>
+                <h3>{{ staff_member.name }}</h3>
+                <p>{{ staff_member.phone }}{% if identity_details.email %} | {{ identity_details.email }}{% endif %}</p>
+                <div class="hc-staff-profile-badges">
+                    <span class="hc-status {% if summary.online_label == 'Online' %}hc-status-success{% elif summary.online_label == 'Away' or summary.online_label == 'Warning' %}hc-status-warning{% else %}hc-status-muted{% endif %}">
+                        {{ summary.online_label }}{% if not staff_member.is_active %} / Inactive{% endif %}
+                    </span>
+                    <span class="hc-sync-pill"><i class="bi bi-cash-stack"></i> {{ summary.compensation_type_label }}</span>
+                    <span class="hc-sync-pill"><i class="bi bi-clock-history"></i> {{ summary.last_seen }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="hc-staff-profile-note">
+            <i class="bi bi-shield-check"></i>
+            <span>Monitor activity, payout readiness, documents, and live access from one page.</span>
+        </div>
+    </div>
+    <div class="hc-staff-profile-stat-grid">
+        <article class="hc-summary-card hc-staff-profile-stat-card">
+            <span class="mf-db2-kicker">Hours Today</span>
+            <h3>{{ summary.active_hours_today }}</h3>
+            <p class="mb-0">{{ today_label }}</p>
+        </article>
+        <article class="hc-summary-card hc-staff-profile-stat-card">
+            <span class="mf-db2-kicker">Calls Today</span>
+            <h3>{{ summary.calls_today }}</h3>
+            <p class="mb-0">{{ summary.converted_today }} converted</p>
+        </article>
+        <article class="hc-summary-card hc-staff-profile-stat-card">
+            <span class="mf-db2-kicker">Assigned Leads</span>
+            <h3>{{ summary.assigned_leads }}</h3>
+            <p class="mb-0">Queue target {{ summary.queue_target }}</p>
+        </article>
+        <article class="hc-summary-card hc-staff-profile-stat-card">
+            <span class="mf-db2-kicker">Quality Score</span>
+            <h3>{{ summary.quality_score }}</h3>
+            <p class="mb-0">{{ summary.quality_label }}</p>
+        </article>
+    </div>
+</section>
+
+<section class="row g-4 hc-staff-profile-layout">
     <div class="col-xl-4">
-        <div class="hc-surface-card h-100">
+        <div class="hc-staff-profile-side-stack">
+        <div class="hc-surface-card hc-staff-profile-primary">
             <div class="d-flex align-items-start justify-content-between gap-3 mb-4">
                 <div>
-                    <span class="mf-db2-kicker">Staff Profile</span>
+                    <span class="mf-db2-kicker">Live Snapshot</span>
                     <h4 class="mb-1">{{ staff_member.name }}</h4>
-                    <p class="text-muted mb-0">{{ staff_member.phone }}</p>
+                    <p class="text-muted mb-0">{{ summary.status_label }}</p>
                 </div>
                 <span class="hc-status {% if summary.online_label == 'Online' %}hc-status-success{% elif summary.online_label == 'Away' or summary.online_label == 'Warning' %}hc-status-warning{% else %}hc-status-muted{% endif %}">
                     {{ summary.online_label }}{% if not staff_member.is_active %} / Inactive{% endif %}
@@ -48,35 +95,35 @@
             <div class="row g-3 mb-4">
                 <div class="col-6">
                     <div class="hc-summary-card h-100">
-                        <span class="mf-db2-kicker">Hours Today</span>
-                        <h3 class="mb-1">{{ summary.active_hours_today }}</h3>
-                        <p class="mb-0 text-muted">{{ today_label }}</p>
+                        <span class="mf-db2-kicker">Queue Target</span>
+                        <h3 class="mb-1">{{ summary.queue_target }}</h3>
+                        <p class="mb-0 text-muted">Leads kept ready for this staff.</p>
                     </div>
                 </div>
                 <div class="col-6">
                     <div class="hc-summary-card h-100">
-                        <span class="mf-db2-kicker">Calls Today</span>
-                        <h3 class="mb-1">{{ summary.calls_today }}</h3>
-                        <p class="mb-0 text-muted">{{ summary.converted_today }} converted</p>
+                        <span class="mf-db2-kicker">Hourly Rate</span>
+                        <h3 class="mb-1">{{ summary.hourly_rate }}</h3>
+                        <p class="mb-0 text-muted">Base earning for active work time.</p>
                     </div>
                 </div>
                 <div class="col-6">
                     <div class="hc-summary-card h-100">
-                        <span class="mf-db2-kicker">Assigned Leads</span>
-                        <h3 class="mb-1">{{ summary.assigned_leads }}</h3>
-                        <p class="mb-0 text-muted">Queue target: {{ summary.queue_target }}</p>
+                        <span class="mf-db2-kicker">Call Rate</span>
+                        <h3 class="mb-1">{{ summary.call_rate }}</h3>
+                        <p class="mb-0 text-muted">Extra amount added for call-based pay.</p>
                     </div>
                 </div>
                 <div class="col-6">
                     <div class="hc-summary-card h-100">
-                        <span class="mf-db2-kicker">Quality Score</span>
-                        <h3 class="mb-1">{{ summary.quality_score }}</h3>
-                        <p class="mb-0 text-muted">{{ summary.quality_label }}</p>
+                        <span class="mf-db2-kicker">No Response Today</span>
+                        <h3 class="mb-1">{{ summary.no_answer_today }}</h3>
+                        <p class="mb-0 text-muted">Calls that did not connect today.</p>
                     </div>
                 </div>
             </div>
 
-            <div class="hc-summary-card mb-4">
+            <div class="hc-summary-card hc-staff-profile-review mb-4">
                 <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
                     <div>
                         <span class="mf-db2-kicker">Quality Review</span>
@@ -107,9 +154,9 @@
                             <small>{{ summary.zero_second_attempt_count }} zero-second attempts from {{ summary.verified_attempt_count }} verified attempts.</small>
                         </div>
                         <div class="hc-profile-meta-card">
-                            <span class="hc-profile-meta-label">Away Review</span>
+                            <span class="hc-profile-meta-label">Away History</span>
                             <strong>{{ summary.away_review_label }}</strong>
-                            <small>{{ summary.long_away_count }} away period(s) longer than 10 minutes.</small>
+                            <small>{{ summary.long_away_count }} long away period(s) recorded.</small>
                         </div>
                         <div class="hc-profile-meta-card">
                             <span class="hc-profile-meta-label">Today Review</span>
@@ -119,7 +166,7 @@
                     </div>
                 </div>
 
-            <div class="hc-summary-card">
+            <div class="hc-summary-card hc-staff-profile-access-card">
                 <div class="d-flex align-items-start justify-content-between gap-3">
                     <div>
                         <span class="mf-db2-kicker">Access Control</span>
@@ -143,7 +190,7 @@
                 </div>
             </div>
 
-            <div class="hc-summary-card mt-4">
+            <div class="hc-summary-card hc-staff-profile-doc-card mt-4">
                 <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
                     <div>
                         <span class="mf-db2-kicker">Identity And Payout</span>
@@ -177,40 +224,51 @@
                         <strong>{{ identity_details.aadhar_number }}</strong>
                     </div>
                 </div>
-                <div class="mt-3">
-                    <span class="hc-profile-meta-label">Aadhaar Photo</span>
-                    {% if identity_details.aadhar_photo_url %}
-                    <a href="{{ identity_details.aadhar_photo_url }}" target="_blank" rel="noopener" class="hc-inline-link d-inline-flex align-items-center gap-2 mb-2">
-                        <i class="bi bi-box-arrow-up-right"></i>
-                        <span>Open full image</span>
-                    </a>
-                    <div class="hc-document-preview">
-                        <img src="{{ identity_details.aadhar_photo_url }}" alt="{{ staff_member.name }} Aadhaar" class="hc-document-preview-image">
+                <div class="hc-staff-profile-doc-grid mt-3">
+                    <div>
+                        <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                            <span class="hc-profile-meta-label mb-0">Aadhaar Photo</span>
+                            {% if identity_details.aadhar_photo_url %}
+                            <a href="{{ identity_details.aadhar_photo_url }}" target="_blank" rel="noopener" class="hc-inline-link d-inline-flex align-items-center gap-2">
+                                <i class="bi bi-box-arrow-up-right"></i>
+                                <span>Open</span>
+                            </a>
+                            {% endif %}
+                        </div>
+                        {% if identity_details.aadhar_photo_url %}
+                        <div class="hc-document-preview">
+                            <img src="{{ identity_details.aadhar_photo_url }}" alt="{{ staff_member.name }} Aadhaar" class="hc-document-preview-image">
+                        </div>
+                        {% else %}
+                        <div class="hc-document-empty">No Aadhaar image uploaded yet.</div>
+                        {% endif %}
                     </div>
-                    {% else %}
-                    <div class="hc-document-empty">No Aadhaar image uploaded yet.</div>
-                    {% endif %}
-                </div>
-                <div class="mt-3">
-                    <span class="hc-profile-meta-label">Passbook Photo</span>
-                    {% if identity_details.passbook_photo_url %}
-                    <a href="{{ identity_details.passbook_photo_url }}" target="_blank" rel="noopener" class="hc-inline-link d-inline-flex align-items-center gap-2 mb-2">
-                        <i class="bi bi-box-arrow-up-right"></i>
-                        <span>Open full image</span>
-                    </a>
-                    <div class="hc-document-preview">
-                        <img src="{{ identity_details.passbook_photo_url }}" alt="{{ staff_member.name }} Passbook" class="hc-document-preview-image">
+                    <div>
+                        <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                            <span class="hc-profile-meta-label mb-0">Passbook Photo</span>
+                            {% if identity_details.passbook_photo_url %}
+                            <a href="{{ identity_details.passbook_photo_url }}" target="_blank" rel="noopener" class="hc-inline-link d-inline-flex align-items-center gap-2">
+                                <i class="bi bi-box-arrow-up-right"></i>
+                                <span>Open</span>
+                            </a>
+                            {% endif %}
+                        </div>
+                        {% if identity_details.passbook_photo_url %}
+                        <div class="hc-document-preview">
+                            <img src="{{ identity_details.passbook_photo_url }}" alt="{{ staff_member.name }} Passbook" class="hc-document-preview-image">
+                        </div>
+                        {% else %}
+                        <div class="hc-document-empty">No passbook image uploaded yet.</div>
+                        {% endif %}
                     </div>
-                    {% else %}
-                    <div class="hc-document-empty">No passbook image uploaded yet.</div>
-                    {% endif %}
                 </div>
             </div>
+        </div>
         </div>
     </div>
 
     <div class="col-xl-8">
-        <div class="hc-surface-card">
+        <div class="hc-surface-card hc-staff-profile-editor">
             <div class="mf-db2-panel-head mb-3">
                 <div>
                     <span class="mf-db2-kicker">Manage Staff</span>
@@ -319,7 +377,7 @@
 
 <section class="row g-4 mt-1">
     <div class="col-xl-6">
-        <div class="hc-surface-card h-100">
+        <div class="hc-surface-card h-100 animate-on-scroll">
             <div class="mf-db2-panel-head mb-3">
                 <div>
                     <span class="mf-db2-kicker">Assigned Leads</span>
@@ -357,7 +415,7 @@
     </div>
 
     <div class="col-xl-6">
-        <div class="hc-surface-card h-100">
+        <div class="hc-surface-card h-100 animate-on-scroll">
             <div class="mf-db2-panel-head mb-3">
                 <div>
                     <span class="mf-db2-kicker">Recent Calls</span>
@@ -395,7 +453,7 @@
     </div>
 </section>
 
-<section class="hc-surface-card mt-4">
+<section class="hc-surface-card hc-staff-profile-referrals mt-4 animate-on-scroll">
     <div class="mf-db2-panel-head mb-3">
         <div>
             <span class="mf-db2-kicker">Referral Entries</span>
@@ -406,7 +464,7 @@
             {{ referral_summary.submitted_count }} submitted
         </span>
     </div>
-    <div class="d-flex flex-wrap gap-2 mb-3">
+    <div class="d-flex flex-wrap gap-2 mb-3 hc-staff-profile-referral-pills">
         <span class="hc-sync-pill"><i class="bi bi-person-dash"></i>{{ referral_summary.not_joined_count }} not joined</span>
         <span class="hc-sync-pill"><i class="bi bi-person-check"></i>{{ referral_summary.joined_count }} joined</span>
         <span class="hc-sync-pill"><i class="bi bi-briefcase"></i>{{ referral_summary.started_working_count }} started working</span>
@@ -456,7 +514,7 @@
     </div>
 </section>
 
-<section class="hc-surface-card mt-4">
+<section class="hc-surface-card hc-staff-profile-sessions mt-4 animate-on-scroll">
     <div class="mf-db2-panel-head mb-3">
         <div>
             <span class="mf-db2-kicker">Recent Sessions</span>

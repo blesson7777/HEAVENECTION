@@ -2012,11 +2012,6 @@ def _build_quality_note(
             f"{zero_only_block_count} calling block(s) had only unanswered attempts, "
             "so no work hours were added for those periods."
         )
-    if long_away_count:
-        return (
-            f"{long_away_count} away-from-app period(s) ran longer than 10 minutes "
-            "and need review."
-        )
     if followup_started_count and followup_closed_count:
         return f"{followup_closed_count} of {followup_started_count} follow-up leads completed."
     if followup_started_count:
@@ -2222,7 +2217,6 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
             overall_score = 0
 
         penalty_points = min((suspicious_block_count * 12) + (zero_only_block_count * 10), 40)
-        penalty_points += min(long_away_count * 5, 20)
         overall_score = max(overall_score - penalty_points, 0)
         if verified_attempt_count >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
             if real_call_count == 0:
@@ -2251,9 +2245,9 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
         else:
             attempt_review_label = "--"
         if long_away_count > 0:
-            away_review_label = f"{long_away_count} long away periods"
+            away_review_label = f"{long_away_count} period(s) recorded"
         else:
-            away_review_label = "Within limit"
+            away_review_label = "No long away periods"
 
         quality_payload[staff_id] = {
             "score": overall_score,
