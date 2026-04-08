@@ -5,293 +5,407 @@
 {% endblock %}
 
 {% block admin_content %}
-<section class="row g-4">
+<section class="row g-4 animate-on-scroll">
     <div class="col-sm-6 col-xl-3">
         <div class="hc-surface-card">
-            <span class="mf-db2-kicker">Weekly Payable</span>
-            <h4 class="mt-2 mb-1">{{ summary.weekly_payable }}</h4>
-            <p class="text-muted mb-0">{{ weekly_breakdown.period_label }}</p>
+            <span class="mf-db2-kicker">Due Salary</span>
+            <h4 class="mt-2 mb-1">{{ summary.due_salary }}</h4>
+            <p class="text-muted mb-0">{{ due_snapshot.period_label }}</p>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
         <div class="hc-surface-card">
-            <span class="mf-db2-kicker">Monthly Payable</span>
-            <h4 class="mt-2 mb-1">{{ summary.monthly_payable }}</h4>
-            <p class="text-muted mb-0">{{ monthly_breakdown.period_label }}</p>
+            <span class="mf-db2-kicker">Current Earned</span>
+            <h4 class="mt-2 mb-1">{{ summary.current_earned }}</h4>
+            <p class="text-muted mb-0">{{ running_snapshot.period_label }}</p>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="hc-surface-card">
+            <span class="mf-db2-kicker">Advance Available</span>
+            <h4 class="mt-2 mb-1">{{ summary.advance_available }}</h4>
+            <p class="text-muted mb-0">Can be released only from the running cycle.</p>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
         <div class="hc-surface-card">
             <span class="mf-db2-kicker">Total Credited</span>
             <h4 class="mt-2 mb-1">{{ summary.total_paid }}</h4>
-            <p class="text-muted mb-0">Paid salary history</p>
-        </div>
-    </div>
-    <div class="col-sm-6 col-xl-3">
-        <div class="hc-surface-card">
-            <span class="mf-db2-kicker">Last Credit</span>
-            <h4 class="mt-2 mb-1">{{ summary.last_paid_amount }}</h4>
-            <p class="text-muted mb-0">{{ summary.last_paid_at }}</p>
+            <p class="text-muted mb-0">Last credit {{ summary.last_paid_amount }} on {{ summary.last_paid_at }}</p>
         </div>
     </div>
 </section>
 
 <section class="row g-4 mt-1">
-    <div class="col-xl-6">
+    <div class="col-xl-4">
         <div class="hc-surface-card h-100">
             <div class="mf-db2-panel-head mb-3">
                 <div>
-                    <span class="mf-db2-kicker">Weekly Breakdown</span>
-                    <h5>{{ staff_member.name }} weekly salary details</h5>
+                    <span class="mf-db2-kicker">Payout Profile</span>
+                    <h5>{{ staff_member.name }}</h5>
                 </div>
-                <span class="hc-sync-pill"><i class="bi bi-calendar2-week"></i> {{ weekly_breakdown.period_label }}</span>
+                <span class="hc-sync-pill"><i class="bi bi-wallet2"></i> {{ summary.compensation_type_label }}</span>
             </div>
             <div class="hc-profile-meta-grid">
-                <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Hours</span>
-                    <strong>{{ weekly_breakdown.hours }}</strong>
-                </div>
-                <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Recommended</span>
-                    <strong>{{ weekly_breakdown.recommended_amount }}</strong>
-                </div>
-                <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Already Credited</span>
-                    <strong>{{ weekly_breakdown.paid_total }}</strong>
-                </div>
-                <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Balance</span>
-                    <strong>{{ weekly_breakdown.balance_amount }}</strong>
-                </div>
-                <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Base Pay</span>
-                    <strong>{{ weekly_breakdown.base_pay }}</strong>
-                </div>
-                <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Call Earnings</span>
-                    <strong>{{ weekly_breakdown.call_earnings }}</strong>
-                </div>
                 <div class="hc-profile-meta-card hc-profile-meta-card-wide">
-                    <span class="hc-profile-meta-label">Bonus</span>
-                    <strong>{{ weekly_breakdown.bonus_earnings }}</strong>
+                    <span class="hc-profile-meta-label">Payout Schedule</span>
+                    <strong>{{ summary.schedule_label }}</strong>
+                    {% if summary.weekly_payout_day_label %}
+                    <small>Weekly day: {{ summary.weekly_payout_day_label }}</small>
+                    {% endif %}
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Email</span>
+                    <strong>{{ identity_details.email }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Account Holder</span>
+                    <strong>{{ identity_details.bank_account_name }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Bank</span>
+                    <strong>{{ identity_details.bank_name }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Account Number</span>
+                    <strong>{{ identity_details.bank_account_number }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">IFSC</span>
+                    <strong>{{ identity_details.bank_ifsc_code }}</strong>
                 </div>
             </div>
-            <form method="post" action="{% url 'salary-detail-page' staff_member.id %}" class="mt-4">
-                {% csrf_token %}
-                <input type="hidden" name="payment_action" value="mark_weekly_paid">
-                <input type="hidden" name="period_start" value="{{ weekly_breakdown.period_start }}">
-                <input type="hidden" name="period_end" value="{{ weekly_breakdown.period_end }}">
-                <input type="hidden" name="paid_amount" value="{{ weekly_breakdown.balance_amount_raw }}">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="weeklyPaymentReference">Reference</label>
-                        <input type="text" class="form-control" id="weeklyPaymentReference" name="payment_reference" placeholder="Txn id / bank ref">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="weeklyPaymentNote">Note</label>
-                        <input type="text" class="form-control" id="weeklyPaymentNote" name="payment_note" placeholder="Optional note">
-                    </div>
-                    <div class="col-12">
-                        <div class="text-muted small">Only the remaining balance can be credited for this period.</div>
-                    </div>
-                </div>
-                <div class="d-flex justify-content-end mt-4">
-                    <button type="submit" class="btn btn-primary"{% if weekly_breakdown.is_fully_paid %} disabled{% endif %}>
-                        {% if weekly_breakdown.is_fully_paid %}Weekly Salary Fully Paid{% else %}Pay Weekly Balance{% endif %}
-                    </button>
-                </div>
-            </form>
         </div>
     </div>
 
-    <div class="col-xl-6">
+    <div class="col-xl-8">
         <div class="hc-surface-card h-100">
             <div class="mf-db2-panel-head mb-3">
                 <div>
-                    <span class="mf-db2-kicker">Monthly Breakdown</span>
-                    <h5>{{ staff_member.name }} monthly salary details</h5>
+                    <span class="mf-db2-kicker">Due Salary Details</span>
+                    <h5>Completed payout period ready for payment</h5>
                 </div>
-                <span class="hc-sync-pill"><i class="bi bi-calendar2-month"></i> {{ monthly_breakdown.period_label }}</span>
+                <span class="hc-sync-pill"><i class="bi bi-calendar2-check"></i> {{ due_snapshot.cycle_label }}</span>
             </div>
-            <div class="hc-profile-meta-grid">
-                <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Hours</span>
-                    <strong>{{ monthly_breakdown.hours }}</strong>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <div class="hc-summary-card h-100">
+                        <span class="mf-db2-kicker">Period</span>
+                        <h6 class="mb-1">{{ due_snapshot.period_label }}</h6>
+                        <p class="mb-0 text-muted">Closed payout period</p>
+                    </div>
                 </div>
-                <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Recommended</span>
-                    <strong>{{ monthly_breakdown.recommended_amount }}</strong>
+                <div class="col-md-3">
+                    <div class="hc-summary-card h-100">
+                        <span class="mf-db2-kicker">Hours</span>
+                        <h3 class="mb-1">{{ due_snapshot.hours_label }}</h3>
+                        <p class="mb-0 text-muted">Tracked working hours</p>
+                    </div>
                 </div>
-                <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Already Credited</span>
-                    <strong>{{ monthly_breakdown.paid_total }}</strong>
+                <div class="col-md-3">
+                    <div class="hc-summary-card h-100">
+                        <span class="mf-db2-kicker">Earned</span>
+                        <h3 class="mb-1">{{ due_snapshot.earned_total_label }}</h3>
+                        <p class="mb-0 text-muted">Total calculated earnings</p>
+                    </div>
                 </div>
-                <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Balance</span>
-                    <strong>{{ monthly_breakdown.balance_amount }}</strong>
+                <div class="col-md-3">
+                    <div class="hc-summary-card h-100">
+                        <span class="mf-db2-kicker">Balance</span>
+                        <h3 class="mb-1">{{ due_snapshot.balance_label }}</h3>
+                        <p class="mb-0 text-muted">Available to pay now</p>
+                    </div>
                 </div>
+            </div>
+            <div class="hc-profile-meta-grid mt-3">
                 <div class="hc-profile-meta-card">
                     <span class="hc-profile-meta-label">Base Pay</span>
-                    <strong>{{ monthly_breakdown.base_pay }}</strong>
+                    <strong>{{ due_snapshot.base_pay_label }}</strong>
                 </div>
                 <div class="hc-profile-meta-card">
                     <span class="hc-profile-meta-label">Call Earnings</span>
-                    <strong>{{ monthly_breakdown.call_earnings }}</strong>
+                    <strong>{{ due_snapshot.call_earnings_label }}</strong>
                 </div>
-                <div class="hc-profile-meta-card hc-profile-meta-card-wide">
-                    <span class="hc-profile-meta-label">Bonus</span>
-                    <strong>{{ monthly_breakdown.bonus_earnings }}</strong>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Bonus Earnings</span>
+                    <strong>{{ due_snapshot.bonus_earnings_label }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Already Paid</span>
+                    <strong>{{ due_snapshot.paid_total_label }}</strong>
                 </div>
             </div>
-            <form method="post" action="{% url 'salary-detail-page' staff_member.id %}" class="mt-4">
-                {% csrf_token %}
-                <input type="hidden" name="payment_action" value="mark_monthly_paid">
-                <input type="hidden" name="period_start" value="{{ monthly_breakdown.period_start }}">
-                <input type="hidden" name="period_end" value="{{ monthly_breakdown.period_end }}">
-                <input type="hidden" name="paid_amount" value="{{ monthly_breakdown.balance_amount_raw }}">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="monthlyPaymentReference">Reference</label>
-                        <input type="text" class="form-control" id="monthlyPaymentReference" name="payment_reference" placeholder="Txn id / bank ref">
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="monthlyPaymentNote">Note</label>
-                        <input type="text" class="form-control" id="monthlyPaymentNote" name="payment_note" placeholder="Optional note">
-                    </div>
-                    <div class="col-12">
-                        <div class="text-muted small">Only the remaining balance can be credited for this period.</div>
-                    </div>
-                </div>
-                <div class="d-flex justify-content-end mt-4">
-                    <button type="submit" class="btn btn-dark"{% if monthly_breakdown.is_fully_paid %} disabled{% endif %}>
-                        {% if monthly_breakdown.is_fully_paid %}Monthly Salary Fully Paid{% else %}Pay Monthly Balance{% endif %}
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</section>
 
-<section class="row g-4 mt-1">
-    <div class="col-xl-5">
-        <div class="hc-surface-card h-100">
-            <div class="mf-db2-panel-head mb-3">
-                <div>
-                    <span class="mf-db2-kicker">Custom Payment</span>
-                    <h5>Credit a custom salary amount</h5>
-                </div>
-            </div>
-            <form method="post" action="{% url 'salary-detail-page' staff_member.id %}" novalidate>
+            {% if due_snapshot.is_payable %}
+            <form method="post" class="mt-4" novalidate>
                 {% csrf_token %}
-                <input type="hidden" name="payment_action" value="mark_custom_paid">
+                <input type="hidden" name="payment_action" value="pay_current_salary">
+                <input type="hidden" name="payment_kind" value="salary">
+                <input type="hidden" name="payout_cycle" value="{{ due_snapshot.payout_cycle }}">
+                <input type="hidden" name="period_start" value="{{ due_snapshot.period_start_value }}">
+                <input type="hidden" name="period_end" value="{{ due_snapshot.period_end_value }}">
                 <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="customPayoutCycle">Payout Cycle</label>
-                        <select class="form-select{% if custom_payment_errors.payout_cycle %} is-invalid{% endif %}" id="customPayoutCycle" name="payout_cycle">
-                            <option value="custom"{% if custom_form_data.payout_cycle == 'custom' %} selected{% endif %}>Custom</option>
-                            <option value="weekly"{% if custom_form_data.payout_cycle == 'weekly' %} selected{% endif %}>Weekly</option>
-                            <option value="monthly"{% if custom_form_data.payout_cycle == 'monthly' %} selected{% endif %}>Monthly</option>
-                        </select>
-                        {% if custom_payment_errors.payout_cycle %}<div class="invalid-feedback">{{ custom_payment_errors.payout_cycle }}</div>{% endif %}
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="dueSalaryAmount">Amount</label>
+                        <input type="number" step="0.01" min="0.01" max="{{ due_snapshot.balance_raw }}" class="form-control{% if payment_errors.paid_amount and payment_form_data.payment_kind != 'advance' %} is-invalid{% endif %}" id="dueSalaryAmount" name="paid_amount" value="{% if payment_form_data.payment_kind == 'advance' %}{{ due_snapshot.balance_raw }}{% else %}{{ payment_form_data.paid_amount|default:due_snapshot.balance_raw }}{% endif %}">
+                        {% if payment_errors.paid_amount and payment_form_data.payment_kind != 'advance' %}<div class="invalid-feedback">{{ payment_errors.paid_amount }}</div>{% endif %}
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="customPaidAmount">Credited Amount</label>
-                        <input type="number" step="0.01" min="0" class="form-control{% if custom_payment_errors.paid_amount %} is-invalid{% endif %}" id="customPaidAmount" name="paid_amount" value="{{ custom_form_data.paid_amount }}">
-                        {% if custom_payment_errors.paid_amount %}<div class="invalid-feedback">{{ custom_payment_errors.paid_amount }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="customPeriodStart">Period Start</label>
-                        <input type="date" class="form-control{% if custom_payment_errors.period_start %} is-invalid{% endif %}" id="customPeriodStart" name="period_start" value="{{ custom_form_data.period_start }}">
-                        {% if custom_payment_errors.period_start %}<div class="invalid-feedback">{{ custom_payment_errors.period_start }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="customPeriodEnd">Period End</label>
-                        <input type="date" class="form-control{% if custom_payment_errors.period_end %} is-invalid{% endif %}" id="customPeriodEnd" name="period_end" value="{{ custom_form_data.period_end }}">
-                        {% if custom_payment_errors.period_end %}<div class="invalid-feedback">{{ custom_payment_errors.period_end }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="customPaymentMethod">Payment Method</label>
-                        <select class="form-select{% if custom_payment_errors.payment_method %} is-invalid{% endif %}" id="customPaymentMethod" name="payment_method">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="dueSalaryMethod">Payment Method</label>
+                        <select class="form-select" id="dueSalaryMethod" name="payment_method">
                             {% for option in payment_method_options %}
-                            <option value="{{ option.value }}"{% if custom_form_data.payment_method == option.value %} selected{% endif %}>{{ option.label }}</option>
+                            <option value="{{ option.value }}"{% if payment_form_data.payment_method == option.value %} selected{% endif %}>{{ option.label }}</option>
                             {% endfor %}
                         </select>
-                        {% if custom_payment_errors.payment_method %}<div class="invalid-feedback">{{ custom_payment_errors.payment_method }}</div>{% endif %}
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="customPaymentReference">Reference</label>
-                        <input type="text" class="form-control{% if custom_payment_errors.payment_reference %} is-invalid{% endif %}" id="customPaymentReference" name="payment_reference" value="{{ custom_form_data.payment_reference }}" placeholder="Txn id / bank ref">
-                        {% if custom_payment_errors.payment_reference %}<div class="invalid-feedback">{{ custom_payment_errors.payment_reference }}</div>{% endif %}
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="dueSalaryReference">Transaction ID</label>
+                        <input type="text" class="form-control" id="dueSalaryReference" name="payment_reference" value="{{ payment_form_data.payment_reference }}" placeholder="Bank ref / UPI ref">
                     </div>
                     <div class="col-12">
-                        <label class="form-label fw-semibold" for="customPaymentNote">Note</label>
-                        <textarea class="form-control{% if custom_payment_errors.payment_note %} is-invalid{% endif %}" id="customPaymentNote" name="payment_note" rows="4" placeholder="Add a note for this credit">{{ custom_form_data.payment_note }}</textarea>
-                        {% if custom_payment_errors.payment_note %}<div class="invalid-feedback">{{ custom_payment_errors.payment_note }}</div>{% endif %}
+                        <label class="form-label fw-semibold" for="dueSalaryNote">Note</label>
+                        <textarea class="form-control" id="dueSalaryNote" name="payment_note" rows="2" placeholder="Optional note">{{ payment_form_data.payment_note }}</textarea>
                     </div>
                     <div class="col-12">
-                        <div class="text-muted small">Custom credits cannot exceed the remaining earnings for the selected period.</div>
+                        <div class="text-muted small">Only the due unpaid balance can be paid for this completed period.</div>
                     </div>
                 </div>
                 <div class="d-flex justify-content-end mt-4">
-                    <button type="submit" class="btn btn-primary">Save Custom Payment</button>
+                    <button type="submit" class="btn btn-primary">Pay Due Salary</button>
                 </div>
             </form>
+            {% else %}
+            <div class="hc-document-empty mt-4">No due salary is waiting for this completed payout period.</div>
+            {% endif %}
         </div>
     </div>
+</section>
 
-    <div class="col-xl-7">
+<section class="row g-4 mt-1">
+    <div class="col-xl-6">
         <div class="hc-surface-card h-100">
             <div class="mf-db2-panel-head mb-3">
                 <div>
-                    <span class="mf-db2-kicker">Salary History</span>
-                    <h5>Credited salary records</h5>
+                    <span class="mf-db2-kicker">Current Cycle Earnings</span>
+                    <h5>Running earnings and advance window</h5>
+                </div>
+                <span class="hc-sync-pill"><i class="bi bi-hourglass-split"></i> {{ running_snapshot.cycle_label }}</span>
+            </div>
+            <div class="hc-profile-meta-grid">
+                <div class="hc-profile-meta-card hc-profile-meta-card-wide">
+                    <span class="hc-profile-meta-label">Running Period</span>
+                    <strong>{{ running_snapshot.period_label }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Hours</span>
+                    <strong>{{ running_snapshot.hours_label }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Current Earned</span>
+                    <strong>{{ running_snapshot.earned_total_label }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Already Released</span>
+                    <strong>{{ running_snapshot.paid_total_label }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Advance Available</span>
+                    <strong>{{ running_snapshot.advance_available }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Base / Calls / Bonus</span>
+                    <strong>{{ running_snapshot.base_pay_label }}</strong>
+                    <small>{{ running_snapshot.call_earnings_label }} calls | {{ running_snapshot.bonus_earnings_label }} bonus</small>
                 </div>
             </div>
-            <div class="table-responsive">
-                <table class="table hc-table align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Period</th>
-                            <th>Cycle</th>
-                            <th>Hours</th>
-                            <th>Credited</th>
-                            <th>Method</th>
-                            <th>Paid At</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in salary_history_rows %}
-                        <tr>
-                            <td>
-                                <strong>{{ row.period_label }}</strong>
-                                <div class="text-muted small">Ref {{ row.payment_reference }}</div>
-                                <div class="text-muted small">{{ row.payment_note }}</div>
-                            </td>
-                            <td>{{ row.payout_cycle_label }}</td>
-                            <td>{{ row.total_hours_label }}</td>
-                            <td>
-                                <strong>{{ row.paid_amount }}</strong>
-                                <div class="text-muted small">Calculated {{ row.final_salary }}</div>
-                            </td>
-                            <td>{{ row.payment_method_label }}</td>
-                            <td>{{ row.paid_at }}</td>
-                            <td class="text-end">
-                                <form method="post" action="{% url 'salary-detail-page' staff_member.id %}" class="m-0 d-inline-block" onsubmit="return confirm('Delete this payment transaction?');">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="payment_action" value="delete_payment_transaction">
-                                    <input type="hidden" name="transaction_id" value="{{ row.id }}">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="7" class="text-center py-4">No salary credits recorded yet.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+
+            {% if running_snapshot.can_pay_advance %}
+            <form method="post" class="mt-4" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="payment_action" value="pay_current_salary">
+                <input type="hidden" name="payment_kind" value="advance">
+                <input type="hidden" name="payout_cycle" value="{{ running_snapshot.payout_cycle }}">
+                <input type="hidden" name="period_start" value="{{ running_snapshot.period_start_value }}">
+                <input type="hidden" name="period_end" value="{{ running_snapshot.period_end_value }}">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="advanceAmount">Advance Amount</label>
+                        <input type="number" step="0.01" min="0.01" max="{{ running_snapshot.advance_available_raw }}" class="form-control{% if payment_errors.paid_amount and payment_form_data.payment_kind == 'advance' %} is-invalid{% endif %}" id="advanceAmount" name="paid_amount" value="{% if payment_form_data.payment_kind == 'advance' %}{{ payment_form_data.paid_amount|default:running_snapshot.advance_available_raw }}{% else %}{{ running_snapshot.advance_available_raw }}{% endif %}">
+                        {% if payment_errors.paid_amount and payment_form_data.payment_kind == 'advance' %}<div class="invalid-feedback">{{ payment_errors.paid_amount }}</div>{% endif %}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="advanceMethod">Payment Method</label>
+                        <select class="form-select" id="advanceMethod" name="payment_method">
+                            {% for option in payment_method_options %}
+                            <option value="{{ option.value }}"{% if payment_form_data.payment_method == option.value %} selected{% endif %}>{{ option.label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="advanceReference">Transaction ID</label>
+                        <input type="text" class="form-control" id="advanceReference" name="payment_reference" value="{{ payment_form_data.payment_reference }}" placeholder="Bank ref / UPI ref">
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold" for="advanceNote">Note</label>
+                        <textarea class="form-control" id="advanceNote" name="payment_note" rows="2" placeholder="Optional note">Advance released{% if payment_form_data.payment_kind == 'advance' and payment_form_data.payment_note %} - {{ payment_form_data.payment_note }}{% endif %}</textarea>
+                    </div>
+                    <div class="col-12">
+                        <div class="text-muted small">Advance cannot exceed the currently earned unpaid amount.</div>
+                    </div>
+                </div>
+                <div class="d-flex justify-content-end mt-4">
+                    <button type="submit" class="btn btn-outline-primary">Pay Advance</button>
+                </div>
+            </form>
+            {% else %}
+            <div class="hc-document-empty mt-4">No advance can be released from the running cycle right now.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="col-xl-6">
+        <div class="hc-surface-card h-100">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Previous Month</span>
+                    <h5>Last completed monthly earning view</h5>
+                </div>
+                <span class="hc-sync-pill"><i class="bi bi-calendar2-month"></i> Monthly</span>
+            </div>
+            <div class="hc-profile-meta-grid">
+                <div class="hc-profile-meta-card hc-profile-meta-card-wide">
+                    <span class="hc-profile-meta-label">Period</span>
+                    <strong>{{ previous_month_snapshot.period_label }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Hours</span>
+                    <strong>{{ previous_month_snapshot.hours_label }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Earned</span>
+                    <strong>{{ previous_month_snapshot.earned_total_label }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Paid</span>
+                    <strong>{{ previous_month_snapshot.paid_total_label }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Balance</span>
+                    <strong>{{ previous_month_snapshot.balance_label }}</strong>
+                </div>
+                <div class="hc-profile-meta-card">
+                    <span class="hc-profile-meta-label">Base / Calls / Bonus</span>
+                    <strong>{{ previous_month_snapshot.base_pay_label }}</strong>
+                    <small>{{ previous_month_snapshot.call_earnings_label }} calls | {{ previous_month_snapshot.bonus_earnings_label }} bonus</small>
+                </div>
             </div>
         </div>
+    </div>
+</section>
+
+{% if company_flags.referral_enabled %}
+<section class="hc-surface-card animate-on-scroll mt-4">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Referral Reward</span>
+            <h5>Qualified referral rewards waiting for payment</h5>
+        </div>
+        <span class="hc-sync-pill"><i class="bi bi-gift"></i> {{ pending_referral_summary.amount_label }}</span>
+    </div>
+    {% if pending_referral_rewards %}
+    <div class="row g-3">
+        {% for reward in pending_referral_rewards %}
+        <div class="col-xl-6">
+            <form method="post" class="border rounded-4 p-3 h-100">
+                {% csrf_token %}
+                <input type="hidden" name="payment_action" value="pay_referral_reward">
+                <input type="hidden" name="reward_id" value="{{ reward.id }}">
+                <div class="fw-semibold">{{ reward.referred_staff_name }}</div>
+                <div class="text-muted small">{{ reward.referred_staff_phone }}</div>
+                <div class="text-muted small mt-1">Qualified after {{ reward.required_hours_label }} on {{ reward.qualified_at_label }}</div>
+                <div class="text-muted small mb-3">Reward {{ reward.reward_amount_label }}</div>
+                <div class="mb-2">
+                    <label class="form-label fw-semibold small" for="referralMethod{{ reward.id }}">Payment Method</label>
+                    <select class="form-select form-select-sm" id="referralMethod{{ reward.id }}" name="payment_method">
+                        {% for option in payment_method_options %}
+                        <option value="{{ option.value }}">{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label fw-semibold small" for="referralReference{{ reward.id }}">Transaction ID</label>
+                    <input type="text" class="form-control form-control-sm" id="referralReference{{ reward.id }}" name="payment_reference" placeholder="Bank ref / UPI ref">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold small" for="referralNote{{ reward.id }}">Note</label>
+                    <textarea class="form-control form-control-sm" id="referralNote{{ reward.id }}" name="payment_note" rows="2" placeholder="Optional note">Referral reward</textarea>
+                </div>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-outline-success btn-sm">Pay Referral Reward</button>
+                </div>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="hc-document-empty">No referral rewards are waiting for payment for this staff member.</div>
+    {% endif %}
+</section>
+{% endif %}
+
+<section class="hc-surface-card animate-on-scroll mt-4">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Payment History</span>
+            <h5>Recorded salary and advance transactions</h5>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Period</th>
+                    <th>Type</th>
+                    <th>Hours</th>
+                    <th>Credited</th>
+                    <th>Method</th>
+                    <th>Paid At</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in salary_history_rows %}
+                <tr>
+                    <td>
+                        <strong>{{ row.period_label }}</strong>
+                        <div class="text-muted small">Calculated {{ row.final_salary }}</div>
+                    </td>
+                    <td>
+                        <div>{{ row.payment_kind_label }}</div>
+                        <div class="text-muted small">{{ row.payout_cycle_label }}</div>
+                    </td>
+                    <td>{{ row.total_hours_label }}</td>
+                    <td>
+                        <strong>{{ row.paid_amount }}</strong>
+                        <div class="text-muted small">{{ row.payment_reference }}</div>
+                        <div class="text-muted small">{{ row.payment_note }}</div>
+                    </td>
+                    <td>{{ row.payment_method_label }}</td>
+                    <td>{{ row.paid_at }}</td>
+                    <td class="text-end">
+                        <form method="post" class="m-0 d-inline-block" onsubmit="return confirm('Delete this payment transaction?');">
+                            {% csrf_token %}
+                            <input type="hidden" name="payment_action" value="delete_payment_transaction">
+                            <input type="hidden" name="transaction_id" value="{{ row.id }}">
+                            <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center py-4">No payment transactions recorded yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </section>
 {% endblock %}

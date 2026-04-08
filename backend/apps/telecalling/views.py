@@ -105,8 +105,10 @@ from backend.apps.telecalling.services import (
     is_staff_lead_visible_now,
     mark_staff_seen,
     read_root_file,
+    reassign_staff_review_leads,
     record_staff_salary_payment,
     record_session_heartbeat,
+    reset_staff_review_leads_to_new_queue,
     release_staff_queue,
     reactivate_oldest_recovery_leads,
     set_active_app_release,
@@ -675,6 +677,30 @@ def staff_profile_page(request, staff_id):
 
             staff_errors = _normalize_errors(serializer.errors)
             messages.error(request, "Unable to change the staff account status.")
+        elif staff_action == "reassign_review_leads":
+            summary = reassign_staff_review_leads(staff)
+            if summary["review_count"] <= 0:
+                messages.info(request, "No review leads were found for this staff member.")
+            else:
+                messages.success(
+                    request,
+                    (
+                        f"{summary['assigned_count']} review lead(s) were returned to {staff.name}'s queue. "
+                        f"{summary['waiting_count']} remain waiting for the next queue slot. "
+                        f"{summary['released_count']} current queue lead(s) were released first."
+                    ),
+                )
+            return redirect("staff-profile-page", staff_id=staff.id)
+        elif staff_action == "reset_review_leads":
+            summary = reset_staff_review_leads_to_new_queue(staff)
+            if summary["review_count"] <= 0:
+                messages.info(request, "No review leads were found for this staff member.")
+            else:
+                messages.success(
+                    request,
+                    f"{summary['reopened_count']} review lead(s) were reopened as new leads.",
+                )
+            return redirect("staff-profile-page", staff_id=staff.id)
         else:
             password_value = request.POST.get("password", "")
             staff_form_data = {
@@ -1209,26 +1235,98 @@ def salary_detail_page(request, staff_id):
                 delete_salary_payment_transaction(transaction)
                 messages.success(request, "Payment transaction deleted successfully.")
                 return redirect("salary-detail-page", staff_id=staff.id)
-        elif payment_action == "mark_weekly_paid":
+        elif payment_action == "pay_current_salary":
             form_data = {
-                "payout_cycle": "weekly",
+                "payout_cycle": request.POST.get("payout_cycle"),
                 "period_start": request.POST.get("period_start"),
                 "period_end": request.POST.get("period_end"),
                 "paid_amount": request.POST.get("paid_amount"),
-                "payment_method": Salary.PaymentMethod.BANK_TRANSFER,
+                "payment_kind": request.POST.get(
+                    "payment_kind",
+                    SalaryPaymentTransaction.PaymentKind.SALARY,
+                ),
+                "payment_method": request.POST.get(
+                    "payment_method",
+                    Salary.PaymentMethod.BANK_TRANSFER,
+                ),
                 "payment_reference": request.POST.get("payment_reference", ""),
                 "payment_note": request.POST.get("payment_note", ""),
             }
-        elif payment_action == "mark_monthly_paid":
-            form_data = {
-                "payout_cycle": "monthly",
-                "period_start": request.POST.get("period_start"),
-                "period_end": request.POST.get("period_end"),
-                "paid_amount": request.POST.get("paid_amount"),
-                "payment_method": Salary.PaymentMethod.BANK_TRANSFER,
-                "payment_reference": request.POST.get("payment_reference", ""),
-                "payment_note": request.POST.get("payment_note", ""),
-            }
+            serializer = SalaryPaymentSerializer(data=form_data)
+            if serializer.is_valid():
+                try:
+                    record, transaction, created = record_staff_salary_payment(
+                        staff, **serializer.validated_data
+                    )
+                except ValidationError as error:
+                    payment_errors = _normalize_errors(getattr(error, "message_dict", {"paid_amount": error.messages}))
+                    messages.error(request, "Please correct the salary payment details and try again.")
+                else:
+                    payment_kind = serializer.validated_data.get(
+                        "payment_kind",
+                        SalaryPaymentTransaction.PaymentKind.SALARY,
+                    )
+                    email_result = {"queued": False, "message": ""}
+                    if payment_kind == SalaryPaymentTransaction.PaymentKind.SALARY:
+                        email_result = queue_salary_payment_acknowledgement(record)
+                    remaining_balance = max(
+                        float(record.final_salary or 0) - float(record.paid_amount or 0),
+                        0.0,
+                    )
+                    action_label = (
+                        "Advance recorded"
+                        if payment_kind == SalaryPaymentTransaction.PaymentKind.ADVANCE
+                        else "Salary recorded"
+                    )
+                    messages.success(
+                        request,
+                        f"{action_label} for {staff.name}. "
+                        f"Credited Rs. {float(transaction.amount):,.2f} for {record.period_start} to {record.period_end}. "
+                        f"Remaining balance Rs. {remaining_balance:,.2f}.",
+                    )
+                    if email_result.get("queued"):
+                        messages.success(request, email_result["message"])
+                    elif email_result.get("message"):
+                        messages.warning(request, email_result["message"])
+                    return redirect("salary-detail-page", staff_id=staff.id)
+            else:
+                payment_errors = _normalize_errors(serializer.errors)
+                messages.error(request, "Please correct the salary payment details and try again.")
+        elif payment_action == "pay_referral_reward":
+            reward_id = request.POST.get("reward_id", "").strip()
+            reward = (
+                ReferralReward.objects.select_related("referrer", "referred_staff")
+                .filter(id=reward_id, referrer=staff)
+                .first()
+            )
+            if not reward:
+                messages.error(request, "Referral reward not found.")
+            else:
+                try:
+                    record_referral_reward_payment(
+                        reward,
+                        payment_method=request.POST.get(
+                            "payment_method",
+                            Salary.PaymentMethod.BANK_TRANSFER,
+                        ),
+                        payment_reference=request.POST.get("payment_reference", ""),
+                        payment_note=request.POST.get("payment_note", ""),
+                    )
+                except ValidationError as error:
+                    messages.error(
+                        request,
+                        " ".join(
+                            error.messages
+                            if hasattr(error, "messages")
+                            else getattr(error, "message_dict", {}).values()
+                        ),
+                    )
+                else:
+                    messages.success(
+                        request,
+                        f"Referral reward paid for {reward.referred_staff.name}.",
+                    )
+                    return redirect("salary-detail-page", staff_id=staff.id)
         else:
             form_data = {
                 "payout_cycle": request.POST.get("payout_cycle", "custom"),
@@ -1271,8 +1369,9 @@ def salary_detail_page(request, staff_id):
                 messages.error(request, "Please correct the salary payment details and try again.")
 
     payload = build_salary_detail_payload(staff)
-    custom_form_data = {
-        "payout_cycle": request.POST.get("payout_cycle", "custom"),
+    payment_form_data = {
+        "payment_kind": request.POST.get("payment_kind", SalaryPaymentTransaction.PaymentKind.SALARY),
+        "payout_cycle": request.POST.get("payout_cycle", payload["due_snapshot"]["payout_cycle"]),
         "period_start": request.POST.get("period_start", payload["custom_defaults"]["period_start"]),
         "period_end": request.POST.get("period_end", payload["custom_defaults"]["period_end"]),
         "paid_amount": request.POST.get("paid_amount", payload["custom_defaults"]["paid_amount"]),
@@ -1286,11 +1385,11 @@ def salary_detail_page(request, staff_id):
         active_page="salary",
         page_title=f"{staff.name} Salary",
         page_heading=f"{staff.name} Salary Details",
-        page_subtitle="Review hourly payroll breakdowns, credit salary, and keep payment history in one place.",
+        page_subtitle="Review earnings, calculations, due balance, and recorded payments from one payout page.",
         extra_context={
             **payload,
-            "custom_payment_errors": payment_errors,
-            "custom_form_data": custom_form_data,
+            "payment_errors": payment_errors,
+            "payment_form_data": payment_form_data,
         },
     )
     return render(request, "admin_salary_detail.html", context)

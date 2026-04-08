@@ -3,6 +3,7 @@ import csv
 import io
 import logging
 import re
+import uuid
 from collections import Counter, defaultdict
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_FLOOR
@@ -2322,6 +2323,116 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
     return quality_payload
 
 
+def _staff_review_call_rows(staff, *, now=None):
+    reference = now or timezone.now()
+    lookback_start = reference - timedelta(days=QUALITY_SCORE_LOOKBACK_DAYS)
+    recent_calls = (
+        Call.objects.filter(
+            staff=staff,
+            start_time__gte=lookback_start,
+        )
+        .select_related("lead")
+        .order_by("-start_time", "-created_at")
+    )
+
+    latest_by_lead = {}
+    for call in recent_calls:
+        latest_by_lead.setdefault(call.lead_id, call)
+
+    review_rows = []
+    for call in latest_by_lead.values():
+        if call.status == Call.Status.STARTED:
+            continue
+        if not call.is_verified or call.is_qualifying:
+            continue
+
+        lead = call.lead
+        review_rows.append(
+            {
+                "lead_id": str(lead.id),
+                "call_id": str(call.id),
+                "lead_name": lead.name,
+                "lead_phone": lead.phone,
+                "call_status": call.status,
+                "call_status_label": call.get_status_display(),
+                "duration_label": _format_duration(call.duration_seconds),
+                "start_time": _format_datetime(call.start_time),
+                "end_time": _format_datetime(call.end_time),
+                "current_lead_status": lead.status,
+                "current_lead_status_label": lead.get_status_display(),
+                "assigned_to_staff": bool(lead.assigned_to_id == staff.id),
+                "is_invalid_short": call.status == Call.Status.INVALID_SHORT,
+                "search_text": " ".join(
+                    [
+                        lead.name.lower(),
+                        lead.phone.lower(),
+                        call.get_status_display().lower(),
+                        lead.get_status_display().lower(),
+                        _format_duration(call.duration_seconds).lower(),
+                    ]
+                ),
+            }
+        )
+
+    review_rows.sort(
+        key=lambda row: (
+            0 if row["is_invalid_short"] else 1,
+            row["lead_name"].lower(),
+            row["lead_phone"],
+        )
+    )
+    return review_rows
+
+
+def _review_lead_ids_for_staff(staff, *, now=None):
+    return [uuid.UUID(row["lead_id"]) for row in _staff_review_call_rows(staff, now=now)]
+
+
+def reassign_staff_review_leads(staff):
+    review_lead_ids = _review_lead_ids_for_staff(staff)
+    if not review_lead_ids:
+        return {
+            "review_count": 0,
+            "released_count": 0,
+            "assigned_count": 0,
+            "waiting_count": 0,
+        }
+
+    released_count = release_staff_queue(staff)
+    Lead.objects.filter(id__in=review_lead_ids).update(
+        status=Lead.Status.NEW,
+        assigned_to=staff,
+        callback_window="",
+        callback_date=None,
+        updated_at=timezone.now(),
+    )
+    auto_allocate_leads(target_staff=staff, prioritized_lead_ids=review_lead_ids)
+    assigned_count = Lead.objects.filter(id__in=review_lead_ids, assigned_to=staff).count()
+    waiting_count = max(len(review_lead_ids) - assigned_count, 0)
+    return {
+        "review_count": len(review_lead_ids),
+        "released_count": released_count,
+        "assigned_count": assigned_count,
+        "waiting_count": waiting_count,
+    }
+
+
+def reset_staff_review_leads_to_new_queue(staff):
+    review_lead_ids = _review_lead_ids_for_staff(staff)
+    if not review_lead_ids:
+        return {"review_count": 0, "reopened_count": 0}
+
+    reopened_count = Lead.objects.filter(id__in=review_lead_ids).update(
+        status=Lead.Status.NEW,
+        assigned_to=None,
+        callback_window="",
+        callback_date=None,
+        updated_at=timezone.now(),
+    )
+    auto_allocate_leads(prioritized_lead_ids=review_lead_ids)
+    return {"review_count": len(review_lead_ids), "reopened_count": reopened_count}
+
+
 def _with_lead_priority(queryset, *, now=None, prioritized_lead_ids=None):
     callback_date = timezone.localdate(now or timezone.now())
     current_slot = _current_callback_window(now)
@@ -3537,6 +3648,7 @@ def build_staff_profile_payload(request, staff):
         now=timezone.now(),
     )
     quality = _build_staff_quality_metrics([staff.id]).get(staff.id, {})
+    review_lead_rows = _staff_review_call_rows(staff)
 
     active_seconds_today = _effective_active_seconds_for_staff(
         staff=staff,
@@ -3652,6 +3764,11 @@ def build_staff_profile_payload(request, staff):
             **referral_tracking["summary"],
         },
         "referral_submission_rows": referral_tracking["rows"][:20],
+        "review_lead_summary": {
+            "count": len(review_lead_rows),
+            "invalid_short_count": sum(1 for row in review_lead_rows if row["is_invalid_short"]),
+        },
+        "review_lead_rows": review_lead_rows,
         "assigned_lead_rows": assigned_lead_rows,
         "recent_call_rows": recent_call_rows,
         "recent_session_rows": recent_session_rows,
@@ -3922,13 +4039,29 @@ def build_salary_page_payload():
 
 def build_salary_detail_payload(staff):
     today = timezone.localdate()
-    week_start_at, _ = _week_range()
-    month_start_at, _ = _month_range()
-    week_start = timezone.localtime(week_start_at).date()
-    month_start = timezone.localtime(month_start_at).date()
-
-    weekly_breakdown = calculate_staff_payout_for_dates(staff, week_start, today)
-    monthly_breakdown = calculate_staff_payout_for_dates(staff, month_start, today)
+    company_profile = get_company_profile()
+    sync_referral_rewards(company_profile)
+    (due_start, due_end), due_cycle = _due_period_for_staff(staff, today)
+    due_snapshot = _salary_period_snapshot(
+        staff,
+        period_start=due_start,
+        period_end=due_end,
+        payout_cycle=due_cycle,
+    )
+    running_start, running_end = _running_period_for_staff(staff, today)
+    running_snapshot = _salary_period_snapshot(
+        staff,
+        period_start=running_start,
+        period_end=running_end,
+        payout_cycle=_running_payout_cycle_for_staff(staff),
+    )
+    previous_month_start, previous_month_end = _previous_month_range(today)
+    previous_month_snapshot = _salary_period_snapshot(
+        staff,
+        period_start=previous_month_start,
+        period_end=previous_month_end,
+        payout_cycle=Salary.PayoutCycle.MONTHLY,
+    )
     salary_history = build_staff_salary_history_rows(staff, limit=40)
     total_paid = (
         Salary.objects.filter(staff=staff, paid_amount__gt=Decimal("0.00"))
@@ -3942,60 +4075,86 @@ def build_salary_detail_payload(staff):
         .order_by("-paid_at", "-created_at")
         .first()
     )
-    weekly_record = Salary.objects.filter(staff=staff, period_start=week_start, period_end=today).first()
-    monthly_record = Salary.objects.filter(staff=staff, period_start=month_start, period_end=today).first()
-    weekly_paid_total = _salary_record_paid_total(weekly_record) if weekly_record else Decimal("0.00")
-    monthly_paid_total = _salary_record_paid_total(monthly_record) if monthly_record else Decimal("0.00")
-    weekly_balance = max(_money(weekly_breakdown["total_pay"]) - weekly_paid_total, Decimal("0.00"))
-    monthly_balance = max(_money(monthly_breakdown["total_pay"]) - monthly_paid_total, Decimal("0.00"))
+    same_period_as_due = (
+        due_snapshot["period_start"] == running_snapshot["period_start"]
+        and due_snapshot["period_end"] == running_snapshot["period_end"]
+    )
+    advance_available = Decimal("0.00") if same_period_as_due else running_snapshot["balance"]
+    pending_referral_rewards = list(
+        ReferralReward.objects.filter(referrer=staff, is_paid=False)
+        .select_related("referred_staff")
+        .order_by("qualified_at", "created_at")
+    )
+    pending_referral_amount = sum(
+        (reward.reward_amount for reward in pending_referral_rewards),
+        Decimal("0.00"),
+    )
 
     return {
         "staff_member": staff,
         "summary": {
-            "weekly_payable": _format_currency(weekly_breakdown["total_pay"]),
-            "monthly_payable": _format_currency(monthly_breakdown["total_pay"]),
-            "weekly_hours": f"{round(float(weekly_breakdown['active_hours']), 1)}h",
-            "monthly_hours": f"{round(float(monthly_breakdown['active_hours']), 1)}h",
+            "due_salary": due_snapshot["balance_label"],
+            "current_earned": running_snapshot["earned_total_label"],
+            "advance_available": _format_currency(advance_available),
             "total_paid": _format_currency(total_paid),
             "last_paid_at": _format_datetime(latest_transaction.paid_at) if latest_transaction else "--",
             "last_paid_amount": _format_currency(latest_transaction.amount) if latest_transaction else _format_currency(0),
+            "compensation_type_label": _payout_cycle_label(staff),
+            "schedule_label": _salary_schedule_label(staff),
+            "weekly_payout_day_label": staff.get_weekly_payout_day_display() if staff.weekly_payout_day else "",
         },
-        "weekly_breakdown": {
-            "period_label": f"{week_start.strftime('%d %b %Y')} to {today.strftime('%d %b %Y')}",
-            "period_start": week_start.isoformat(),
-            "period_end": today.isoformat(),
-            "hours": f"{round(float(weekly_breakdown['active_hours']), 1)}h",
-            "base_pay": _format_currency(weekly_breakdown["base_pay"]),
-            "call_earnings": _format_currency(weekly_breakdown["call_earnings"]),
-            "bonus_earnings": _format_currency(weekly_breakdown["bonus_earnings"]),
-            "recommended_amount": _format_currency(weekly_breakdown["total_pay"]),
-            "recommended_amount_raw": f"{_money(weekly_breakdown['total_pay']):.2f}",
-            "paid_total": _format_currency(weekly_paid_total),
-            "paid_total_raw": f"{weekly_paid_total:.2f}",
-            "balance_amount": _format_currency(weekly_balance),
-            "balance_amount_raw": f"{weekly_balance:.2f}",
-            "is_fully_paid": weekly_balance <= Decimal("0.00"),
+        "identity_details": {
+            "email": staff.email or "--",
+            "bank_account_name": staff.bank_account_name or "--",
+            "bank_name": staff.bank_name or "--",
+            "bank_account_number": staff.bank_account_number or "--",
+            "bank_ifsc_code": staff.bank_ifsc_code or "--",
         },
-        "monthly_breakdown": {
-            "period_label": f"{month_start.strftime('%d %b %Y')} to {today.strftime('%d %b %Y')}",
-            "period_start": month_start.isoformat(),
-            "period_end": today.isoformat(),
-            "hours": f"{round(float(monthly_breakdown['active_hours']), 1)}h",
-            "base_pay": _format_currency(monthly_breakdown["base_pay"]),
-            "call_earnings": _format_currency(monthly_breakdown["call_earnings"]),
-            "bonus_earnings": _format_currency(monthly_breakdown["bonus_earnings"]),
-            "recommended_amount": _format_currency(monthly_breakdown["total_pay"]),
-            "recommended_amount_raw": f"{_money(monthly_breakdown['total_pay']):.2f}",
-            "paid_total": _format_currency(monthly_paid_total),
-            "paid_total_raw": f"{monthly_paid_total:.2f}",
-            "balance_amount": _format_currency(monthly_balance),
-            "balance_amount_raw": f"{monthly_balance:.2f}",
-            "is_fully_paid": monthly_balance <= Decimal("0.00"),
+        "due_snapshot": {
+            **due_snapshot,
+            "period_start_value": due_snapshot["period_start"].isoformat(),
+            "period_end_value": due_snapshot["period_end"].isoformat(),
+            "balance_raw": f"{due_snapshot['balance']:.2f}",
+            "is_payable": due_snapshot["balance"] > Decimal("0.00"),
+            "cycle_label": Salary.PayoutCycle(due_snapshot["payout_cycle"]).label,
+        },
+        "running_snapshot": {
+            **running_snapshot,
+            "period_start_value": running_snapshot["period_start"].isoformat(),
+            "period_end_value": running_snapshot["period_end"].isoformat(),
+            "advance_available": _format_currency(advance_available),
+            "advance_available_raw": f"{_money(advance_available):.2f}",
+            "can_pay_advance": advance_available > Decimal("0.00"),
+            "cycle_label": Salary.PayoutCycle(running_snapshot["payout_cycle"]).label,
+        },
+        "previous_month_snapshot": {
+            **previous_month_snapshot,
+            "period_start_value": previous_month_snapshot["period_start"].isoformat(),
+            "period_end_value": previous_month_snapshot["period_end"].isoformat(),
+            "cycle_label": Salary.PayoutCycle(previous_month_snapshot["payout_cycle"]).label,
+        },
+        "company_flags": {
+            "referral_enabled": company_profile.referral_program_enabled,
+        },
+        "pending_referral_rewards": [
+            {
+                "id": str(reward.id),
+                "referred_staff_name": reward.referred_staff.name,
+                "referred_staff_phone": reward.referred_staff.phone,
+                "reward_amount_label": _format_currency(reward.reward_amount),
+                "qualified_at_label": _format_datetime(reward.qualified_at),
+                "required_hours_label": f"{float(reward.required_hours or 0):,.1f}h",
+            }
+            for reward in pending_referral_rewards
+        ],
+        "pending_referral_summary": {
+            "count": len(pending_referral_rewards),
+            "amount_label": _format_currency(pending_referral_amount),
         },
         "custom_defaults": {
-            "period_start": month_start.isoformat(),
-            "period_end": today.isoformat(),
-            "paid_amount": f"{monthly_balance:.2f}",
+            "period_start": due_snapshot["period_start"].isoformat(),
+            "period_end": due_snapshot["period_end"].isoformat(),
+            "paid_amount": f"{due_snapshot['balance']:.2f}",
         },
         "payment_method_options": [
             {"value": value, "label": label}

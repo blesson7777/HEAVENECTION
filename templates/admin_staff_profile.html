@@ -32,6 +32,11 @@
       document.querySelectorAll('#staffCallActivityBody tr[data-search-text]')
     );
     const callEmptyState = document.getElementById('staffCallActivityEmpty');
+    const reviewSearchInput = document.getElementById('staffReviewLeadSearch');
+    const reviewRows = Array.from(
+      document.querySelectorAll('#staffReviewLeadBody tr[data-search-text]')
+    );
+    const reviewEmptyState = document.getElementById('staffReviewLeadEmpty');
 
     if (callSearchInput && callRows.length) {
       const applyCallSearch = () => {
@@ -54,6 +59,29 @@
 
       callSearchInput.addEventListener('input', applyCallSearch);
       applyCallSearch();
+    }
+
+    if (reviewSearchInput && reviewRows.length) {
+      const applyReviewSearch = () => {
+        const query = reviewSearchInput.value.trim().toLowerCase();
+        let visibleCount = 0;
+
+        reviewRows.forEach((row) => {
+          const haystack = row.dataset.searchText || '';
+          const matches = !query || haystack.includes(query);
+          row.classList.toggle('d-none', !matches);
+          if (matches) {
+            visibleCount += 1;
+          }
+        });
+
+        if (reviewEmptyState) {
+          reviewEmptyState.classList.toggle('d-none', visibleCount !== 0);
+        }
+      };
+
+      reviewSearchInput.addEventListener('input', applyReviewSearch);
+      applyReviewSearch();
     }
   })();
 </script>
@@ -194,6 +222,73 @@
                         </div>
                     </div>
                 </div>
+
+            <div class="hc-summary-card hc-staff-profile-review mb-4">
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                    <div>
+                        <span class="mf-db2-kicker">Call Review Leads</span>
+                        <h5 class="mb-1">{{ review_lead_summary.count }} lead(s) need a queue decision</h5>
+                        <p class="text-muted mb-0">Use this when very short or zero-talk call records should be reopened for the same staff or reset as new leads.</p>
+                    </div>
+                    <span class="hc-status {% if review_lead_summary.count %}hc-status-warning{% else %}hc-status-muted{% endif %}">
+                        {{ review_lead_summary.invalid_short_count }} invalid short
+                    </span>
+                </div>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <form method="post" action="{% url 'staff-profile-page' staff_member.id %}" onsubmit="return window.confirm('Return these review leads to this staff queue? Current queue leads will be released first.');">
+                        {% csrf_token %}
+                        <input type="hidden" name="staff_action" value="reassign_review_leads">
+                        <button type="submit" class="btn btn-outline-primary btn-sm" {% if not review_lead_summary.count %}disabled{% endif %}>Reallocate To Same Staff</button>
+                    </form>
+                    <form method="post" action="{% url 'staff-profile-page' staff_member.id %}" onsubmit="return window.confirm('Reopen these review leads as new leads in the main queue?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="staff_action" value="reset_review_leads">
+                        <button type="submit" class="btn btn-outline-secondary btn-sm" {% if not review_lead_summary.count %}disabled{% endif %}>Create As New Lead</button>
+                    </form>
+                </div>
+                {% if review_lead_rows %}
+                <div class="hc-search-box mb-3">
+                    <i class="bi bi-search"></i>
+                    <input type="search" id="staffReviewLeadSearch" placeholder="Search review lead, phone, result, or duration">
+                </div>
+                <div class="table-responsive hc-card-scroll-table hc-card-scroll-table-10">
+                    <table class="table hc-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Lead</th>
+                                <th>Last Review</th>
+                                <th>Duration</th>
+                                <th>Current Lead</th>
+                            </tr>
+                        </thead>
+                        <tbody id="staffReviewLeadBody">
+                            {% for row in review_lead_rows %}
+                            <tr data-search-text="{{ row.search_text }}">
+                                <td>
+                                    <strong>{{ row.lead_name }}</strong>
+                                    <div class="text-muted small">{{ row.lead_phone }}</div>
+                                </td>
+                                <td>
+                                    <span class="hc-status {% if row.is_invalid_short %}hc-status-warning{% else %}hc-status-muted{% endif %}">{{ row.call_status_label }}</span>
+                                    <div class="text-muted small">{{ row.end_time }}</div>
+                                </td>
+                                <td>{{ row.duration_label }}</td>
+                                <td>
+                                    <div>{{ row.current_lead_status_label }}</div>
+                                    <div class="text-muted small">{% if row.assigned_to_staff %}Still under this staff{% else %}Not currently in this staff queue{% endif %}</div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            <tr id="staffReviewLeadEmpty" class="d-none">
+                                <td colspan="4" class="text-center text-muted py-4">No review leads match this search.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="hc-document-empty">No review leads are waiting for action right now.</div>
+                {% endif %}
+            </div>
 
             <div class="hc-summary-card hc-staff-profile-access-card">
                 <div class="d-flex align-items-start justify-content-between gap-3">
