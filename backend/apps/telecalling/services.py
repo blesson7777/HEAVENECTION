@@ -303,7 +303,7 @@ def _call_activity_block_summary(calls):
 
 
 def _effective_active_seconds_map(*, start_at=None, end_at=None, staff_ids=None):
-    call_queryset = Call.objects.filter(end_time__isnull=False, is_verified=True)
+    call_queryset = _payable_work_hour_call_queryset()
 
     if start_at is not None and end_at is not None:
         call_queryset = call_queryset.filter(start_time__range=(start_at, end_at))
@@ -453,6 +453,12 @@ def _decimal_minutes(total_seconds):
 
 def _money(value):
     return Decimal(value or 0).quantize(TWOPLACES)
+
+
+def _payable_work_hour_call_queryset():
+    return Call.objects.filter(end_time__isnull=False, is_verified=True).exclude(
+        status=Call.Status.INVALID_SHORT
+    )
 
 
 def _hourly_bonus_call_queryset(queryset=None):
