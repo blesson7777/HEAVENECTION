@@ -32,6 +32,7 @@ class MainActivity : FlutterActivity() {
     private var isDownloadReceiverRegistered = false
     private var resumeInstallAfterSettings = false
     private var pendingPhoneStatePermissionResult: MethodChannel.Result? = null
+    private var pendingRequiredPermissionsResult: MethodChannel.Result? = null
 
     private val downloadReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -75,6 +76,12 @@ class MainActivity : FlutterActivity() {
                 "getVersionInfo" -> result.success(buildVersionInfoPayload())
                 "isCallInProgress" -> result.success(buildCallStatePayload())
                 "requestPhoneStatePermission" -> handlePhoneStatePermissionRequest(result)
+                "getRequiredPermissionStatus" -> result.success(buildRequiredPermissionPayload())
+                "requestRequiredPermissions" -> handleRequiredPermissionsRequest(result)
+                "openAppSettings" -> {
+                    openAppSettings()
+                    result.success(true)
+                }
                 "getDownloadedUpdateStatus" -> result.success(
                     buildDownloadedUpdateStatus(call.argument<Int>("versionCode")),
                 )
@@ -91,16 +98,22 @@ class MainActivity : FlutterActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != REQUEST_READ_PHONE_STATE_PERMISSION) {
-            return
+        when (requestCode) {
+            REQUEST_READ_PHONE_STATE_PERMISSION -> {
+                val granted = grantResults.firstOrNull() == PERMISSION_GRANTED
+                pendingPhoneStatePermissionResult?.success(
+                    mapOf(
+                        "granted" to granted,
+                    ),
+                )
+                pendingPhoneStatePermissionResult = null
+            }
+            REQUEST_REQUIRED_PERMISSIONS -> {
+                pendingRequiredPermissionsResult?.success(buildRequiredPermissionPayload())
+                pendingRequiredPermissionsResult = null
+            }
+            else -> return
         }
-        val granted = grantResults.firstOrNull() == PERMISSION_GRANTED
-        pendingPhoneStatePermissionResult?.success(
-            mapOf(
-                "granted" to granted,
-            ),
-        )
-        pendingPhoneStatePermissionResult = null
     }
 
     private fun handleDownloadRequest(call: MethodCall, result: MethodChannel.Result) {
@@ -186,6 +199,28 @@ class MainActivity : FlutterActivity() {
             this,
             arrayOf(Manifest.permission.READ_PHONE_STATE),
             REQUEST_READ_PHONE_STATE_PERMISSION,
+        )
+    }
+
+    private fun handleRequiredPermissionsRequest(result: MethodChannel.Result) {
+        if (hasAllRequiredPermissions()) {
+            result.success(buildRequiredPermissionPayload())
+            return
+        }
+        if (pendingRequiredPermissionsResult != null) {
+            result.success(buildRequiredPermissionPayload())
+            return
+        }
+        val missingPermissions = requiredPermissions().filterNot { hasPermission(it) }
+        if (missingPermissions.isEmpty()) {
+            result.success(buildRequiredPermissionPayload())
+            return
+        }
+        pendingRequiredPermissionsResult = result
+        ActivityCompat.requestPermissions(
+            this,
+            missingPermissions.toTypedArray(),
+            REQUEST_REQUIRED_PERMISSIONS,
         )
     }
 
@@ -292,6 +327,16 @@ class MainActivity : FlutterActivity() {
         resumeInstallAfterSettings = true
         val intent = Intent(
             Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            Uri.parse("package:$packageName"),
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
+    }
+
+    private fun openAppSettings() {
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
             Uri.parse("package:$packageName"),
         ).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -407,6 +452,18 @@ class MainActivity : FlutterActivity() {
         )
     }
 
+    private fun buildRequiredPermissionPayload(): Map<String, Any> {
+        val canCallPhone = hasPermission(Manifest.permission.CALL_PHONE)
+        val canReadCallLog = hasPermission(Manifest.permission.READ_CALL_LOG)
+        val canReadPhoneState = hasReadPhoneStatePermission()
+        return mapOf(
+            "callPhoneGranted" to canCallPhone,
+            "callLogGranted" to canReadCallLog,
+            "phoneStateGranted" to canReadPhoneState,
+            "allGranted" to (canCallPhone && canReadCallLog && canReadPhoneState),
+        )
+    }
+
     private fun buildCallStatePayload(): Map<String, Any> {
         if (!hasReadPhoneStatePermission()) {
             return mapOf(
@@ -436,6 +493,22 @@ class MainActivity : FlutterActivity() {
             this,
             Manifest.permission.READ_PHONE_STATE,
         ) == PERMISSION_GRANTED
+    }
+
+    private fun requiredPermissions(): List<String> {
+        return listOf(
+            Manifest.permission.CALL_PHONE,
+            Manifest.permission.READ_CALL_LOG,
+            Manifest.permission.READ_PHONE_STATE,
+        )
+    }
+
+    private fun hasAllRequiredPermissions(): Boolean {
+        return requiredPermissions().all { hasPermission(it) }
+    }
+
+    private fun hasPermission(permission: String): Boolean {
+        return ContextCompat.checkSelfPermission(this, permission) == PERMISSION_GRANTED
     }
 
     private fun readInstalledVersionCode(packageInfo: PackageInfo = readPackageInfo()): Int {
@@ -476,5 +549,6 @@ class MainActivity : FlutterActivity() {
         private const val KEY_PENDING_FILE_PATH = "pending_file_path"
         private const val KEY_PENDING_VERSION_CODE = "pending_version_code"
         private const val REQUEST_READ_PHONE_STATE_PERMISSION = 4201
+        private const val REQUEST_REQUIRED_PERMISSIONS = 4202
     }
 }

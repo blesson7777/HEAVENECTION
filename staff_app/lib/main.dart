@@ -205,6 +205,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   File? _selectedPassbookPhoto;
   bool _removeAadharPhoto = false;
   bool _removePassbookPhoto = false;
+  Map<String, dynamic> _requiredPermissionStatus = const <String, dynamic>{};
+  bool? _requiredPermissionsGranted;
+  bool _isRefreshingRequiredPermissions = false;
+  bool _isRequiredPermissionDialogVisible = false;
 
   @override
   void initState() {
@@ -247,18 +251,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    if (!_summary.workingNow) {
-      if (state == AppLifecycleState.resumed) {
-        unawaited(
-          _loadDashboardData(showLoader: false, promptTrainingGate: true),
-        );
-      }
-      return;
-    }
-
     if (state == AppLifecycleState.resumed) {
-      unawaited(_handleResumeFromBackground());
+      unawaited(_handleResumeState());
     } else if (_isBackgroundState(state)) {
+      if (!_summary.workingNow) {
+        return;
+      }
       if (_hasActiveCustomerCall) {
         _backgroundedAt = null;
       } else {
@@ -297,6 +295,13 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   bool get _hasActiveCustomerCall =>
       _activeCallId != null && _pendingDialerCall != null;
+
+  bool get _needsRequiredPermissionGate =>
+      _user != null && _requiredPermissionsGranted == false;
+
+  bool get _isResolvingRequiredPermissions =>
+      _user != null &&
+      (_requiredPermissionsGranted == null || _isRefreshingRequiredPermissions);
 
   List<TrainingLesson> get _filteredLessons {
     final query = _learningQuery.trim().toLowerCase();
@@ -429,7 +434,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     final startedAt = _summary.recoverableCallStartedAt ?? DateTime.now();
-    final hasSameCall = _pendingDialerCall?.callId == _summary.recoverableCallId;
+    final hasSameCall =
+        _pendingDialerCall?.callId == _summary.recoverableCallId;
     _activeCallId = _summary.recoverableCallId;
     _activeCallLeadId = _summary.recoverableCallLeadId;
     _pendingDialerCall = PendingDialerCall(
@@ -463,10 +469,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
-  Future<void> _showCallScreenForLead(
-    LeadItem lead, {
-    int? index,
-  }) async {
+  Future<void> _showCallScreenForLead(LeadItem lead, {int? index}) async {
     if (!mounted) {
       return;
     }
@@ -503,9 +506,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
-  Future<void> _openCurrentCallScreen({
-    String? notice,
-  }) async {
+  Future<void> _openCurrentCallScreen({String? notice}) async {
     final activeLeadId = _activeCallLeadId ?? _pendingDialerCall?.leadId;
     final activeLead = _leadById(activeLeadId);
     if (activeLead == null) {
@@ -536,6 +537,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     final canReadCallLog = await _ensureCallLogAccess();
     if (!canReadCallLog) {
+      return;
+    }
+    final canReadPhoneState = await _ensurePhoneStateAccess();
+    if (!canReadPhoneState) {
       return;
     }
 
@@ -708,6 +713,440 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
   }
 
+  void _markRequiredPermissionsPending() {
+    _requiredPermissionsGranted = null;
+    _isRefreshingRequiredPermissions = true;
+  }
+
+  void _applyRequiredPermissionStatus(Map<String, dynamic> status) {
+    final allGranted = status['allGranted'] == true;
+    if (!mounted) {
+      _requiredPermissionStatus = status;
+      _requiredPermissionsGranted = allGranted;
+      _isRefreshingRequiredPermissions = false;
+      return;
+    }
+    setState(() {
+      _requiredPermissionStatus = status;
+      _requiredPermissionsGranted = allGranted;
+      _isRefreshingRequiredPermissions = false;
+    });
+  }
+
+  Future<Map<String, dynamic>> _readRequiredPermissionStatus() async {
+    if (!Platform.isAndroid) {
+      return const <String, dynamic>{
+        'callPhoneGranted': false,
+        'callLogGranted': false,
+        'phoneStateGranted': false,
+        'allGranted': false,
+      };
+    }
+
+    try {
+      return Map<String, dynamic>.from(
+        await _updaterChannel.invokeMapMethod<String, dynamic>(
+              'getRequiredPermissionStatus',
+            ) ??
+            const <String, dynamic>{},
+      );
+    } on MissingPluginException {
+      return const <String, dynamic>{
+        'callPhoneGranted': false,
+        'callLogGranted': false,
+        'phoneStateGranted': false,
+        'allGranted': false,
+      };
+    } on PlatformException {
+      return const <String, dynamic>{
+        'callPhoneGranted': false,
+        'callLogGranted': false,
+        'phoneStateGranted': false,
+        'allGranted': false,
+      };
+    }
+  }
+
+  Future<bool> _refreshRequiredPermissionState({
+    bool showDialogIfMissing = false,
+  }) async {
+    if (_user == null) {
+      _requiredPermissionStatus = const <String, dynamic>{};
+      _requiredPermissionsGranted = null;
+      _isRefreshingRequiredPermissions = false;
+      return true;
+    }
+
+    if (mounted) {
+      setState(() => _isRefreshingRequiredPermissions = true);
+    } else {
+      _isRefreshingRequiredPermissions = true;
+    }
+
+    final status = await _readRequiredPermissionStatus();
+    _applyRequiredPermissionStatus(status);
+    final allGranted = status['allGranted'] == true;
+    if (allGranted) {
+      _handlePermissionReadyPrompts();
+    } else if (showDialogIfMissing) {
+      _scheduleRequiredPermissionDialog();
+    }
+    return allGranted;
+  }
+
+  Future<bool> _requestRequiredPermissions({
+    bool showMissingMessage = true,
+  }) async {
+    if (!Platform.isAndroid) {
+      if (showMissingMessage) {
+        _showMessage(
+          'This app needs Android phone permissions to work correctly.',
+          isError: true,
+        );
+      }
+      return false;
+    }
+
+    try {
+      final status = Map<String, dynamic>.from(
+        await _updaterChannel.invokeMapMethod<String, dynamic>(
+              'requestRequiredPermissions',
+            ) ??
+            const <String, dynamic>{},
+      );
+      _applyRequiredPermissionStatus(status);
+      final allGranted = status['allGranted'] == true;
+      if (allGranted) {
+        _handlePermissionReadyPrompts();
+      } else if (showMissingMessage) {
+        _showMessage(
+          'Allow all required Android permissions to continue working in the app.',
+          isError: true,
+        );
+      }
+      return allGranted;
+    } on MissingPluginException {
+      if (showMissingMessage) {
+        _showMessage(
+          'This device cannot open the Android permission flow right now.',
+          isError: true,
+        );
+      }
+      return false;
+    } on PlatformException catch (error) {
+      if (showMissingMessage) {
+        _showMessage(
+          error.message ??
+              'Could not open the Android permission flow right now.',
+          isError: true,
+        );
+      }
+      return false;
+    }
+  }
+
+  Future<void> _openAppPermissionSettings() async {
+    if (!Platform.isAndroid) {
+      _showMessage(
+        'This app needs Android phone permissions to work correctly.',
+        isError: true,
+      );
+      return;
+    }
+    try {
+      await _updaterChannel.invokeMethod<void>('openAppSettings');
+    } on MissingPluginException {
+      _showMessage(
+        'Could not open Android app settings on this device.',
+        isError: true,
+      );
+    } on PlatformException catch (error) {
+      _showMessage(
+        error.message ?? 'Could not open Android app settings right now.',
+        isError: true,
+      );
+    }
+  }
+
+  Future<bool> _ensureRequiredPermissionsReady({
+    bool requestIfMissing = false,
+    bool showDialogIfMissing = false,
+  }) async {
+    final alreadyGranted = await _refreshRequiredPermissionState(
+      showDialogIfMissing: showDialogIfMissing,
+    );
+    if (alreadyGranted) {
+      return true;
+    }
+    if (!requestIfMissing) {
+      return false;
+    }
+
+    final granted = await _requestRequiredPermissions();
+    if (!granted && showDialogIfMissing) {
+      _scheduleRequiredPermissionDialog();
+    }
+    return granted;
+  }
+
+  void _scheduleRequiredPermissionDialog() {
+    if (!mounted ||
+        _user == null ||
+        _requiredPermissionsGranted != false ||
+        _isRequiredPermissionDialogVisible ||
+        _isNetworkErrorVisible) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          _user == null ||
+          _requiredPermissionsGranted != false ||
+          _isRequiredPermissionDialogVisible ||
+          _isNetworkErrorVisible) {
+        return;
+      }
+      unawaited(_showRequiredPermissionDialog());
+    });
+  }
+
+  void _handlePermissionReadyPrompts() {
+    if (_summary.pendingCallStatusRequired) {
+      _schedulePendingCallStatusPrompt();
+      return;
+    }
+    if (_summary.currentState == 'warning' && !_isIdleWarningVisible) {
+      unawaited(_showIdleWarning());
+    }
+    _maybePromptMandatoryTraining();
+  }
+
+  Future<void> _showRequiredPermissionDialog() async {
+    if (!mounted ||
+        _user == null ||
+        _requiredPermissionsGranted != false ||
+        _isRequiredPermissionDialogVisible) {
+      return;
+    }
+
+    _isRequiredPermissionDialogVisible = true;
+    final action = await showDialog<_PermissionDialogAction>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            title: const Text('Allow Required Access'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'This app needs phone call access, call history access, and phone status access before staff can work.',
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'Without these permissions, call tracking and work-hour calculation will not run correctly.',
+                  style: TextStyle(color: Colors.black54),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(
+                  dialogContext,
+                ).pop(_PermissionDialogAction.openSettings),
+                child: const Text('Open Settings'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(
+                  dialogContext,
+                ).pop(_PermissionDialogAction.allowNow),
+                child: const Text('Allow Now'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    _isRequiredPermissionDialogVisible = false;
+
+    if (!mounted || _user == null) {
+      return;
+    }
+    if (action == _PermissionDialogAction.allowNow) {
+      await _requestRequiredPermissions();
+    } else if (action == _PermissionDialogAction.openSettings) {
+      await _openAppPermissionSettings();
+    }
+  }
+
+  Widget _permissionRequirementRow({
+    required IconData icon,
+    required String title,
+    required String description,
+    required bool granted,
+  }) {
+    final accent = granted ? kGreen : kRed;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: accent.withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: accent),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16.5,
+                    fontWeight: FontWeight.w800,
+                    color: kPrimaryDark,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    color: Colors.black54,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Icon(
+            granted ? Icons.check_circle_rounded : Icons.error_rounded,
+            color: accent,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _requiredPermissionGatePage() {
+    final callPhoneGranted =
+        _requiredPermissionStatus['callPhoneGranted'] == true;
+    final callLogGranted = _requiredPermissionStatus['callLogGranted'] == true;
+    final phoneStateGranted =
+        _requiredPermissionStatus['phoneStateGranted'] == true;
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Allow Access')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(22),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [kPrimaryDark, kPrimary],
+                ),
+                borderRadius: BorderRadius.circular(28),
+              ),
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.verified_user_rounded,
+                    color: Colors.white,
+                    size: 34,
+                  ),
+                  SizedBox(height: 14),
+                  Text(
+                    'Required access is missing',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Staff calling cannot continue until all required Android permissions are allowed.',
+                    style: TextStyle(color: Colors.white70, fontSize: 15.5),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+            _permissionRequirementRow(
+              icon: Icons.call_rounded,
+              title: 'Phone Call Access',
+              description:
+                  'Needed to place the customer call directly from the app.',
+              granted: callPhoneGranted,
+            ),
+            const SizedBox(height: 12),
+            _permissionRequirementRow(
+              icon: Icons.history_toggle_off_rounded,
+              title: 'Call History Access',
+              description:
+                  'Needed to confirm the finished customer call from the phone record.',
+              granted: callLogGranted,
+            ),
+            const SizedBox(height: 12),
+            _permissionRequirementRow(
+              icon: Icons.phone_in_talk_rounded,
+              title: 'Phone Status Access',
+              description:
+                  'Needed to detect when a live customer call ends and open the correct remark flow.',
+              granted: phoneStateGranted,
+            ),
+            const SizedBox(height: 18),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final granted = await _requestRequiredPermissions();
+                  if (!granted) {
+                    _scheduleRequiredPermissionDialog();
+                  }
+                },
+                icon: const Icon(Icons.security_rounded),
+                label: const Text('Allow Permissions'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _openAppPermissionSettings,
+              icon: const Icon(Icons.settings_rounded),
+              label: const Text('Open Settings'),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'If you denied any permission earlier, open Android settings and allow every required access there.',
+              style: TextStyle(color: Colors.black54, height: 1.45),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _watchConnectivity() {
     final connectivity = Connectivity();
     _connectivitySubscription = connectivity.onConnectivityChanged.listen((
@@ -757,10 +1196,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         final restoredUser = await _apiClient.restoreSession();
         if (restoredUser != null) {
           _user = restoredUser;
+          _markRequiredPermissionsPending();
           _updatePreferredOrientations();
           await _loadDashboardData(showLoader: false, promptTrainingGate: true);
           await _maybeAutoSyncEndedCall(showMissingMessage: false);
           await _loadProfile(showLoader: false);
+          await _refreshRequiredPermissionState(showDialogIfMissing: true);
         }
       } else {
         await _loadDashboardData(showLoader: false, promptTrainingGate: false);
@@ -768,6 +1209,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         if (_tab == 3 || _profile == null) {
           await _loadProfile(showLoader: false);
         }
+        await _refreshRequiredPermissionState(showDialogIfMissing: true);
       }
 
       if (!mounted) {
@@ -780,7 +1222,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           (_summary.pendingCallStatusRequired ||
               _summary.recoverableCallRequired)
           ? 1
-          : (_lastLoadedTab < 0 ? 0 : (_lastLoadedTab > 3 ? 3 : _lastLoadedTab));
+          : (_lastLoadedTab < 0
+                ? 0
+                : (_lastLoadedTab > 3 ? 3 : _lastLoadedTab));
       setState(() {
         _isNetworkErrorVisible = false;
         _tab = preferredTab;
@@ -803,10 +1247,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       final restoredUser = await _apiClient.restoreSession();
       if (restoredUser != null) {
         _user = restoredUser;
+        _markRequiredPermissionsPending();
         _updatePreferredOrientations();
         await _loadDashboardData(showLoader: false, promptTrainingGate: true);
         await _maybeAutoSyncEndedCall(showMissingMessage: false);
         await _loadProfile(showLoader: false);
+        await _refreshRequiredPermissionState(showDialogIfMissing: true);
       }
     } on ApiException catch (error) {
       if (error.code == 'network_error') {
@@ -864,13 +1310,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       });
       _syncPresenceMonitoring();
       if (_summary.pendingCallStatusRequired) {
-        _schedulePendingCallStatusPrompt();
+        if (_requiredPermissionsGranted == true) {
+          _schedulePendingCallStatusPrompt();
+        }
         return;
       }
-      if (_summary.currentState == 'warning' && !_isIdleWarningVisible) {
+      if (_requiredPermissionsGranted == true &&
+          _summary.currentState == 'warning' &&
+          !_isIdleWarningVisible) {
         unawaited(_showIdleWarning());
       }
-      if (promptTrainingGate) {
+      if (promptTrainingGate && _requiredPermissionsGranted == true) {
         await _handleEntryPrompts();
       }
     } on ApiException catch (error) {
@@ -1231,32 +1681,28 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
-  Future<bool> _ensurePhoneStateAccess({bool showMessageOnDenied = true}) async {
+  Future<bool> _ensurePhoneStateAccess({
+    bool showMessageOnDenied = true,
+  }) async {
+    final permissionsReady = await _ensureRequiredPermissionsReady(
+      requestIfMissing: true,
+      showDialogIfMissing: true,
+    );
+    if (!permissionsReady) {
+      return false;
+    }
+
     final callState = await _readPhoneCallState();
     if (callState['permissionGranted'] == true) {
       return true;
     }
-
-    try {
-      final response = Map<String, dynamic>.from(
-        await _updaterChannel.invokeMapMethod<String, dynamic>(
-              'requestPhoneStatePermission',
-            ) ??
-            const <String, dynamic>{},
+    if (showMessageOnDenied) {
+      _showMessage(
+        'Allow all required Android permissions so the app can detect when a customer call ends.',
+        isError: true,
       );
-      final granted = response['granted'] == true;
-      if (!granted && showMessageOnDenied) {
-        _showMessage(
-          'Allow phone access once so the app can open the customer remark screen automatically after each call.',
-          isError: true,
-        );
-      }
-      return granted;
-    } on MissingPluginException {
-      return false;
-    } on PlatformException {
-      return false;
     }
+    return false;
   }
 
   Future<bool> _downloadAppUpdate(AppUpdateInfo update) async {
@@ -1350,11 +1796,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _registerInteraction(syncServer: false);
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder:
-            (_) => StaffSalaryDetailsPage(
-              apiClient: _apiClient,
-              initialSummary: _profile?.salarySummary,
-            ),
+        builder: (_) => StaffSalaryDetailsPage(
+          apiClient: _apiClient,
+          initialSummary: _profile?.salarySummary,
+        ),
       ),
     );
   }
@@ -1453,7 +1898,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     setState(() => _loginErrorText = null);
     if (phone.text.trim().isEmpty || password.text.isEmpty) {
       setState(
-        () => _loginErrorText = 'Enter your phone number or email and password.',
+        () =>
+            _loginErrorText = 'Enter your phone number or email and password.',
       );
       return;
     }
@@ -1473,9 +1919,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         return;
       }
       _user = user;
+      _markRequiredPermissionsPending();
       _updatePreferredOrientations();
       await _loadDashboardData(showLoader: false, promptTrainingGate: true);
       await _loadProfile(showLoader: false);
+      await _refreshRequiredPermissionState(showDialogIfMissing: true);
     } on ApiException catch (error) {
       if (error.code == 'network_error') {
         _showNetworkError(
@@ -1525,6 +1973,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _hasCheckedAppUpdate = false;
       _isDownloadingUpdate = false;
       _isUpdateDialogVisible = false;
+      _requiredPermissionStatus = const <String, dynamic>{};
+      _requiredPermissionsGranted = null;
+      _isRefreshingRequiredPermissions = false;
+      _isRequiredPermissionDialogVisible = false;
     });
     _updatePreferredOrientations();
     _showMessage('Session expired. Please sign in again.', isError: true);
@@ -1569,6 +2021,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _hasCheckedAppUpdate = false;
       _isDownloadingUpdate = false;
       _isUpdateDialogVisible = false;
+      _requiredPermissionStatus = const <String, dynamic>{};
+      _requiredPermissionsGranted = null;
+      _isRefreshingRequiredPermissions = false;
+      _isRequiredPermissionDialogVisible = false;
     });
     _updatePreferredOrientations();
   }
@@ -1586,9 +2042,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             borderRadius: BorderRadius.circular(24),
           ),
           title: const Text('Confirm Logout'),
-          content: const Text(
-            'Do you want to log out from HEAVENECTION now?',
-          ),
+          content: const Text('Do you want to log out from HEAVENECTION now?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -1716,7 +2170,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   Future<void> _confirmDocumentRemoval(_ProfileDocument document) async {
     final profile = _profile;
     final isAadhar = document == _ProfileDocument.aadhar;
-    final selectedFile = isAadhar ? _selectedAadharPhoto : _selectedPassbookPhoto;
+    final selectedFile = isAadhar
+        ? _selectedAadharPhoto
+        : _selectedPassbookPhoto;
     final hasSavedDocument = isAadhar
         ? (profile?.hasAadharPhoto ?? false)
         : (profile?.hasPassbookPhoto ?? false);
@@ -2070,9 +2526,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         return;
       }
       if (error.code == 'network_error') {
-        _showNetworkError(
-          'Unable to start right now. Please try again.',
-        );
+        _showNetworkError('Unable to start right now. Please try again.');
         return;
       }
       if (error.statusCode == 409 || error.code == 'training_required') {
@@ -2200,7 +2654,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (!canReadCallLog) {
       return;
     }
-    await _ensurePhoneStateAccess();
+    final canReadPhoneState = await _ensurePhoneStateAccess();
+    if (!canReadPhoneState) {
+      return;
+    }
 
     final dialStartedAt = DateTime.now();
     final call = await _apiClient.startCall(leadId: lead.id);
@@ -2276,8 +2733,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       if (error.statusCode == 409 && error.code == 'call_recovery_required') {
         await _loadDashboardData(showLoader: false, promptTrainingGate: false);
         await _openCurrentCallScreen(
-          notice:
-              'Sync the current customer call before starting another one.',
+          notice: 'Sync the current customer call before starting another one.',
         );
         return;
       }
@@ -2296,6 +2752,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   }
 
   Future<bool> _ensureCallLogAccess() async {
+    final permissionsReady = await _ensureRequiredPermissionsReady(
+      requestIfMissing: true,
+      showDialogIfMissing: true,
+    );
+    if (!permissionsReady) {
+      return false;
+    }
+
     if (!Platform.isAndroid) {
       _showMessage(
         'Automatic call sync is available on Android only.',
@@ -2312,8 +2776,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       );
       return true;
     } catch (_) {
+      await _refreshRequiredPermissionState(showDialogIfMissing: true);
       _showMessage(
-        'Allow call log access in Android permissions to sync calls automatically.',
+        'Allow all required Android permissions to sync calls automatically.',
         isError: true,
       );
       return false;
@@ -2435,7 +2900,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                 if (_pendingStatusLeadPhone.isNotEmpty)
                                   Text(
                                     _pendingStatusLeadPhone,
-                                    style: const TextStyle(color: Colors.black54),
+                                    style: const TextStyle(
+                                      color: Colors.black54,
+                                    ),
                                   ),
                               ],
                             ),
@@ -2487,13 +2954,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                       ),
                                       child: Icon(
                                         _remarkIcon(item),
-                                        color: isSelected ? Colors.white : color,
+                                        color: isSelected
+                                            ? Colors.white
+                                            : color,
                                       ),
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Text(
                                             item,
@@ -2540,7 +3010,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                       context: dialogContext,
                                       initialDate:
                                           selectedCallbackDate ??
-                                          DateTime(now.year, now.month, now.day),
+                                          DateTime(
+                                            now.year,
+                                            now.month,
+                                            now.day,
+                                          ),
                                       firstDate: DateTime(
                                         now.year,
                                         now.month,
@@ -2616,7 +3090,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                         ? null
                                         : (_) {
                                             setDialogState(
-                                              () => selectedCallbackWindow = item,
+                                              () =>
+                                                  selectedCallbackWindow = item,
                                             );
                                           },
                                     selectedColor: kPrimary,
@@ -2660,7 +3135,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                         ? null
                         : () async {
                             setDialogState(() => isSaving = true);
-                            final callbackDateLabel = selectedCallbackDate == null
+                            final callbackDateLabel =
+                                selectedCallbackDate == null
                                 ? ''
                                 : _formatCallbackDateLabel(
                                     selectedCallbackDate!,
@@ -2674,10 +3150,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                 callbackWindowLabel: selectedCallbackWindow,
                                 callbackDate: selectedCallbackDate,
                                 callbackDateLabel: callbackDateLabel,
-                                callbackScheduleLabel: _formatCallbackScheduleLabel(
-                                  callbackDateLabel,
-                                  selectedCallbackWindow,
-                                ),
+                                callbackScheduleLabel:
+                                    _formatCallbackScheduleLabel(
+                                      callbackDateLabel,
+                                      selectedCallbackWindow,
+                                    ),
                               ),
                             );
                           },
@@ -3005,6 +3482,22 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     });
   }
 
+  Future<void> _handleResumeState() async {
+    final permissionsReady = await _refreshRequiredPermissionState(
+      showDialogIfMissing: true,
+    );
+    if (!permissionsReady) {
+      return;
+    }
+
+    if (!_summary.workingNow) {
+      await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+      return;
+    }
+
+    await _handleResumeFromBackground();
+  }
+
   Future<void> _handleResumeFromBackground() async {
     final backgroundedAt = _backgroundedAt;
     _backgroundedAt = null;
@@ -3251,7 +3744,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         ? 'If you exit the app now, you will be marked offline immediately and work-hour counting will stop.'
         : 'Do you want to exit the app?';
 
-    final shouldExit = await showDialog<bool>(
+    final shouldExit =
+        await showDialog<bool>(
           context: context,
           barrierDismissible: false,
           builder: (dialogContext) {
@@ -3421,7 +3915,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         if (savedLabel == 'Call Back' && callbackScheduleLabel.isNotEmpty) {
           _showMessage('Call Back scheduled for $callbackScheduleLabel.');
         } else if (label == 'Rejected' && savedLabel != label) {
-          _showMessage('No real connected call was found, so the remark was saved as $savedLabel.');
+          _showMessage(
+            'No real connected call was found, so the remark was saved as $savedLabel.',
+          );
         } else {
           _showMessage('Remark saved as $savedLabel.');
         }
@@ -3596,9 +4092,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   String _remarkDescription(String label) {
     return switch (label) {
       'Follow Up' => 'Customer spoke and needs the next step from you.',
-      'Call Back' => 'Customer asked for a scheduled callback to discuss later.',
+      'Call Back' =>
+        'Customer asked for a scheduled callback to discuss later.',
       'Rejected' => 'Customer clearly said they are not interested.',
-      'No Response' => 'No useful discussion happened or the customer did not respond.',
+      'No Response' =>
+        'No useful discussion happened or the customer did not respond.',
       _ => '',
     };
   }
@@ -3633,6 +4131,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       );
     } else if (_user == null) {
       screen = _login();
+    } else if (_isResolvingRequiredPermissions) {
+      screen = const Scaffold(body: Center(child: CircularProgressIndicator()));
+    } else if (_needsRequiredPermissionGate) {
+      screen = _requiredPermissionGatePage();
     } else {
       final pages = [
         _dashboard(),
@@ -3987,7 +4489,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   Expanded(
                     child: Text(
                       'Work tracking starts automatically when you place a customer call.',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -4361,10 +4866,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   const SizedBox(height: 6),
                   Text(
                     _pendingStatusLeadPhone,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      color: Colors.black54,
-                    ),
+                    style: const TextStyle(fontSize: 17, color: Colors.black54),
                   ),
                 ],
                 const SizedBox(height: 14),
@@ -4431,7 +4933,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
     if (_hasActiveCustomerCall && _activeCallLeadId != _leads[index].id) {
       await _openCurrentCallScreen(
-        notice: 'Finish the current customer call before moving to another lead.',
+        notice:
+            'Finish the current customer call before moving to another lead.',
       );
       return;
     }
@@ -4541,7 +5044,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: _isSyncingCallLog ? null : () => _startCall(),
+                        onPressed: _isSyncingCallLog
+                            ? null
+                            : () => _startCall(),
                         icon: const Icon(Icons.phone_forwarded),
                         label: const Text('Call'),
                       ),
@@ -5173,10 +5678,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                         OutlinedButton.icon(
                           onPressed: _isProfileSaving
                               ? null
-                              : () =>
-                                    _confirmDocumentRemoval(
-                                      _ProfileDocument.aadhar,
-                                    ),
+                              : () => _confirmDocumentRemoval(
+                                  _ProfileDocument.aadhar,
+                                ),
                           icon: const Icon(Icons.delete_outline),
                           label: const Text('Remove Photo'),
                         ),
@@ -5205,10 +5709,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                         OutlinedButton.icon(
                           onPressed: _isProfileSaving
                               ? null
-                              : () =>
-                                    _confirmDocumentRemoval(
-                                      _ProfileDocument.passbook,
-                                    ),
+                              : () => _confirmDocumentRemoval(
+                                  _ProfileDocument.passbook,
+                                ),
                           icon: const Icon(Icons.delete_outline),
                           label: const Text('Remove Passbook'),
                         ),
@@ -5414,7 +5917,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     ),
                 ],
               ),
-              ),
+            ),
             const SizedBox(height: 18),
             ElevatedButton.icon(
               onPressed: _isProfileSaving ? null : _saveProfile,
@@ -6198,7 +6701,9 @@ class NetworkErrorView extends StatelessWidget {
                         SizedBox(height: 10),
                         Text('1. Check mobile data or Wi-Fi on the device.'),
                         SizedBox(height: 6),
-                        Text('2. Check that your internet service is available.'),
+                        Text(
+                          '2. Check that your internet service is available.',
+                        ),
                         SizedBox(height: 6),
                         Text(
                           '3. Wait a moment. The app will restore automatically when the connection returns.',
@@ -6488,12 +6993,9 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
                               selectedCallbackDate == null)
                       ? null
                       : () {
-                          final callbackDateLabel =
-                              selectedCallbackDate == null
+                          final callbackDateLabel = selectedCallbackDate == null
                               ? ''
-                              : _formatCallbackDateLabel(
-                                  selectedCallbackDate!,
-                                );
+                              : _formatCallbackDateLabel(selectedCallbackDate!);
                           Navigator.of(dialogContext).pop(
                             _RecoverySelection(
                               statusLabel: selectedStatus,
@@ -6503,10 +7005,11 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
                               callbackWindowLabel: selectedCallbackWindow,
                               callbackDate: selectedCallbackDate,
                               callbackDateLabel: callbackDateLabel,
-                              callbackScheduleLabel: _formatCallbackScheduleLabel(
-                                callbackDateLabel,
-                                selectedCallbackWindow,
-                              ),
+                              callbackScheduleLabel:
+                                  _formatCallbackScheduleLabel(
+                                    callbackDateLabel,
+                                    selectedCallbackWindow,
+                                  ),
                             ),
                           );
                         },
@@ -6802,6 +7305,8 @@ enum _PendingCallAction { markStatus, callRecent, cancel }
 
 enum _AppUpdateAction { download, install, later }
 
+enum _PermissionDialogAction { allowNow, openSettings }
+
 enum _ProfileDocument { aadhar, passbook }
 
 class StaffSalaryDetailsPage extends StatefulWidget {
@@ -6941,11 +7446,16 @@ class _StaffSalaryDetailsPageState extends State<StaffSalaryDetailsPage> {
                   children: [
                     const Text(
                       'Current progress',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'This is your live work progress for the running cycle.',
+                    Text(
+                      details == null
+                          ? 'This page shows your current earning, unpaid balance, and released salary history.'
+                          : 'This page shows your running-cycle earning, unpaid balance, and released salary details.',
                       style: TextStyle(fontSize: 14.5, color: Colors.black54),
                     ),
                     const SizedBox(height: 14),
@@ -6975,6 +7485,29 @@ class _StaffSalaryDetailsPageState extends State<StaffSalaryDetailsPage> {
                                 'Rs. 0.00',
                             color: kGreen,
                             icon: Icons.account_balance_wallet_outlined,
+                          ),
+                        ),
+                        SizedBox(
+                          width: 150,
+                          child: InfoCard(
+                            title: 'Pending',
+                            value:
+                                details?.currentCycle.balanceLabel ??
+                                'Rs. 0.00',
+                            color: kOrange,
+                            icon: Icons.pending_actions_outlined,
+                          ),
+                        ),
+                        SizedBox(
+                          width: 150,
+                          child: InfoCard(
+                            title: 'Released',
+                            value:
+                                details?.currentCycle.paidTotalLabel ??
+                                fallbackSummary?.totalPaidAmountLabel ??
+                                'Rs. 0.00',
+                            color: kPrimaryDark,
+                            icon: Icons.payments_outlined,
                           ),
                         ),
                       ],
@@ -7206,10 +7739,7 @@ class _StaffSalaryDetailsPageState extends State<StaffSalaryDetailsPage> {
                       const SizedBox(height: 8),
                       const Text(
                         'Review earlier credited payments and the periods they covered.',
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          color: Colors.black54,
-                        ),
+                        style: TextStyle(fontSize: 14.5, color: Colors.black54),
                       ),
                       const SizedBox(height: 14),
                       if (details.paymentHistory.isEmpty)
@@ -7326,8 +7856,14 @@ class _SalaryDetailCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           _SalaryMetricRow(label: 'Worked hours', value: block.hoursLabel),
-          _SalaryMetricRow(label: 'Earned amount', value: block.earnedTotalLabel),
-          _SalaryMetricRow(label: 'Released amount', value: block.paidTotalLabel),
+          _SalaryMetricRow(
+            label: 'Earned amount',
+            value: block.earnedTotalLabel,
+          ),
+          _SalaryMetricRow(
+            label: 'Released amount',
+            value: block.paidTotalLabel,
+          ),
           _SalaryMetricRow(label: 'Pending balance', value: block.balanceLabel),
           const Divider(height: 28),
           _SalaryMetricRow(label: 'Hourly earnings', value: block.basePayLabel),
@@ -7462,7 +7998,10 @@ class _SalaryPaymentHistoryCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(999),
@@ -7508,7 +8047,8 @@ class _SalaryPaymentHistoryCard extends StatelessWidget {
               ),
             ),
           ],
-          if (payment.paymentNote.isNotEmpty && payment.paymentNote != '--') ...[
+          if (payment.paymentNote.isNotEmpty &&
+              payment.paymentNote != '--') ...[
             const SizedBox(height: 6),
             Text(
               payment.paymentNote,
@@ -7607,7 +8147,8 @@ class _ReferralTrackingCard extends StatelessWidget {
             'Submitted on ${item.createdAtLabel}',
             style: const TextStyle(fontSize: 13.5, color: Colors.black54),
           ),
-          if (item.rewardAmountLabel.isNotEmpty && item.rewardAmountLabel != '--') ...[
+          if (item.rewardAmountLabel.isNotEmpty &&
+              item.rewardAmountLabel != '--') ...[
             const SizedBox(height: 6),
             Text(
               'Reward ${item.rewardAmountLabel} • ${item.rewardStatusLabel}',
@@ -7660,7 +8201,10 @@ class _ReferralRewardHistoryCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(999),
@@ -7701,7 +8245,8 @@ class _ReferralRewardHistoryCard extends StatelessWidget {
               style: const TextStyle(fontSize: 13.5, color: Colors.black54),
             ),
           ],
-          if (reward.paymentReference.isNotEmpty && reward.paymentReference != '--') ...[
+          if (reward.paymentReference.isNotEmpty &&
+              reward.paymentReference != '--') ...[
             const SizedBox(height: 6),
             Text(
               'Transaction ID: ${reward.paymentReference}',
@@ -7876,6 +8421,3 @@ class StatusPill extends StatelessWidget {
     );
   }
 }
-
-
-
