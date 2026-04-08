@@ -5,7 +5,7 @@ import logging
 import re
 from collections import Counter, defaultdict
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_FLOOR
 from threading import Thread
 
 from django.conf import settings
@@ -272,11 +272,15 @@ def _staff_period_totals(start, end):
         .values("staff_id")
         .annotate(total=Sum("duration_seconds"))
     }
+    qualifying_call_counts = Counter(
+        Call.objects.filter(start_time__range=(start, end), is_qualifying=True)
+        .values_list("staff_id", flat=True)
+    )
     converted_counts = Counter(
         Call.objects.filter(start_time__range=(start, end), status=Call.Status.CONVERTED, is_qualifying=True)
         .values_list("staff_id", flat=True)
     )
-    return session_totals, call_totals, converted_counts
+    return session_totals, call_totals, converted_counts, qualifying_call_counts
 
 
 def _calculate_base_pay(staff, active_hours):
@@ -284,19 +288,68 @@ def _calculate_base_pay(staff, active_hours):
     return _money(active_hours * staff.hourly_rate)
 
 
-def calculate_staff_payout(staff, *, active_seconds=0, call_seconds=0, converted_leads=0):
+def _calculate_hourly_call_bonus(*, company_profile, active_hours, qualifying_calls):
+    if not company_profile.hourly_call_bonus_enabled:
+        return {
+            "threshold_calls": 0,
+            "extra_calls": 0,
+            "bonus_amount": Decimal("0.00"),
+        }
+
+    threshold_per_hour = int(company_profile.hourly_call_bonus_threshold or 0)
+    bonus_rate = _money(company_profile.hourly_call_bonus_rate or 0)
+    if threshold_per_hour <= 0 or bonus_rate <= Decimal("0.00") or active_hours <= Decimal("0.00"):
+        return {
+            "threshold_calls": 0,
+            "extra_calls": 0,
+            "bonus_amount": Decimal("0.00"),
+        }
+
+    threshold_calls = int(
+        (Decimal(active_hours) * Decimal(threshold_per_hour)).to_integral_value(rounding=ROUND_FLOOR)
+    )
+    extra_calls = max(int(qualifying_calls or 0) - threshold_calls, 0)
+    bonus_amount = _money(Decimal(extra_calls) * bonus_rate)
+    return {
+        "threshold_calls": threshold_calls,
+        "extra_calls": extra_calls,
+        "bonus_amount": bonus_amount,
+    }
+
+
+def calculate_staff_payout(
+    staff,
+    *,
+    active_seconds=0,
+    call_seconds=0,
+    converted_leads=0,
+    qualifying_calls=0,
+    company_profile=None,
+):
+    company_profile = company_profile or get_company_profile()
     active_hours = _decimal_hours(active_seconds)
     call_minutes = _decimal_minutes(call_seconds)
     call_earnings = _money(call_minutes * staff.call_rate)
-    bonus_earnings = _money(Decimal(str(converted_leads or 0)) * staff.bonus_per_conversion)
+    conversion_bonus = _money(Decimal(str(converted_leads or 0)) * staff.bonus_per_conversion)
+    hourly_call_bonus = _calculate_hourly_call_bonus(
+        company_profile=company_profile,
+        active_hours=active_hours,
+        qualifying_calls=qualifying_calls,
+    )
+    bonus_earnings = _money(conversion_bonus + hourly_call_bonus["bonus_amount"])
     base_pay = _calculate_base_pay(staff, active_hours)
     total_pay = _money(base_pay + call_earnings + bonus_earnings)
     return {
         "active_hours": active_hours,
         "call_minutes": call_minutes,
         "converted_leads": int(converted_leads or 0),
+        "qualifying_calls": int(qualifying_calls or 0),
         "base_pay": base_pay,
         "call_earnings": call_earnings,
+        "conversion_bonus": conversion_bonus,
+        "hourly_call_bonus": hourly_call_bonus["bonus_amount"],
+        "hourly_call_bonus_threshold_calls": hourly_call_bonus["threshold_calls"],
+        "hourly_call_bonus_extra_calls": hourly_call_bonus["extra_calls"],
         "bonus_earnings": bonus_earnings,
         "total_pay": total_pay,
     }
@@ -629,6 +682,7 @@ def _date_range_bounds(period_start, period_end):
 
 def calculate_staff_payout_for_dates(staff, period_start, period_end):
     start_at, end_at = _date_range_bounds(period_start, period_end)
+    company_profile = get_company_profile()
     active_seconds = (
         Session.objects.filter(staff=staff, login_time__range=(start_at, end_at)).aggregate(total=Sum("active_seconds")).get("total")
         or 0
@@ -645,11 +699,18 @@ def calculate_staff_payout_for_dates(staff, period_start, period_end):
         status=Call.Status.CONVERTED,
         is_qualifying=True,
     ).count()
+    qualifying_calls = Call.objects.filter(
+        staff=staff,
+        start_time__range=(start_at, end_at),
+        is_qualifying=True,
+    ).count()
     breakdown = calculate_staff_payout(
         staff,
         active_seconds=active_seconds,
         call_seconds=call_seconds,
         converted_leads=converted_leads,
+        qualifying_calls=qualifying_calls,
+        company_profile=company_profile,
     )
     breakdown["period_start"] = period_start
     breakdown["period_end"] = period_end
@@ -2094,6 +2155,56 @@ def auto_allocate_leads(*, target_staff=None, prioritized_lead_ids=None):
     }
 
 
+def assign_imported_leads_to_staff(*, imported_lead_ids, selected_staff):
+    selected_staff = [staff for staff in selected_staff if staff and staff.is_active and staff.role == Staff.Role.STAFF]
+    if not imported_lead_ids or not selected_staff:
+        return {
+            "assigned_count": 0,
+            "remaining_unassigned_count": len(imported_lead_ids or []),
+            "released_count": 0,
+        }
+
+    queue_limit = get_lead_queue_limit()
+    released_count = 0
+    for staff in selected_staff:
+        released_count += release_staff_queue(staff)
+
+    staff_slots = [
+        {
+            "staff_id": staff.id,
+            "name": staff.name.lower(),
+            "assigned_count": 0,
+        }
+        for staff in selected_staff
+    ]
+    ordered_imported_ids = list(
+        Lead.objects.filter(id__in=list(imported_lead_ids)).order_by("created_at", "id").values_list("id", flat=True)
+    )
+    assigned_by_staff = defaultdict(list)
+    remaining_unassigned = []
+    for lead_id in ordered_imported_ids:
+        eligible_slots = [slot for slot in staff_slots if slot["assigned_count"] < queue_limit]
+        eligible_slots.sort(key=lambda item: (item["assigned_count"], item["name"], str(item["staff_id"])))
+        chosen_slot = eligible_slots[0] if eligible_slots else None
+        if not chosen_slot:
+            remaining_unassigned.append(lead_id)
+            continue
+        assigned_by_staff[chosen_slot["staff_id"]].append(lead_id)
+        chosen_slot["assigned_count"] += 1
+
+    assigned_at = timezone.now()
+    assigned_count = 0
+    for staff_id, lead_ids in assigned_by_staff.items():
+        assigned_count += len(lead_ids)
+        Lead.objects.filter(id__in=lead_ids).update(assigned_to_id=staff_id, updated_at=assigned_at)
+
+    return {
+        "assigned_count": assigned_count,
+        "remaining_unassigned_count": len(remaining_unassigned),
+        "released_count": released_count,
+    }
+
+
 def _decode_csv_bytes(file_bytes):
     for encoding in ("utf-8-sig", "utf-8", "latin-1"):
         try:
@@ -2230,7 +2341,7 @@ def _detect_lead_column_indexes(rows):
     return name_index, phone_index, rows[1:]
 
 
-def import_leads_from_upload(uploaded_file):
+def import_leads_from_upload(uploaded_file, *, assignment_mode="auto", assigned_staff=None):
     rows = _read_lead_rows_from_upload(uploaded_file)
     name_index, phone_index, data_rows = _detect_lead_column_indexes(rows)
 
@@ -2269,13 +2380,25 @@ def import_leads_from_upload(uploaded_file):
     if created_leads:
         Lead.objects.bulk_create(created_leads)
 
-    allocation = auto_allocate_leads()
+    selected_staff = list(assigned_staff or [])
+    if assignment_mode == "selected_staff" and selected_staff:
+        allocation = assign_imported_leads_to_staff(
+            imported_lead_ids=[lead.id for lead in created_leads if getattr(lead, "id", None)],
+            selected_staff=selected_staff,
+        )
+    else:
+        allocation = auto_allocate_leads()
+
     return {
         "created_count": len(created_leads),
         "skipped_count": skipped_rows,
         "assigned_count": allocation["assigned_count"],
         "remaining_unassigned_count": allocation["remaining_unassigned_count"],
         "queue_limit": get_lead_queue_limit(),
+        "assignment_mode": assignment_mode,
+        "selected_staff_count": len(selected_staff),
+        "selected_staff_names": [staff.name for staff in selected_staff],
+        "released_count": allocation.get("released_count", 0),
     }
 
 
@@ -2678,8 +2801,8 @@ def build_dashboard_payload():
         row["staff_id"]: row["total"] or 0
         for row in qualifying_calls_today.values("staff_id").annotate(total=Sum("duration_seconds"))
     }
-    month_session_totals, month_call_totals, month_converted = _staff_period_totals(month_start, month_end)
-    week_session_totals, week_call_totals, week_converted = _staff_period_totals(week_start, week_end)
+    month_session_totals, month_call_totals, month_converted, month_qualifying_counts = _staff_period_totals(month_start, month_end)
+    week_session_totals, week_call_totals, week_converted, week_qualifying_counts = _staff_period_totals(week_start, week_end)
     salary_estimate = Decimal("0.00")
     for staff in staff_queryset:
         weekly_breakdown = calculate_staff_payout(
@@ -2687,12 +2810,14 @@ def build_dashboard_payload():
             active_seconds=week_session_totals.get(staff.id, 0),
             call_seconds=week_call_totals.get(staff.id, 0),
             converted_leads=week_converted.get(staff.id, 0),
+            qualifying_calls=week_qualifying_counts.get(staff.id, 0),
         )
         monthly_breakdown = calculate_staff_payout(
             staff,
             active_seconds=month_session_totals.get(staff.id, 0),
             call_seconds=month_call_totals.get(staff.id, 0),
             converted_leads=month_converted.get(staff.id, 0),
+            qualifying_calls=month_qualifying_counts.get(staff.id, 0),
         )
         current_payable, _ = _current_cycle_payout(staff, weekly_breakdown, monthly_breakdown)
         salary_estimate += current_payable
@@ -2792,12 +2917,14 @@ def build_dashboard_payload():
             active_seconds=week_session_totals.get(staff.id, 0),
             call_seconds=week_call_totals.get(staff.id, 0),
             converted_leads=week_converted.get(staff.id, 0),
+            qualifying_calls=week_qualifying_counts.get(staff.id, 0),
         )
         monthly_breakdown = calculate_staff_payout(
             staff,
             active_seconds=month_session_totals.get(staff.id, 0),
             call_seconds=month_call_totals.get(staff.id, 0),
             converted_leads=month_converted.get(staff.id, 0),
+            qualifying_calls=month_qualifying_counts.get(staff.id, 0),
         )
         current_payable, cycle_label = _current_cycle_payout(staff, weekly_breakdown, monthly_breakdown)
         salary_records.append(
@@ -3211,6 +3338,13 @@ def build_salary_control_payload(request):
             "reward_amount": f"{Decimal(company_profile.referral_reward_amount or 0):.2f}",
             "required_hours_label": f"{float(company_profile.referral_required_hours or 0):,.1f}h",
             "reward_amount_label": _format_currency(company_profile.referral_reward_amount or 0),
+        },
+        "call_bonus_settings": {
+            "enabled": company_profile.hourly_call_bonus_enabled,
+            "threshold": int(company_profile.hourly_call_bonus_threshold or 0),
+            "rate": f"{Decimal(company_profile.hourly_call_bonus_rate or 0):.2f}",
+            "threshold_label": f"{int(company_profile.hourly_call_bonus_threshold or 0)} calls / hour",
+            "rate_label": _format_currency(company_profile.hourly_call_bonus_rate or 0),
         },
         "referrer_options": referrer_options,
         "salary_rows": salary_rows,
@@ -3632,7 +3766,6 @@ def build_settings_payload(current_user):
 
 
 def build_lead_management_payload():
-    auto_allocate_leads()
     leads = Lead.objects.select_related("assigned_to").order_by("-updated_at")
     active_queue = _lead_queue_queryset()
     queue_limit = get_lead_queue_limit()

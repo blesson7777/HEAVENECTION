@@ -73,6 +73,47 @@
 <section class="hc-surface-card animate-on-scroll mt-4">
     <div class="mf-db2-panel-head mb-3">
         <div>
+            <span class="mf-db2-kicker">Hourly Call Bonus</span>
+            <h5>Reward staff for calls completed above the hourly target</h5>
+        </div>
+        <span class="hc-sync-pill"><i class="bi bi-lightning-charge"></i> Editable Bonus Rule</span>
+    </div>
+
+    <form method="post" class="row g-3 align-items-end">
+        {% csrf_token %}
+        <input type="hidden" name="salary_control_action" value="update_call_bonus_settings">
+        <div class="col-md-3">
+            <div class="form-check form-switch pt-4">
+                <input class="form-check-input" type="checkbox" role="switch" id="hourlyCallBonusEnabled" name="hourly_call_bonus_enabled" {% if call_bonus_settings.enabled %}checked{% endif %}>
+                <label class="form-check-label fw-semibold" for="hourlyCallBonusEnabled">Enable hourly call bonus</label>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label fw-semibold" for="hourlyCallBonusThreshold">Target Calls per Hour</label>
+            <input type="number" class="form-control" id="hourlyCallBonusThreshold" name="hourly_call_bonus_threshold" min="1" value="{{ call_bonus_settings.threshold }}">
+            <div class="form-text">Example: `50` means the bonus starts only after 50 calls for every 1 hour of work.</div>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label fw-semibold" for="hourlyCallBonusRate">Bonus per Extra Call</label>
+            <input type="number" class="form-control" id="hourlyCallBonusRate" name="hourly_call_bonus_rate" step="0.01" min="0" value="{{ call_bonus_settings.rate }}">
+            <div class="form-text">Example: `0.50` adds 50 paise for every extra call above the target.</div>
+        </div>
+        <div class="col-md-3">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Current Rule</span>
+                <h6 class="mb-1">{{ call_bonus_settings.threshold_label }}</h6>
+                <p class="text-muted mb-0">{{ call_bonus_settings.rate_label }} per extra call</p>
+            </div>
+        </div>
+        <div class="col-12 d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary">Save Hourly Bonus Rule</button>
+        </div>
+    </form>
+</section>
+
+<section class="hc-surface-card animate-on-scroll mt-4">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
             <span class="mf-db2-kicker">Salary Control Panel</span>
             <h5>Configure payout settings and review payout details for each staff member</h5>
         </div>

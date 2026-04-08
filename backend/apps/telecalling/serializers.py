@@ -730,6 +730,9 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             "referral_program_enabled",
             "referral_required_hours",
             "referral_reward_amount",
+            "hourly_call_bonus_enabled",
+            "hourly_call_bonus_threshold",
+            "hourly_call_bonus_rate",
             "description",
             "logo",
             "logo_url",
@@ -768,6 +771,9 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
             "referral_program_enabled",
             "referral_required_hours",
             "referral_reward_amount",
+            "hourly_call_bonus_enabled",
+            "hourly_call_bonus_threshold",
+            "hourly_call_bonus_rate",
             "description",
             "logo",
             "remove_logo",
@@ -781,6 +787,20 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Upload an image file for the company logo.")
         if getattr(value, "size", 0) > 5 * 1024 * 1024:
             raise serializers.ValidationError("Logo size must be 5 MB or smaller.")
+        return value
+
+    def validate_hourly_call_bonus_threshold(self, value):
+        if value is None:
+            return value
+        if int(value) < 0:
+            raise serializers.ValidationError("Target calls per hour cannot be negative.")
+        return value
+
+    def validate_hourly_call_bonus_rate(self, value):
+        if value is None:
+            return value
+        if Decimal(value) < Decimal("0.00"):
+            raise serializers.ValidationError("Bonus per extra call cannot be negative.")
         return value
 
     def update(self, instance, validated_data):
@@ -927,13 +947,39 @@ class UpdateLeadSerializer(serializers.ModelSerializer):
 
 
 class LeadImportUploadSerializer(serializers.Serializer):
+    class AssignmentMode:
+        AUTOMATIC = "auto"
+        SELECTED_STAFF = "selected_staff"
+
     file = serializers.FileField()
+    assignment_mode = serializers.ChoiceField(
+        choices=[
+            (AssignmentMode.AUTOMATIC, "Automatic"),
+            (AssignmentMode.SELECTED_STAFF, "Selected Staff"),
+        ],
+        required=False,
+        default=AssignmentMode.AUTOMATIC,
+    )
+    assigned_staff_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Staff.objects.filter(role=Staff.Role.STAFF, is_active=True),
+        many=True,
+        required=False,
+    )
 
     def validate_file(self, value):
         file_name = str(getattr(value, "name", "")).lower()
         if not file_name.endswith((".csv", ".xlsx", ".xlsm", ".vcf")):
             raise serializers.ValidationError("Upload a CSV, Excel, or VCF file.")
         return value
+
+    def validate(self, attrs):
+        assignment_mode = attrs.get("assignment_mode", self.AssignmentMode.AUTOMATIC)
+        selected_staff = attrs.get("assigned_staff_ids") or []
+        if assignment_mode == self.AssignmentMode.SELECTED_STAFF and not selected_staff:
+            raise serializers.ValidationError(
+                {"assigned_staff_ids": "Select at least one active staff member for manual import assignment."}
+            )
+        return attrs
 
 
 class FollowupUpdateUploadSerializer(serializers.Serializer):

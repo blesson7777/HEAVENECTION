@@ -257,8 +257,36 @@
                             The system reads name and phone columns automatically from spreadsheets, or contact names and phone numbers from VCF files, and skips duplicate phone numbers.
                         </div>
                     </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Import Assignment</label>
+                        <div class="d-flex flex-wrap gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="assignment_mode" id="leadImportAssignAuto" value="auto" checked>
+                                <label class="form-check-label" for="leadImportAssignAuto">Automatic queue</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="assignment_mode" id="leadImportAssignSelected" value="selected_staff">
+                                <label class="form-check-label" for="leadImportAssignSelected">Assign imported queue to selected staff</label>
+                            </div>
+                        </div>
+                        <div class="form-text">Choose selected staff when this batch should replace their current active queue with the newly imported leads.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Selected Staff</label>
+                        <div class="border rounded-4 p-3" style="max-height: 210px; overflow-y: auto;">
+                            {% for staff in staff_options %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="assigned_staff_ids" id="leadImportStaff{{ forloop.counter }}" value="{{ staff.id }}">
+                                <label class="form-check-label" for="leadImportStaff{{ forloop.counter }}">{{ staff.name }}</label>
+                            </div>
+                            {% empty %}
+                            <div class="text-muted small">No active staff available right now.</div>
+                            {% endfor %}
+                        </div>
+                        <div class="form-text">If selected-staff import is used, any currently assigned active leads for those staff members are moved back to the waiting queue first.</div>
+                    </div>
                     <div class="alert alert-light border mb-0" role="alert">
-                        Imported leads are assigned automatically until each active staff member reaches the target count shown above. As soon as one lead is completed, the next waiting lead is assigned automatically.
+                        Automatic import keeps every active staff member filled up to the target count. Selected-staff import first releases that staff member's current active queue, then loads the newly imported leads into their queue.
                     </div>
                     <div id="leadImportFeedback" class="hc-form-feedback d-none mt-3"></div>
                     <div class="d-flex justify-content-end gap-2 mt-4">

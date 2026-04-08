@@ -679,6 +679,9 @@
         }
 
         const fileInput = document.getElementById("leadImportFile");
+        const assignmentModeInputs = Array.from(
+            form.querySelectorAll('input[name="assignment_mode"]'),
+        );
         const feedback = document.getElementById("leadImportFeedback");
         const submitButton = document.getElementById("leadImportSubmitButton");
 
@@ -715,10 +718,24 @@
             submitButton.disabled = true;
             const formData = new FormData();
             formData.append("file", file);
+            const selectedAssignmentMode =
+                assignmentModeInputs.find((input) => input.checked)?.value || "auto";
+            formData.append("assignment_mode", selectedAssignmentMode);
+            if (selectedAssignmentMode === "selected_staff") {
+                Array.from(
+                    form.querySelectorAll('input[name="assigned_staff_ids"]:checked'),
+                ).forEach((input) => {
+                    formData.append("assigned_staff_ids", input.value);
+                });
+            }
 
             try {
                 const result = await requestForm(config.leadImportUrl, formData, { method: "POST" });
-                const successMessage = `Imported ${result.created_count} leads, skipped ${result.skipped_count}, assigned ${result.assigned_count}, waiting ${result.remaining_unassigned_count}.`;
+                const assignmentNote =
+                    result.assignment_mode === "selected_staff"
+                        ? ` Loaded into ${result.selected_staff_count} selected staff queue(s).`
+                        : "";
+                const successMessage = `Imported ${result.created_count} leads, skipped ${result.skipped_count}, assigned ${result.assigned_count}, waiting ${result.remaining_unassigned_count}.${assignmentNote}`;
                 showFeedback(successMessage, false);
                 storeFlashMessage(successMessage, "success");
                 window.setTimeout(() => window.location.reload(), 900);

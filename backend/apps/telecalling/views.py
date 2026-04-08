@@ -770,18 +770,35 @@ def leads_page(request):
     if request.method == "POST":
         lead_action = request.POST.get("lead_action")
         if lead_action == "import":
-            serializer = LeadImportUploadSerializer(data={"file": request.FILES.get("file")})
+            serializer = LeadImportUploadSerializer(
+                data={
+                    "file": request.FILES.get("file"),
+                    "assignment_mode": request.POST.get("assignment_mode", "auto"),
+                    "assigned_staff_ids": request.POST.getlist("assigned_staff_ids"),
+                }
+            )
             if serializer.is_valid():
                 try:
-                    summary = import_leads_from_upload(serializer.validated_data["file"])
+                    summary = import_leads_from_upload(
+                        serializer.validated_data["file"],
+                        assignment_mode=serializer.validated_data.get("assignment_mode", "auto"),
+                        assigned_staff=serializer.validated_data.get("assigned_staff_ids") or [],
+                    )
                 except ValueError as error:
                     messages.error(request, str(error))
                 else:
+                    assignment_note = ""
+                    if summary.get("assignment_mode") == "selected_staff":
+                        selected_names = ", ".join(summary.get("selected_staff_names") or [])
+                        assignment_note = (
+                            f" Replaced {summary.get('released_count', 0)} existing assigned leads and loaded the imported batch into: {selected_names or 'selected staff'}."
+                        )
                     messages.success(
                         request,
                         "Lead import completed. "
                         f"Imported {summary['created_count']}, skipped {summary['skipped_count']}, "
-                        f"assigned {summary['assigned_count']}, waiting {summary['remaining_unassigned_count']}.",
+                        f"assigned {summary['assigned_count']}, waiting {summary['remaining_unassigned_count']}."
+                        f"{assignment_note}",
                     )
                 return redirect("leads-page")
 
@@ -1271,6 +1288,26 @@ def salary_control_page(request):
                 "Please correct the referral settings and try again. "
                 + " ".join(_normalize_errors(serializer.errors).values()),
             )
+        elif request.POST.get("salary_control_action") == "update_call_bonus_settings":
+            company_profile = get_company_profile()
+            serializer = CompanyProfileUpdateSerializer(
+                company_profile,
+                data={
+                    "hourly_call_bonus_enabled": request.POST.get("hourly_call_bonus_enabled") == "on",
+                    "hourly_call_bonus_threshold": request.POST.get("hourly_call_bonus_threshold", "50"),
+                    "hourly_call_bonus_rate": request.POST.get("hourly_call_bonus_rate", "0.50"),
+                },
+                partial=True,
+            )
+            if serializer.is_valid():
+                serializer.save()
+                messages.success(request, "Hourly call bonus settings updated successfully.")
+                return redirect("salary-control-page")
+            messages.error(
+                request,
+                "Please correct the hourly call bonus settings and try again. "
+                + " ".join(_normalize_errors(serializer.errors).values()),
+            )
 
     context = _admin_web_context(
         request,
@@ -1483,9 +1520,16 @@ def leads_api(request):
 @api_view(["POST"])
 @permission_classes([IsAdminStaff])
 def import_leads_api(request):
-    serializer = LeadImportUploadSerializer(data=request.data)
+    payload = request.data.copy()
+    if hasattr(request.data, "getlist"):
+        payload.setlist("assigned_staff_ids", request.data.getlist("assigned_staff_ids"))
+    serializer = LeadImportUploadSerializer(data=payload)
     serializer.is_valid(raise_exception=True)
-    summary = import_leads_from_upload(serializer.validated_data["file"])
+    summary = import_leads_from_upload(
+        serializer.validated_data["file"],
+        assignment_mode=serializer.validated_data.get("assignment_mode", "auto"),
+        assigned_staff=serializer.validated_data.get("assigned_staff_ids") or [],
+    )
     return Response(summary, status=201)
 
 
