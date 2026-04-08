@@ -290,6 +290,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool get _hasPendingCallStatus =>
       _pendingStatusCallId != null && _pendingStatusCallId!.isNotEmpty;
 
+  bool get _hasRecoverableCustomerCall =>
+      !_hasPendingCallStatus &&
+      _summary.recoverableCallRequired &&
+      _summary.recoverableCallId.isNotEmpty;
+
   bool get _hasActiveCustomerCall =>
       _activeCallId != null && _pendingDialerCall != null;
 
@@ -381,6 +386,20 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     });
   }
 
+  void _ensureActiveCallTimerRunning() {
+    if (_callTimer != null) {
+      return;
+    }
+    _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || !_hasActiveCustomerCall) {
+        _callTimer?.cancel();
+        _callTimer = null;
+        return;
+      }
+      setState(() => _elapsed += const Duration(seconds: 1));
+    });
+  }
+
   void _setCallLogSyncing(bool value) {
     if (_isSyncingCallLog == value) {
       return;
@@ -400,6 +419,31 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _tab = 1;
       _lastLoadedTab = 1;
     });
+  }
+
+  void _syncRecoverableCallFromSummary() {
+    if (_summary.pendingCallStatusRequired ||
+        !_summary.recoverableCallRequired ||
+        _summary.recoverableCallId.isEmpty) {
+      return;
+    }
+
+    final startedAt = _summary.recoverableCallStartedAt ?? DateTime.now();
+    final hasSameCall = _pendingDialerCall?.callId == _summary.recoverableCallId;
+    _activeCallId = _summary.recoverableCallId;
+    _activeCallLeadId = _summary.recoverableCallLeadId;
+    _pendingDialerCall = PendingDialerCall(
+      callId: _summary.recoverableCallId,
+      leadId: _summary.recoverableCallLeadId,
+      phone: _summary.recoverableCallLeadPhone,
+      startedAt: startedAt,
+    );
+    _lastCallActivityAt = startedAt;
+    if (!hasSameCall) {
+      final elapsed = DateTime.now().difference(startedAt);
+      _elapsed = elapsed.isNegative ? Duration.zero : elapsed;
+    }
+    _ensureActiveCallTimerRunning();
   }
 
   Future<void> _focusLeadWorkflowAfterCallResultSaved() async {
@@ -536,12 +580,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _lastCallActivityAt = dialStartedAt;
         _elapsed = Duration.zero;
       });
-      _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!mounted) {
-          return;
-        }
-        setState(() => _elapsed += const Duration(seconds: 1));
-      });
+      _ensureActiveCallTimerRunning();
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
         await _handleForcedLogout();
@@ -720,10 +759,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           _user = restoredUser;
           _updatePreferredOrientations();
           await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+          await _maybeAutoSyncEndedCall(showMissingMessage: false);
           await _loadProfile(showLoader: false);
         }
       } else {
         await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+        await _maybeAutoSyncEndedCall(showMissingMessage: false);
         if (_tab == 3 || _profile == null) {
           await _loadProfile(showLoader: false);
         }
@@ -735,11 +776,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       if (_isNetworkErrorVisible) {
         return;
       }
+      final preferredTab =
+          (_summary.pendingCallStatusRequired ||
+              _summary.recoverableCallRequired)
+          ? 1
+          : (_lastLoadedTab < 0 ? 0 : (_lastLoadedTab > 3 ? 3 : _lastLoadedTab));
       setState(() {
         _isNetworkErrorVisible = false;
-        _tab = _lastLoadedTab < 0
-            ? 0
-            : (_lastLoadedTab > 3 ? 3 : _lastLoadedTab);
+        _tab = preferredTab;
+        _lastLoadedTab = preferredTab;
       });
     } on ApiException catch (error) {
       if (error.code != 'network_error') {
@@ -760,6 +805,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _user = restoredUser;
         _updatePreferredOrientations();
         await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+        await _maybeAutoSyncEndedCall(showMissingMessage: false);
         await _loadProfile(showLoader: false);
       }
     } on ApiException catch (error) {
@@ -799,8 +845,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _leads = results[1] as List<LeadItem>;
         _applyLearningPayload(results[2] as LearningCenterPayload);
         _syncPendingCallStatusFromSummary();
-        _isNetworkErrorVisible = false;
         if (_summary.pendingCallStatusRequired) {
+          _resetActiveCallTracking();
+        } else if (_summary.recoverableCallRequired) {
+          _syncRecoverableCallFromSummary();
+        } else {
+          _resetActiveCallTracking();
+        }
+        _isNetworkErrorVisible = false;
+        if (_summary.pendingCallStatusRequired ||
+            _summary.recoverableCallRequired) {
           _tab = 1;
           _lastLoadedTab = 1;
         }
@@ -2179,12 +2233,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _lastCallActivityAt = dialStartedAt;
       _elapsed = Duration.zero;
     });
-    _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() => _elapsed += const Duration(seconds: 1));
-    });
+    _ensureActiveCallTimerRunning();
   }
 
   Future<void> _startCall() async {
@@ -2224,6 +2273,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         await _loadDashboardData(showLoader: false, promptTrainingGate: false);
         return;
       }
+      if (error.statusCode == 409 && error.code == 'call_recovery_required') {
+        await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+        await _openCurrentCallScreen(
+          notice:
+              'Sync the current customer call before starting another one.',
+        );
+        return;
+      }
       _showMessage(error.message, isError: true);
     }
   }
@@ -2235,7 +2292,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    await _syncCallFromLog(allowManualFallback: false, showMissingMessage: true);
+    await _syncCallFromLog(allowManualFallback: true, showMissingMessage: true);
   }
 
   Future<bool> _ensureCallLogAccess() async {
@@ -2957,6 +3014,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     await _loadDashboardData(showLoader: false, promptTrainingGate: true);
+    if (await _maybeAutoSyncEndedCall(showMissingMessage: false)) {
+      return;
+    }
     if (_tab == 3) {
       await _loadProfile(showLoader: false);
     }
@@ -2981,7 +3041,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     await _sendHeartbeat('foreground', interaction: true, source: 'lifecycle');
   }
 
-  Future<bool> _maybeAutoSyncEndedCall() async {
+  Future<bool> _maybeAutoSyncEndedCall({bool showMissingMessage = true}) async {
     if (_pendingDialerCall == null || _isSyncingCallLog) {
       return false;
     }
@@ -2996,7 +3056,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     return _syncCallFromLog(
       allowManualFallback: false,
-      showMissingMessage: true,
+      showMissingMessage: showMissingMessage,
     );
   }
 
@@ -3902,6 +3962,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           if (_hasPendingCallStatus) ...[
             _buildPendingCallStatusBanner(),
             const SizedBox(height: 18),
+          ] else if (_hasRecoverableCustomerCall) ...[
+            _buildRecoverableCallBanner(),
+            const SizedBox(height: 18),
           ],
           if (_summary.workingNow)
             ElevatedButton.icon(
@@ -4027,6 +4090,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           const SizedBox(height: 16),
           if (_hasPendingCallStatus) ...[
             _buildPendingCallStatusBanner(),
+            const SizedBox(height: 16),
+          ] else if (_hasRecoverableCustomerCall) ...[
+            _buildRecoverableCallBanner(),
             const SizedBox(height: 16),
           ],
           if (_leads.isEmpty)
@@ -4177,6 +4243,58 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecoverableCallBanner() {
+    if (!_hasRecoverableCustomerCall) {
+      return const SizedBox.shrink();
+    }
+
+    final leadSummary = _summary.recoverableCallLeadName.isNotEmpty
+        ? _summary.recoverableCallLeadName
+        : (_summary.recoverableCallLeadPhone.isNotEmpty
+              ? _summary.recoverableCallLeadPhone
+              : 'recent customer');
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: kPrimary.withValues(alpha: 0.22)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.sync_problem, color: kPrimary),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Current Call Needs Sync',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Finish syncing the recent customer call for $leadSummary before moving to another customer.',
+            style: const TextStyle(fontSize: 15.5, color: Colors.black54),
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            onPressed: () => _openCurrentCallScreen(
+              notice:
+                  'Sync the current customer call before starting another one.',
+            ),
+            icon: const Icon(Icons.phone_in_talk),
+            label: const Text('Open Current Call'),
           ),
         ],
       ),

@@ -798,6 +798,12 @@ class DailySummary {
     required this.pendingCallLeadId,
     required this.pendingCallLeadName,
     required this.pendingCallLeadPhone,
+    required this.recoverableCallRequired,
+    required this.recoverableCallId,
+    required this.recoverableCallLeadId,
+    required this.recoverableCallLeadName,
+    required this.recoverableCallLeadPhone,
+    required this.recoverableCallStartedAt,
   });
 
   final String activeLabel;
@@ -816,6 +822,12 @@ class DailySummary {
   final String pendingCallLeadId;
   final String pendingCallLeadName;
   final String pendingCallLeadPhone;
+  final bool recoverableCallRequired;
+  final String recoverableCallId;
+  final String recoverableCallLeadId;
+  final String recoverableCallLeadName;
+  final String recoverableCallLeadPhone;
+  final DateTime? recoverableCallStartedAt;
 
   factory DailySummary.empty() {
     return const DailySummary(
@@ -835,6 +847,12 @@ class DailySummary {
       pendingCallLeadId: '',
       pendingCallLeadName: '',
       pendingCallLeadPhone: '',
+      recoverableCallRequired: false,
+      recoverableCallId: '',
+      recoverableCallLeadId: '',
+      recoverableCallLeadName: '',
+      recoverableCallLeadPhone: '',
+      recoverableCallStartedAt: null,
     );
   }
 
@@ -858,6 +876,19 @@ class DailySummary {
       pendingCallLeadId: json['pending_call_lead_id']?.toString() ?? '',
       pendingCallLeadName: json['pending_call_lead_name']?.toString() ?? '',
       pendingCallLeadPhone: json['pending_call_lead_phone']?.toString() ?? '',
+      recoverableCallRequired: json['recoverable_call_required'] == true,
+      recoverableCallId: json['recoverable_call_id']?.toString() ?? '',
+      recoverableCallLeadId:
+          json['recoverable_call_lead_id']?.toString() ?? '',
+      recoverableCallLeadName:
+          json['recoverable_call_lead_name']?.toString() ?? '',
+      recoverableCallLeadPhone:
+          json['recoverable_call_lead_phone']?.toString() ?? '',
+      recoverableCallStartedAt: json['recoverable_call_started_at'] == null
+          ? null
+          : DateTime.tryParse(
+              json['recoverable_call_started_at'].toString(),
+            )?.toLocal(),
     );
   }
 }

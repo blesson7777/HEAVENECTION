@@ -97,6 +97,7 @@ from backend.apps.telecalling.services import (
     end_staff_session,
     get_assigned_leads,
     get_pending_status_call,
+    get_recoverable_open_call,
     get_company_profile,
     publish_app_release,
     queue_salary_payment_acknowledgement,
@@ -2017,6 +2018,17 @@ def start_call_api(request):
                 "detail": "Mark the previous call status before starting another call.",
                 "code": "call_status_required",
                 "call": CallSerializer(pending_status_call).data,
+                "summary": build_staff_today_payload(request.user)["summary"],
+            },
+            status=409,
+        )
+    recoverable_call = get_recoverable_open_call(request.user)
+    if recoverable_call:
+        return Response(
+            {
+                "detail": "Finish syncing the recent customer call before starting another one.",
+                "code": "call_recovery_required",
+                "call": CallSerializer(recoverable_call).data,
                 "summary": build_staff_today_payload(request.user)["summary"],
             },
             status=409,

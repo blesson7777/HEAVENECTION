@@ -1812,11 +1812,31 @@ def _return_lead_to_queue_after_invalid_short(lead):
     return lead
 
 
+def _return_lead_to_same_staff_after_invalid_short(lead, staff):
+    if not lead or not staff:
+        return None
+
+    lead.status = Lead.Status.NEW
+    lead.assigned_to = staff
+    lead.callback_window = ""
+    lead.callback_date = None
+    lead.save(
+        update_fields=[
+            "status",
+            "assigned_to",
+            "callback_window",
+            "callback_date",
+            "updated_at",
+        ]
+    )
+    return lead
+
+
 def _close_unresolved_call(call, *, reason):
     if not call or call.end_time is not None:
         return call
 
-    session = get_open_session(call.staff, reconcile=True)
+    session = get_open_session(call.staff, reconcile=False)
     call.end_time = call.start_time
     call.duration_seconds = 0
     call.is_qualifying = False
@@ -1886,6 +1906,20 @@ def _reconcile_open_calls(*, staff=None, now=None):
         live_staff_ids.add(call.staff_id)
 
     return live_staff_ids
+
+
+def get_recoverable_open_call(staff, *, now=None):
+    _reconcile_open_calls(staff=staff, now=now)
+    return (
+        Call.objects.filter(
+            staff=staff,
+            status=Call.Status.STARTED,
+            end_time__isnull=True,
+        )
+        .select_related("lead")
+        .order_by("-start_time", "-created_at")
+        .first()
+    )
 
 
 def _staff_queryset():
@@ -5058,6 +5092,7 @@ def build_staff_today_payload(staff):
     latest_session = sessions_today.order_by("-login_time").first()
     learning_payload = build_staff_learning_payload(staff)
     pending_status_call = get_pending_status_call(staff)
+    recoverable_open_call = get_recoverable_open_call(staff, now=now)
 
     active_seconds = _effective_active_seconds_for_staff(
         staff=staff,
@@ -5090,6 +5125,14 @@ def build_staff_today_payload(staff):
             "pending_call_lead_id": str(pending_status_call.lead_id) if pending_status_call else "",
             "pending_call_lead_name": pending_status_call.lead.name if pending_status_call else "",
             "pending_call_lead_phone": pending_status_call.lead.phone if pending_status_call else "",
+            "recoverable_call_required": bool(recoverable_open_call),
+            "recoverable_call_id": str(recoverable_open_call.id) if recoverable_open_call else "",
+            "recoverable_call_lead_id": str(recoverable_open_call.lead_id) if recoverable_open_call else "",
+            "recoverable_call_lead_name": recoverable_open_call.lead.name if recoverable_open_call else "",
+            "recoverable_call_lead_phone": recoverable_open_call.lead.phone if recoverable_open_call else "",
+            "recoverable_call_started_at": recoverable_open_call.start_time.isoformat()
+            if recoverable_open_call
+            else None,
         },
         "session": {
             "id": str(open_session.id),
@@ -5372,8 +5415,12 @@ def end_staff_call(
     call.lead.last_contacted_at = call.end_time
     call.lead.save(update_fields=["last_contacted_at", "updated_at"])
     if call.status == Call.Status.INVALID_SHORT:
-        _return_lead_to_queue_after_invalid_short(call.lead)
-        auto_allocate_leads()
+        if source == "call_log_short_recall":
+            _return_lead_to_same_staff_after_invalid_short(call.lead, call.staff)
+            auto_allocate_leads(target_staff=call.staff, prioritized_lead_ids=[call.lead_id])
+        else:
+            _return_lead_to_queue_after_invalid_short(call.lead)
+            auto_allocate_leads()
 
     _log_staff_action(
         call.staff,
@@ -5404,15 +5451,18 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
     if call.status == Call.Status.INVALID_SHORT:
         return call
 
+    if not call.is_verified or int(call.duration_seconds or 0) <= 0:
+        if status == Call.Status.NOT_INTERESTED:
+            status = Call.Status.NO_ANSWER
+        elif status != Call.Status.NO_ANSWER:
+            raise ValueError(
+                "This call could not be verified from the phone log. Sync it again or mark it as No Response."
+            )
+
     now = timezone.now()
     session = get_open_session(call.staff, reconcile=True)
     if session:
         _touch_session_interaction(session, now, metadata={"source": "call_status"})
-
-    if status == Call.Status.NOT_INTERESTED and (
-        not call.is_verified or int(call.duration_seconds or 0) <= 0
-    ):
-        status = Call.Status.NO_ANSWER
 
     resolved_callback_window = callback_window if status == Call.Status.CALL_BACK else ""
     resolved_callback_date = callback_date if status == Call.Status.CALL_BACK else None
