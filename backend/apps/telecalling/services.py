@@ -454,6 +454,11 @@ def _money(value):
     return Decimal(value or 0).quantize(TWOPLACES)
 
 
+def _hourly_bonus_call_queryset(queryset=None):
+    base_queryset = queryset if queryset is not None else Call.objects.all()
+    return base_queryset.filter(is_verified=True).exclude(status=Call.Status.INVALID_SHORT)
+
+
 def _staff_period_totals(start, end):
     session_totals = _effective_active_seconds_map(start_at=start, end_at=end)
     call_totals = {
@@ -462,15 +467,15 @@ def _staff_period_totals(start, end):
         .values("staff_id")
         .annotate(total=Sum("duration_seconds"))
     }
-    qualifying_call_counts = Counter(
-        Call.objects.filter(start_time__range=(start, end), is_qualifying=True)
+    bonus_call_counts = Counter(
+        _hourly_bonus_call_queryset(Call.objects.filter(start_time__range=(start, end)))
         .values_list("staff_id", flat=True)
     )
     converted_counts = Counter(
         Call.objects.filter(start_time__range=(start, end), status=Call.Status.CONVERTED, is_qualifying=True)
         .values_list("staff_id", flat=True)
     )
-    return session_totals, call_totals, converted_counts, qualifying_call_counts
+    return session_totals, call_totals, converted_counts, bonus_call_counts
 
 
 def _calculate_base_pay(staff, active_hours):
@@ -478,7 +483,7 @@ def _calculate_base_pay(staff, active_hours):
     return _money(active_hours * staff.hourly_rate)
 
 
-def _calculate_hourly_call_bonus(*, company_profile, active_hours, qualifying_calls):
+def _calculate_hourly_call_bonus(*, company_profile, active_hours, bonus_calls):
     if not company_profile.hourly_call_bonus_enabled:
         return {
             "threshold_calls": 0,
@@ -498,7 +503,7 @@ def _calculate_hourly_call_bonus(*, company_profile, active_hours, qualifying_ca
     threshold_calls = int(
         (Decimal(active_hours) * Decimal(threshold_per_hour)).to_integral_value(rounding=ROUND_FLOOR)
     )
-    extra_calls = max(int(qualifying_calls or 0) - threshold_calls, 0)
+    extra_calls = max(int(bonus_calls or 0) - threshold_calls, 0)
     bonus_amount = _money(Decimal(extra_calls) * bonus_rate)
     return {
         "threshold_calls": threshold_calls,
@@ -513,7 +518,7 @@ def calculate_staff_payout(
     active_seconds=0,
     call_seconds=0,
     converted_leads=0,
-    qualifying_calls=0,
+    bonus_calls=0,
     company_profile=None,
 ):
     company_profile = company_profile or get_company_profile()
@@ -524,7 +529,7 @@ def calculate_staff_payout(
     hourly_call_bonus = _calculate_hourly_call_bonus(
         company_profile=company_profile,
         active_hours=active_hours,
-        qualifying_calls=qualifying_calls,
+        bonus_calls=bonus_calls,
     )
     bonus_earnings = _money(conversion_bonus + hourly_call_bonus["bonus_amount"])
     base_pay = _calculate_base_pay(staff, active_hours)
@@ -533,7 +538,7 @@ def calculate_staff_payout(
         "active_hours": active_hours,
         "call_minutes": call_minutes,
         "converted_leads": int(converted_leads or 0),
-        "qualifying_calls": int(qualifying_calls or 0),
+        "bonus_calls": int(bonus_calls or 0),
         "base_pay": base_pay,
         "call_earnings": call_earnings,
         "conversion_bonus": conversion_bonus,
@@ -882,17 +887,18 @@ def calculate_staff_payout_for_dates(staff, period_start, period_end):
         status=Call.Status.CONVERTED,
         is_qualifying=True,
     ).count()
-    qualifying_calls = Call.objects.filter(
-        staff=staff,
-        start_time__range=(start_at, end_at),
-        is_qualifying=True,
+    bonus_calls = _hourly_bonus_call_queryset(
+        Call.objects.filter(
+            staff=staff,
+            start_time__range=(start_at, end_at),
+        )
     ).count()
     breakdown = calculate_staff_payout(
         staff,
         active_seconds=active_seconds,
         call_seconds=call_seconds,
         converted_leads=converted_leads,
-        qualifying_calls=qualifying_calls,
+        bonus_calls=bonus_calls,
         company_profile=company_profile,
     )
     breakdown["period_start"] = period_start
@@ -1779,6 +1785,26 @@ def _staff_online_label(session, active_cutoff, *, is_in_customer_call=False):
     return "Offline"
 
 
+def _return_lead_to_queue_after_invalid_short(lead):
+    if not lead:
+        return None
+
+    lead.status = Lead.Status.NEW
+    lead.assigned_to = None
+    lead.callback_window = ""
+    lead.callback_date = None
+    lead.save(
+        update_fields=[
+            "status",
+            "assigned_to",
+            "callback_window",
+            "callback_date",
+            "updated_at",
+        ]
+    )
+    return lead
+
+
 def _close_unresolved_call(call, *, reason):
     if not call or call.end_time is not None:
         return call
@@ -1808,6 +1834,8 @@ def _close_unresolved_call(call, *, reason):
 
     call.lead.last_contacted_at = call.start_time
     call.lead.save(update_fields=["last_contacted_at", "updated_at"])
+    _return_lead_to_queue_after_invalid_short(call.lead)
+    auto_allocate_leads()
 
     _log_staff_action(
         call.staff,
@@ -3158,8 +3186,8 @@ def build_dashboard_payload():
         row["staff_id"]: row["total"] or 0
         for row in qualifying_calls_today.values("staff_id").annotate(total=Sum("duration_seconds"))
     }
-    month_session_totals, month_call_totals, month_converted, month_qualifying_counts = _staff_period_totals(month_start, month_end)
-    week_session_totals, week_call_totals, week_converted, week_qualifying_counts = _staff_period_totals(week_start, week_end)
+    month_session_totals, month_call_totals, month_converted, month_bonus_counts = _staff_period_totals(month_start, month_end)
+    week_session_totals, week_call_totals, week_converted, week_bonus_counts = _staff_period_totals(week_start, week_end)
     salary_estimate = Decimal("0.00")
     for staff in staff_queryset:
         weekly_breakdown = calculate_staff_payout(
@@ -3167,14 +3195,14 @@ def build_dashboard_payload():
             active_seconds=week_session_totals.get(staff.id, 0),
             call_seconds=week_call_totals.get(staff.id, 0),
             converted_leads=week_converted.get(staff.id, 0),
-            qualifying_calls=week_qualifying_counts.get(staff.id, 0),
+            bonus_calls=week_bonus_counts.get(staff.id, 0),
         )
         monthly_breakdown = calculate_staff_payout(
             staff,
             active_seconds=month_session_totals.get(staff.id, 0),
             call_seconds=month_call_totals.get(staff.id, 0),
             converted_leads=month_converted.get(staff.id, 0),
-            qualifying_calls=month_qualifying_counts.get(staff.id, 0),
+            bonus_calls=month_bonus_counts.get(staff.id, 0),
         )
         current_payable, _ = _current_cycle_payout(staff, weekly_breakdown, monthly_breakdown)
         salary_estimate += current_payable
@@ -3274,14 +3302,14 @@ def build_dashboard_payload():
             active_seconds=week_session_totals.get(staff.id, 0),
             call_seconds=week_call_totals.get(staff.id, 0),
             converted_leads=week_converted.get(staff.id, 0),
-            qualifying_calls=week_qualifying_counts.get(staff.id, 0),
+            bonus_calls=week_bonus_counts.get(staff.id, 0),
         )
         monthly_breakdown = calculate_staff_payout(
             staff,
             active_seconds=month_session_totals.get(staff.id, 0),
             call_seconds=month_call_totals.get(staff.id, 0),
             converted_leads=month_converted.get(staff.id, 0),
-            qualifying_calls=month_qualifying_counts.get(staff.id, 0),
+            bonus_calls=month_bonus_counts.get(staff.id, 0),
         )
         current_payable, cycle_label = _current_cycle_payout(staff, weekly_breakdown, monthly_breakdown)
         salary_records.append(
@@ -5161,6 +5189,9 @@ def end_staff_call(
 
     call.lead.last_contacted_at = call.end_time
     call.lead.save(update_fields=["last_contacted_at", "updated_at"])
+    if call.status == Call.Status.INVALID_SHORT:
+        _return_lead_to_queue_after_invalid_short(call.lead)
+        auto_allocate_leads()
 
     _log_staff_action(
         call.staff,
