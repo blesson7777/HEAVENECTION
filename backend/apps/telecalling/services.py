@@ -1985,7 +1985,23 @@ def _build_quality_note(
     suspicious_attempt_count,
     zero_only_block_count,
     long_away_count,
+    real_call_count,
+    verified_attempt_count,
 ):
+    if verified_attempt_count >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK and real_call_count == 0:
+        return (
+            f"No real conversations were recorded across {verified_attempt_count} verified attempts, "
+            "so this calling pattern needs review."
+        )
+    if (
+        verified_attempt_count >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
+        and real_call_count > 0
+        and (Decimal(real_call_count) / Decimal(verified_attempt_count)) < Decimal("0.20")
+    ):
+        return (
+            f"Only {real_call_count} real conversations were recorded across {verified_attempt_count} verified attempts, "
+            "so this calling pattern needs review."
+        )
     if suspicious_block_count:
         return (
             f"Review calling pattern: {suspicious_attempt_count} attempts across "
@@ -2164,6 +2180,11 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
         zero_only_block_count = staff_metrics["zero_only_block_count"]
         suspicious_attempt_count = staff_metrics["suspicious_attempt_count"]
         long_away_count = staff_metrics["long_away_count"]
+        real_call_ratio = (
+            Decimal(real_call_count) / Decimal(verified_attempt_count)
+            if verified_attempt_count > 0
+            else None
+        )
 
         weighted_total = Decimal("0")
         total_weight = Decimal("0")
@@ -2203,6 +2224,17 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
         penalty_points = min((suspicious_block_count * 12) + (zero_only_block_count * 10), 40)
         penalty_points += min(long_away_count * 5, 20)
         overall_score = max(overall_score - penalty_points, 0)
+        if verified_attempt_count >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+            if real_call_count == 0:
+                overall_score = min(overall_score, 25)
+            elif real_call_ratio is not None and real_call_ratio < Decimal("0.20"):
+                overall_score = min(overall_score, 45)
+            elif (
+                real_call_ratio is not None
+                and real_call_ratio < Decimal("0.35")
+                and (suspicious_block_count > 0 or zero_only_block_count > 0)
+            ):
+                overall_score = min(overall_score, 54)
 
         has_activity = (
             total_completed_calls > 0
@@ -2235,6 +2267,8 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
                 suspicious_attempt_count=suspicious_attempt_count,
                 zero_only_block_count=zero_only_block_count,
                 long_away_count=long_away_count,
+                real_call_count=real_call_count,
+                verified_attempt_count=verified_attempt_count,
             ),
             "has_activity": has_activity,
             "outcome_consistency": outcome_value,
