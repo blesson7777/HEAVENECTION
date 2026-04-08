@@ -2060,15 +2060,18 @@ def end_call_api(request, call_id):
     except request.user.calls.model.DoesNotExist:
         return Response({"detail": "Call not found."}, status=404)
 
-    call = end_staff_call(
-        call,
-        serializer.validated_data.get("status"),
-        duration_seconds=serializer.validated_data.get("duration_seconds"),
-        ended_at=serializer.validated_data.get("ended_at"),
-        source=serializer.validated_data.get("source", "app"),
-        callback_window=serializer.validated_data.get("callback_window", ""),
-        callback_date=serializer.validated_data.get("callback_date"),
-    )
+    try:
+        call = end_staff_call(
+            call,
+            serializer.validated_data.get("status"),
+            duration_seconds=serializer.validated_data.get("duration_seconds"),
+            ended_at=serializer.validated_data.get("ended_at"),
+            source=serializer.validated_data.get("source", "app"),
+            callback_window=serializer.validated_data.get("callback_window", ""),
+            callback_date=serializer.validated_data.get("callback_date"),
+        )
+    except ValueError as error:
+        return Response({"detail": str(error)}, status=400)
     return Response(CallSerializer(call).data)
 
 
@@ -2080,10 +2083,10 @@ def retry_call_api(request, call_id):
     except request.user.calls.model.DoesNotExist:
         return Response({"detail": "Call not found."}, status=404)
 
-    if call.status != Call.Status.STARTED or call.end_time is None:
+    if call.status != Call.Status.STARTED:
         return Response(
             {
-                "detail": "Only a pending call result can be retried.",
+                "detail": "Only a pending call can be retried.",
                 "code": "retry_not_allowed",
             },
             status=409,
@@ -2113,12 +2116,15 @@ def update_call_status_api(request, call_id):
     except request.user.calls.model.DoesNotExist:
         return Response({"detail": "Call not found."}, status=404)
 
-    call = update_staff_call_status(
-        call,
-        serializer.validated_data["status"],
-        serializer.validated_data.get("callback_window", ""),
-        serializer.validated_data.get("callback_date"),
-    )
+    try:
+        call = update_staff_call_status(
+            call,
+            serializer.validated_data["status"],
+            serializer.validated_data.get("callback_window", ""),
+            serializer.validated_data.get("callback_date"),
+        )
+    except ValueError as error:
+        return Response({"detail": str(error)}, status=400)
     return Response(CallSerializer(call).data)
 
 

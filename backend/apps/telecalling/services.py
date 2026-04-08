@@ -5012,10 +5012,10 @@ def get_pending_status_call(staff):
         Call.objects.filter(
             staff=staff,
             status=Call.Status.STARTED,
-            end_time__isnull=False,
         )
+        .annotate(pending_activity_at=Coalesce("end_time", "updated_at", "start_time"))
         .select_related("lead")
-        .order_by("-end_time", "-start_time")
+        .order_by("-pending_activity_at", "-start_time", "-created_at")
         .first()
     )
 
@@ -5226,7 +5226,7 @@ def start_staff_call(staff, lead):
 
 
 def retry_pending_staff_call(call):
-    if call.end_time is None or call.status != Call.Status.STARTED:
+    if call.status != Call.Status.STARTED:
         return call
 
     now = timezone.now()
@@ -5392,12 +5392,32 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
     if session:
         _touch_session_interaction(session, now, metadata={"source": "call_status"})
 
+    if status == Call.Status.NOT_INTERESTED and (
+        not call.is_verified or int(call.duration_seconds or 0) <= 0
+    ):
+        raise ValueError("Rejected can be marked only after a real connected call.")
+
     resolved_callback_window = callback_window if status == Call.Status.CALL_BACK else ""
     resolved_callback_date = callback_date if status == Call.Status.CALL_BACK else None
+    update_fields = ["status", "callback_window", "callback_date", "updated_at"]
+    if call.end_time is None:
+        call.end_time = now
+        call.duration_seconds = 0
+        call.is_qualifying = False
+        call.is_verified = False
+        call.verification_source = ""
+        update_fields = [
+            "end_time",
+            "duration_seconds",
+            "is_qualifying",
+            "is_verified",
+            "verification_source",
+            *update_fields,
+        ]
     call.status = status
     call.callback_window = resolved_callback_window
     call.callback_date = resolved_callback_date
-    call.save(update_fields=["status", "callback_window", "callback_date", "updated_at"])
+    call.save(update_fields=update_fields)
     call.lead.status = status
     call.lead.callback_window = resolved_callback_window
     call.lead.callback_date = resolved_callback_date
