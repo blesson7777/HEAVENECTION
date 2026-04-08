@@ -68,6 +68,9 @@ from backend.apps.telecalling.services import (
     auto_allocate_leads,
     authenticate_staff,
     build_app_update_payload,
+    build_callback_csv_response,
+    build_callback_excel_response,
+    build_callback_payload,
     build_call_detail_payload,
     build_dashboard_payload,
     build_developer_release_payload,
@@ -927,6 +930,38 @@ def followups_page(request):
         extra_context=build_followup_payload(),
     )
     return render(request, "admin_followups.html", context)
+
+
+@require_GET
+def callbacks_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    if request.GET.get("download") == "csv":
+        csv_content = build_callback_csv_response()
+        response = HttpResponse(csv_content, content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="heavenection-callbacks.csv"'
+        return response
+    if request.GET.get("download") == "xlsx":
+        excel_content = build_callback_excel_response()
+        response = HttpResponse(
+            excel_content,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = 'attachment; filename="heavenection-callbacks.xlsx"'
+        return response
+
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="callbacks",
+        page_title="Call Back Tracker",
+        page_heading="Call Back Tracker",
+        page_subtitle="Track scheduled call back leads separately by date, slot, and assigned staff.",
+        extra_context=build_callback_payload(),
+    )
+    return render(request, "admin_callbacks.html", context)
 
 
 @require_http_methods(["GET", "POST"])

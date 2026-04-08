@@ -1878,6 +1878,10 @@ def _follow_up_queryset():
     return Lead.objects.filter(status__in=FOLLOW_UP_STATUSES)
 
 
+def _callback_tracking_queryset():
+    return Lead.objects.filter(status=Lead.Status.CALL_BACK)
+
+
 def _staff_call_queue_queryset(queryset=None):
     base_queryset = queryset if queryset is not None else Lead.objects.all()
     return _visible_staff_lead_queryset(base_queryset)
@@ -4292,6 +4296,179 @@ def build_followup_excel_response():
                 row["status_label"],
                 row["callback_date_label"],
                 row["callback_window_label"],
+                row["assigned_to"],
+                row["assigned_to_phone"],
+                row["notes"],
+                row["last_contacted"],
+                row["updated_at"],
+            ]
+        )
+
+    for column_cells in worksheet.columns:
+        max_length = 0
+        column_letter = column_cells[0].column_letter
+        for cell in column_cells:
+            cell_value = "" if cell.value is None else str(cell.value)
+            max_length = max(max_length, len(cell_value))
+        worksheet.column_dimensions[column_letter].width = min(max(max_length + 2, 14), 36)
+
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return output.getvalue()
+
+
+def build_callback_payload():
+    today = timezone.localdate()
+    reference = timezone.now()
+    callbacks = (
+        _callback_tracking_queryset()
+        .select_related("assigned_to")
+        .order_by("callback_date", "callback_window", "-updated_at", "-last_contacted_at")
+    )
+
+    callback_rows = []
+    for lead in callbacks:
+        callback_date_label = _format_callback_date_label(lead.callback_date)
+        callback_window_label = lead.get_callback_window_display() if lead.callback_window else ""
+        is_due_today = bool(lead.callback_date and lead.callback_date == today)
+        is_due_now = _is_callback_due(lead.callback_date, lead.callback_window, now=reference)
+        is_overdue = bool(lead.callback_date and lead.callback_date < today)
+        is_unscheduled = not lead.callback_date or not lead.callback_window
+        if is_due_now:
+            schedule_state_label = "Due now"
+            schedule_state_tone = "warning"
+        elif is_overdue:
+            schedule_state_label = "Overdue"
+            schedule_state_tone = "danger"
+        elif is_due_today:
+            schedule_state_label = "Due today"
+            schedule_state_tone = "primary"
+        elif is_unscheduled:
+            schedule_state_label = "Schedule needed"
+            schedule_state_tone = "muted"
+        else:
+            schedule_state_label = "Upcoming"
+            schedule_state_tone = "success"
+
+        callback_rows.append(
+            {
+                "id": str(lead.id),
+                "name": lead.name,
+                "phone": lead.phone,
+                "status": lead.status,
+                "status_label": lead.get_status_display(),
+                "callback_window": lead.callback_window,
+                "callback_window_label": callback_window_label,
+                "callback_date": lead.callback_date.isoformat() if lead.callback_date else "",
+                "callback_date_label": callback_date_label,
+                "callback_schedule_label": _format_callback_schedule_label(
+                    lead.callback_date,
+                    lead.callback_window,
+                ),
+                "assigned_to_id": str(lead.assigned_to_id) if lead.assigned_to_id else "",
+                "assigned_to": lead.assigned_to.name if lead.assigned_to else "Unassigned",
+                "assigned_to_phone": lead.assigned_to.phone if lead.assigned_to else "",
+                "notes": lead.notes,
+                "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
+                "updated_at": _format_datetime(lead.updated_at),
+                "is_due_now": is_due_now,
+                "is_due_today": is_due_today,
+                "is_overdue": is_overdue,
+                "is_unscheduled": is_unscheduled,
+                "schedule_state_label": schedule_state_label,
+                "schedule_state_tone": schedule_state_tone,
+            }
+        )
+
+    return {
+        "callback_rows": callback_rows,
+        "staff_options": [
+            {"id": str(staff.id), "name": staff.name}
+            for staff in _staff_queryset().filter(is_active=True)
+        ],
+        "callback_summary": {
+            "total_callbacks": len(callback_rows),
+            "due_now_count": sum(1 for row in callback_rows if row["is_due_now"]),
+            "due_today_count": sum(1 for row in callback_rows if row["is_due_today"]),
+            "overdue_count": sum(1 for row in callback_rows if row["is_overdue"]),
+            "assigned_count": sum(1 for row in callback_rows if row["assigned_to_id"]),
+            "unscheduled_count": sum(1 for row in callback_rows if row["is_unscheduled"]),
+        },
+    }
+
+
+def build_callback_csv_response():
+    response = io.StringIO()
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Lead ID",
+            "Name",
+            "Phone",
+            "Callback Date",
+            "Callback Window",
+            "Schedule State",
+            "Assigned Staff",
+            "Assigned Staff Phone",
+            "Notes",
+            "Last Contacted",
+            "Updated At",
+        ]
+    )
+
+    for row in build_callback_payload()["callback_rows"]:
+        writer.writerow(
+            [
+                row["id"],
+                row["name"],
+                row["phone"],
+                row["callback_date_label"],
+                row["callback_window_label"],
+                row["schedule_state_label"],
+                row["assigned_to"],
+                row["assigned_to_phone"],
+                row["notes"],
+                row["last_contacted"],
+                row["updated_at"],
+            ]
+        )
+
+    return response.getvalue()
+
+
+def build_callback_excel_response():
+    if Workbook is None:
+        raise ValueError("Excel export is not available right now.")
+
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Callbacks"
+    worksheet.append(
+        [
+            "Lead ID",
+            "Name",
+            "Phone",
+            "Callback Date",
+            "Callback Window",
+            "Schedule State",
+            "Assigned Staff",
+            "Assigned Staff Phone",
+            "Notes",
+            "Last Contacted",
+            "Updated At",
+        ]
+    )
+
+    for row in build_callback_payload()["callback_rows"]:
+        worksheet.append(
+            [
+                row["id"],
+                row["name"],
+                row["phone"],
+                row["callback_date_label"],
+                row["callback_window_label"],
+                row["schedule_state_label"],
                 row["assigned_to"],
                 row["assigned_to_phone"],
                 row["notes"],

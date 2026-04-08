@@ -1,0 +1,189 @@
+{% extends "admin_base.html" %}
+
+{% block page_actions %}
+<a href="{% url 'leads-page' %}" class="btn btn-outline-primary btn-sm">Lead Desk</a>
+<a href="{% url 'callbacks-page' %}?download=csv" class="btn btn-outline-primary btn-sm">Download CSV</a>
+<a href="{% url 'callbacks-page' %}?download=xlsx" class="btn btn-outline-primary btn-sm">Download Excel</a>
+{% endblock %}
+
+{% block admin_content %}
+<section class="hc-surface-card animate-on-scroll">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Call Back Desk</span>
+            <h5>Scheduled call back leads</h5>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Total</span>
+                <h3 class="mb-1">{{ callback_summary.total_callbacks }}</h3>
+                <p class="mb-0 text-muted">Leads waiting for a scheduled call back.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Due Now</span>
+                <h3 class="mb-1">{{ callback_summary.due_now_count }}</h3>
+                <p class="mb-0 text-muted">Callbacks ready for the current slot.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Due Today</span>
+                <h3 class="mb-1">{{ callback_summary.due_today_count }}</h3>
+                <p class="mb-0 text-muted">{{ callback_summary.overdue_count }} overdue callbacks need attention.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Assigned</span>
+                <h3 class="mb-1">{{ callback_summary.assigned_count }}</h3>
+                <p class="mb-0 text-muted">{{ callback_summary.unscheduled_count }} still need a complete date and slot.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-primary border-0 mb-4" role="alert">
+        This page tracks only leads marked as <strong>Call Back</strong>. Review the scheduled date and slot, monitor what is due now, and export the list whenever needed.
+    </div>
+
+    <div class="hc-search-box">
+        <i class="bi bi-search"></i>
+        <input type="search" id="callbackSearchInput" placeholder="Search callback lead, phone, schedule, note, or staff">
+    </div>
+
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Lead</th>
+                    <th>Phone</th>
+                    <th>Schedule</th>
+                    <th>Staff</th>
+                    <th>Last Contact</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="callbackTableBody">
+                {% for lead in callback_rows %}
+                <tr data-status="{{ lead.status }}">
+                    <td>
+                        <strong>{{ lead.name }}</strong>
+                        <div class="text-muted small">{{ lead.notes|default:"No notes" }}</div>
+                    </td>
+                    <td>{{ lead.phone }}</td>
+                    <td>
+                        <span class="hc-status hc-status-{{ lead.schedule_state_tone }} mb-1">{{ lead.schedule_state_label }}</span>
+                        <div class="mt-1">{{ lead.callback_schedule_label|default:"Schedule needed" }}</div>
+                        {% if lead.callback_date_label or lead.callback_window_label %}
+                        <div class="small text-muted">{{ lead.callback_date_label }}{% if lead.callback_date_label and lead.callback_window_label %} | {% endif %}{{ lead.callback_window_label }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ lead.assigned_to }}
+                        {% if lead.assigned_to_phone %}
+                        <div class="small text-muted">{{ lead.assigned_to_phone }}</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ lead.last_contacted }}</td>
+                    <td>{{ lead.updated_at }}</td>
+                    <td>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button
+                                type="button"
+                                class="btn btn-outline-primary btn-sm js-edit-lead"
+                                data-lead-id="{{ lead.id }}"
+                                data-name="{{ lead.name }}"
+                                data-phone="{{ lead.phone }}"
+                                data-status="{{ lead.status }}"
+                                data-callback-window="{{ lead.callback_window }}"
+                                data-callback-date="{{ lead.callback_date }}"
+                                data-assigned-to-id="{{ lead.assigned_to_id }}"
+                                data-notes="{{ lead.notes }}"
+                            >Edit</button>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center py-4">No scheduled call back leads are ready right now.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<div class="modal fade" id="leadModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content hc-modal-card">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <span class="mf-db2-kicker">Lead Setup</span>
+                    <h5 class="modal-title mt-1" id="leadModalTitle">Edit Lead</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <form id="leadForm">
+                    <input type="hidden" id="leadFormId">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="leadName">Lead Name</label>
+                            <input type="text" class="form-control" id="leadName" required>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="leadPhone">Phone Number</label>
+                            <input type="text" class="form-control" id="leadPhone" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="leadStatus">Status</label>
+                            <select class="form-select" id="leadStatus">
+                                <option value="new">New</option>
+                                <option value="interested">Follow Up</option>
+                                <option value="not_interested">Rejected</option>
+                                <option value="no_answer">No Response</option>
+                                <option value="call_back">Call Back</option>
+                                <option value="converted">Converted</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="leadCallbackWindow">Call Back Slot</label>
+                            <select class="form-select" id="leadCallbackWindow">
+                                <option value="">Choose slot</option>
+                                <option value="noon">Noon</option>
+                                <option value="evening">Evening</option>
+                                <option value="night">Night</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="leadCallbackDate">Call Back Date</label>
+                            <input type="date" class="form-control" id="leadCallbackDate">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="leadAssignedTo">Assign To</label>
+                            <select class="form-select" id="leadAssignedTo">
+                                <option value="">Unassigned</option>
+                                {% for staff in staff_options %}
+                                <option value="{{ staff.id }}">{{ staff.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="leadNotes">Notes</label>
+                            <textarea class="form-control" id="leadNotes" rows="4"></textarea>
+                        </div>
+                    </div>
+                    <div id="leadFormFeedback" class="hc-form-feedback d-none mt-3"></div>
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="leadSubmitButton">Save Lead</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

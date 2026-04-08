@@ -87,13 +87,13 @@
                 </div>
             </div>
 
-            <div class="hc-sidebar-section{% if active_page == 'staff' or active_page == 'leads' or active_page == 'followups' or active_page == 'recovery' or active_page == 'learning' %} is-expanded{% endif %}">
+            <div class="hc-sidebar-section{% if active_page == 'staff' or active_page == 'leads' or active_page == 'followups' or active_page == 'callbacks' or active_page == 'recovery' or active_page == 'learning' %} is-expanded{% endif %}">
                 <button
                     type="button"
                     class="hc-sidebar-toggle"
                     data-bs-toggle="collapse"
                     data-bs-target="#hcSidebarOperations"
-                    aria-expanded="{% if active_page == 'staff' or active_page == 'leads' or active_page == 'followups' or active_page == 'recovery' or active_page == 'learning' %}true{% else %}false{% endif %}"
+                    aria-expanded="{% if active_page == 'staff' or active_page == 'leads' or active_page == 'followups' or active_page == 'callbacks' or active_page == 'recovery' or active_page == 'learning' %}true{% else %}false{% endif %}"
                     aria-controls="hcSidebarOperations"
                 >
                     <span class="hc-sidebar-toggle-icon"><i class="bi bi-diagram-3-fill"></i></span>
@@ -101,10 +101,10 @@
                         <strong>Operations</strong>
                         <small>Staff setup, leads, and training</small>
                     </span>
-                    <span class="hc-sidebar-toggle-badge">5</span>
+                    <span class="hc-sidebar-toggle-badge">6</span>
                     <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
                 </button>
-                <div class="collapse{% if active_page == 'staff' or active_page == 'leads' or active_page == 'followups' or active_page == 'recovery' or active_page == 'learning' %} show{% endif %}" id="hcSidebarOperations" data-bs-parent="#hcSidebarNav">
+                <div class="collapse{% if active_page == 'staff' or active_page == 'leads' or active_page == 'followups' or active_page == 'callbacks' or active_page == 'recovery' or active_page == 'learning' %} show{% endif %}" id="hcSidebarOperations" data-bs-parent="#hcSidebarNav">
                     <div class="hc-sidebar-links">
                         <a href="{% url 'staff-page' %}" class="hc-sidebar-link{% if active_page == 'staff' %} active{% endif %}">
                             <i class="bi bi-people-fill"></i>
@@ -117,6 +117,10 @@
                         <a href="{% url 'followups-page' %}" class="hc-sidebar-link{% if active_page == 'followups' %} active{% endif %}">
                             <i class="bi bi-list-check"></i>
                             <span>Follow-Up Queue</span>
+                        </a>
+                        <a href="{% url 'callbacks-page' %}" class="hc-sidebar-link{% if active_page == 'callbacks' %} active{% endif %}">
+                            <i class="bi bi-calendar2-check"></i>
+                            <span>Call Back Tracker</span>
                         </a>
                         <a href="{% url 'recovery-leads-page' %}" class="hc-sidebar-link{% if active_page == 'recovery' %} active{% endif %}">
                             <i class="bi bi-arrow-repeat"></i>

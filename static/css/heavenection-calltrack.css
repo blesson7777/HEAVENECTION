@@ -809,6 +809,11 @@
     color: #ae6a09;
 }
 
+.hc-status-danger {
+    background: rgba(220, 53, 69, 0.14);
+    color: #b42335;
+}
+
 .hc-status-success {
     background: rgba(42, 184, 110, 0.14);
     color: #0d9154;
