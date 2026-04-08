@@ -2083,10 +2083,10 @@ def retry_call_api(request, call_id):
     except request.user.calls.model.DoesNotExist:
         return Response({"detail": "Call not found."}, status=404)
 
-    if call.status != Call.Status.STARTED:
+    if call.end_time is None or call.status != Call.Status.STARTED:
         return Response(
             {
-                "detail": "Only a pending call can be retried.",
+                "detail": "Only a pending call result can be retried.",
                 "code": "retry_not_allowed",
             },
             status=409,

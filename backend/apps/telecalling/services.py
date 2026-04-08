@@ -5012,10 +5012,10 @@ def get_pending_status_call(staff):
         Call.objects.filter(
             staff=staff,
             status=Call.Status.STARTED,
+            end_time__isnull=False,
         )
-        .annotate(pending_activity_at=Coalesce("end_time", "updated_at", "start_time"))
         .select_related("lead")
-        .order_by("-pending_activity_at", "-start_time", "-created_at")
+        .order_by("-end_time", "-start_time")
         .first()
     )
 
@@ -5226,7 +5226,7 @@ def start_staff_call(staff, lead):
 
 
 def retry_pending_staff_call(call):
-    if call.status != Call.Status.STARTED:
+    if call.end_time is None or call.status != Call.Status.STARTED:
         return call
 
     now = timezone.now()
@@ -5311,6 +5311,11 @@ def end_staff_call(
         resolved_duration = 0
 
     requested_status = status
+    normalized_requested_status = requested_status
+    if requested_status == Call.Status.NOT_INTERESTED and (
+        not is_verified or resolved_duration <= 0
+    ):
+        normalized_requested_status = Call.Status.NO_ANSWER
     call.end_time = resolved_end_time
     call.duration_seconds = resolved_duration
     call.is_qualifying = call.duration_seconds >= SHORT_CALL_SECONDS
@@ -5330,12 +5335,12 @@ def end_staff_call(
     if source == "call_log_short_recall":
         call.is_qualifying = False
         call.status = Call.Status.INVALID_SHORT
-    elif not call.is_qualifying and requested_status in {
+    elif not call.is_qualifying and normalized_requested_status in {
         Call.Status.NO_ANSWER,
         Call.Status.NOT_INTERESTED,
     }:
         call.status = Call.Status.NO_ANSWER
-        if requested_status == Call.Status.NOT_INTERESTED:
+        if normalized_requested_status == Call.Status.NOT_INTERESTED:
             call.status = Call.Status.NOT_INTERESTED
     else:
         call.status = Call.Status.INVALID_SHORT if not call.is_qualifying else call.status
@@ -5375,11 +5380,11 @@ def end_staff_call(
         },
     )
 
-    if requested_status and (
+    if normalized_requested_status and (
         call.is_qualifying
-        or requested_status in {Call.Status.NO_ANSWER, Call.Status.NOT_INTERESTED}
+        or normalized_requested_status in {Call.Status.NO_ANSWER, Call.Status.NOT_INTERESTED}
     ):
-        update_staff_call_status(call, requested_status, callback_window, callback_date)
+        update_staff_call_status(call, normalized_requested_status, callback_window, callback_date)
     return call
 
 
@@ -5395,7 +5400,7 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
     if status == Call.Status.NOT_INTERESTED and (
         not call.is_verified or int(call.duration_seconds or 0) <= 0
     ):
-        raise ValueError("Rejected can be marked only after a real connected call.")
+        status = Call.Status.NO_ANSWER
 
     resolved_callback_window = callback_window if status == Call.Status.CALL_BACK else ""
     resolved_callback_date = callback_date if status == Call.Status.CALL_BACK else None
