@@ -12,7 +12,7 @@ from threading import Thread
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
-from django.db import close_old_connections
+from django.db import IntegrityError, close_old_connections, transaction
 from django.db.models import Case, Count, IntegerField, Max, Q, Sum, Value, When
 from django.template.loader import render_to_string
 from django.db.models.functions import Coalesce, TruncDate
@@ -1185,13 +1185,23 @@ def _sync_referral_reward_for_staff(staff, *, company_profile=None):
     if total_hours < required_hours:
         return None
 
-    return ReferralReward.objects.create(
-        referrer=staff.referred_by,
-        referred_staff=staff,
-        required_hours=required_hours,
-        reward_amount=_money(company_profile.referral_reward_amount or 0),
-        qualified_at=timezone.now(),
-    )
+    reward_defaults = {
+        "referrer": staff.referred_by,
+        "required_hours": required_hours,
+        "reward_amount": _money(company_profile.referral_reward_amount or 0),
+        "qualified_at": timezone.now(),
+    }
+    try:
+        with transaction.atomic():
+            reward, _ = ReferralReward.objects.get_or_create(
+                referred_staff=staff,
+                defaults=reward_defaults,
+            )
+    except IntegrityError:
+        reward = ReferralReward.objects.select_related("referrer", "referred_staff").get(
+            referred_staff=staff
+        )
+    return reward
 
 
 def sync_referral_rewards(company_profile=None):
