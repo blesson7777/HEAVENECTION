@@ -317,7 +317,6 @@ def _call_activity_block_summary(calls, *, range_end=None):
             zero_only_block_count += 1
             continue
 
-        block_seconds = max(0, int((block_end - block_start).total_seconds()))
         if (
             len(block_calls) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
             and (real_calls_in_block * MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) < len(block_calls)
@@ -533,7 +532,266 @@ def _hourly_bonus_call_queryset(queryset=None):
     return base_queryset.filter(is_verified=True).exclude(status=Call.Status.INVALID_SHORT)
 
 
+def _empty_hourly_bonus_summary():
+    return {
+        "completed_hours": 0,
+        "completed_bonus_calls": 0,
+        "threshold_calls": 0,
+        "extra_calls": 0,
+        "bonus_amount": Decimal("0.00"),
+    }
+
+
+def _segment_seconds(segment):
+    start_time, end_time = segment
+    return max(0, int((end_time - start_time).total_seconds()))
+
+
+def _truncate_segments_to_seconds(segments, total_seconds):
+    remaining_seconds = max(0, int(total_seconds or 0))
+    if remaining_seconds <= 0:
+        return []
+
+    truncated_segments = []
+    for start_time, end_time in segments:
+        if remaining_seconds <= 0:
+            break
+        segment_seconds = _segment_seconds((start_time, end_time))
+        if segment_seconds <= 0:
+            continue
+        if segment_seconds <= remaining_seconds:
+            truncated_segments.append((start_time, end_time))
+            remaining_seconds -= segment_seconds
+            continue
+
+        truncated_segments.append((start_time, start_time + timedelta(seconds=remaining_seconds)))
+        remaining_seconds = 0
+
+    return truncated_segments
+
+
+def _split_segments_into_buckets(segments, bucket_seconds):
+    bucket_seconds = max(1, int(bucket_seconds or 0))
+    buckets = []
+    current_bucket = []
+    remaining_bucket_seconds = bucket_seconds
+
+    for start_time, end_time in segments:
+        segment_start = start_time
+        segment_end = end_time
+        while segment_end > segment_start:
+            slice_seconds = min(
+                remaining_bucket_seconds,
+                _segment_seconds((segment_start, segment_end)),
+            )
+            if slice_seconds <= 0:
+                break
+
+            slice_end = segment_start + timedelta(seconds=slice_seconds)
+            current_bucket.append((segment_start, slice_end))
+            remaining_bucket_seconds -= slice_seconds
+            segment_start = slice_end
+
+            if remaining_bucket_seconds <= 0:
+                buckets.append(current_bucket)
+                current_bucket = []
+                remaining_bucket_seconds = bucket_seconds
+
+    return buckets
+
+
+def _call_bonus_timestamp(call):
+    return (
+        call.get("end_time")
+        if isinstance(call, dict)
+        else getattr(call, "end_time", None)
+    ) or (
+        call.get("start_time")
+        if isinstance(call, dict)
+        else getattr(call, "start_time", None)
+    )
+
+
+def _count_calls_in_segments(calls, segments):
+    if not calls or not segments:
+        return 0
+
+    ordered_segments = [
+        (start_time, end_time)
+        for start_time, end_time in sorted(segments, key=lambda value: value[0])
+        if end_time >= start_time
+    ]
+    if not ordered_segments:
+        return 0
+
+    ordered_timestamps = sorted(
+        timestamp
+        for timestamp in (_call_bonus_timestamp(call) for call in calls)
+        if timestamp is not None
+    )
+    if not ordered_timestamps:
+        return 0
+
+    count = 0
+    segment_index = 0
+    for timestamp in ordered_timestamps:
+        while segment_index < len(ordered_segments) and timestamp > ordered_segments[segment_index][1]:
+            segment_index += 1
+        if segment_index >= len(ordered_segments):
+            break
+        if ordered_segments[segment_index][0] <= timestamp <= ordered_segments[segment_index][1]:
+            count += 1
+    return count
+
+
+def _call_activity_block_analysis(calls, *, range_end=None):
+    analysis = {
+        "active_seconds": 0,
+        "attempt_count": 0,
+        "real_call_count": 0,
+        "zero_second_attempt_count": 0,
+        "suspicious_block_count": 0,
+        "zero_only_block_count": 0,
+        "suspicious_attempt_count": 0,
+        "segments": [],
+    }
+
+    for block_calls, block_start, block_end in _split_call_activity_blocks(calls):
+        analysis["attempt_count"] += len(block_calls)
+        real_call_activity_seconds = 0
+        real_calls_in_block = 0
+        zero_seconds_in_block = 0
+        real_call_segments = []
+
+        for call in block_calls:
+            activity_start, activity_end, duration_seconds = _call_activity_window(call)
+            if not activity_start:
+                continue
+
+            activity_span_seconds = max(0, int((activity_end - activity_start).total_seconds()))
+            if duration_seconds > 0:
+                real_calls_in_block += 1
+                real_call_activity_seconds += max(activity_span_seconds, duration_seconds)
+                real_call_segments.append((activity_start, activity_end))
+            else:
+                zero_seconds_in_block += 1
+
+        analysis["zero_second_attempt_count"] += zero_seconds_in_block
+        analysis["real_call_count"] += real_calls_in_block
+
+        if real_calls_in_block <= 0:
+            analysis["zero_only_block_count"] += 1
+            continue
+
+        block_seconds = max(0, int((block_end - block_start).total_seconds()))
+        if (
+            len(block_calls) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
+            and (real_calls_in_block * MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) < len(block_calls)
+        ):
+            analysis["suspicious_block_count"] += 1
+            analysis["suspicious_attempt_count"] += len(block_calls)
+            analysis["active_seconds"] += real_call_activity_seconds
+            analysis["segments"].extend(real_call_segments)
+            continue
+
+        cooldown_seconds = _call_activity_cooldown_seconds(block_end, range_end=range_end)
+        block_segment = (block_start, block_end + timedelta(seconds=cooldown_seconds))
+        analysis["active_seconds"] += _segment_seconds(block_segment)
+        analysis["segments"].append(block_segment)
+
+    return analysis
+
+
+def _hourly_bonus_summary_for_day_calls(calls, *, company_profile, range_end=None):
+    if not company_profile.hourly_call_bonus_enabled:
+        return _empty_hourly_bonus_summary()
+
+    threshold_per_hour = int(company_profile.hourly_call_bonus_threshold or 0)
+    bonus_rate = _money(company_profile.hourly_call_bonus_rate or 0)
+    if threshold_per_hour <= 0 or bonus_rate <= Decimal("0.00"):
+        return _empty_hourly_bonus_summary()
+
+    analysis = _call_activity_block_analysis(calls, range_end=range_end)
+    completed_hours = analysis["active_seconds"] // 3600
+    if completed_hours < 1:
+        return {
+            **_empty_hourly_bonus_summary(),
+            "completed_hours": completed_hours,
+        }
+
+    completed_segments = _truncate_segments_to_seconds(
+        analysis["segments"],
+        completed_hours * 3600,
+    )
+    completed_hour_segments = _split_segments_into_buckets(completed_segments, 3600)
+    completed_bonus_calls = 0
+    extra_calls = 0
+    for hour_segments in completed_hour_segments:
+        hour_call_count = _count_calls_in_segments(calls, hour_segments)
+        completed_bonus_calls += hour_call_count
+        extra_calls += max(int(hour_call_count or 0) - threshold_per_hour, 0)
+
+    threshold_calls = completed_hours * threshold_per_hour
+    return {
+        "completed_hours": int(completed_hours),
+        "completed_bonus_calls": int(completed_bonus_calls or 0),
+        "threshold_calls": int(threshold_calls),
+        "extra_calls": int(extra_calls),
+        "bonus_amount": _money(Decimal(extra_calls) * bonus_rate),
+    }
+
+
+def _hourly_bonus_summary_map(*, start_at=None, end_at=None, staff_ids=None, company_profile=None):
+    company_profile = company_profile or get_company_profile()
+    call_queryset = _hourly_bonus_call_queryset()
+
+    if start_at is not None and end_at is not None:
+        call_queryset = call_queryset.filter(start_time__range=(start_at, end_at))
+
+    if staff_ids is not None:
+        staff_ids = list(staff_ids)
+        call_queryset = call_queryset.filter(staff_id__in=staff_ids)
+
+    calls_by_staff_day = defaultdict(list)
+    for call in (
+        call_queryset.annotate(activity_day=TruncDate("start_time"))
+        .only(
+            "staff_id",
+            "start_time",
+            "end_time",
+            "duration_seconds",
+            "is_verified",
+            "created_at",
+        )
+        .order_by("staff_id", "start_time", "end_time", "id")
+    ):
+        calls_by_staff_day[(call.staff_id, getattr(call, "activity_day", None))].append(call)
+
+    summaries_by_staff = defaultdict(_empty_hourly_bonus_summary)
+    for (_staff_id, _activity_day), calls in calls_by_staff_day.items():
+        daily_summary = _hourly_bonus_summary_for_day_calls(
+            calls,
+            company_profile=company_profile,
+            range_end=end_at,
+        )
+        staff_summary = summaries_by_staff[_staff_id]
+        staff_summary["completed_hours"] += daily_summary["completed_hours"]
+        staff_summary["completed_bonus_calls"] += daily_summary["completed_bonus_calls"]
+        staff_summary["threshold_calls"] += daily_summary["threshold_calls"]
+        staff_summary["extra_calls"] += daily_summary["extra_calls"]
+        staff_summary["bonus_amount"] = _money(
+            staff_summary["bonus_amount"] + daily_summary["bonus_amount"]
+        )
+
+    if staff_ids is not None:
+        for staff_id in staff_ids:
+            summaries_by_staff.setdefault(staff_id, _empty_hourly_bonus_summary())
+
+    return dict(summaries_by_staff)
+
+
 def _staff_period_totals(start, end):
+    company_profile = get_company_profile()
     session_totals = _effective_active_seconds_map(start_at=start, end_at=end)
     call_totals = {
         row["staff_id"]: row["total"] or 0
@@ -541,15 +799,16 @@ def _staff_period_totals(start, end):
         .values("staff_id")
         .annotate(total=Sum("duration_seconds"))
     }
-    bonus_call_counts = Counter(
-        _hourly_bonus_call_queryset(Call.objects.filter(start_time__range=(start, end)))
-        .values_list("staff_id", flat=True)
+    bonus_summaries = _hourly_bonus_summary_map(
+        start_at=start,
+        end_at=end,
+        company_profile=company_profile,
     )
     converted_counts = Counter(
         Call.objects.filter(start_time__range=(start, end), status=Call.Status.CONVERTED, is_qualifying=True)
         .values_list("staff_id", flat=True)
     )
-    return session_totals, call_totals, converted_counts, bonus_call_counts
+    return session_totals, call_totals, converted_counts, bonus_summaries
 
 
 def _calculate_base_pay(staff, active_hours):
@@ -601,13 +860,14 @@ def calculate_staff_payout(
     converted_leads=0,
     bonus_calls=0,
     company_profile=None,
+    hourly_call_bonus_summary=None,
 ):
     company_profile = company_profile or get_company_profile()
     active_hours = _decimal_hours(active_seconds)
     call_minutes = _decimal_minutes(call_seconds)
     call_earnings = _money(call_minutes * staff.call_rate)
     conversion_bonus = _money(Decimal(str(converted_leads or 0)) * staff.bonus_per_conversion)
-    hourly_call_bonus = _calculate_hourly_call_bonus(
+    hourly_call_bonus = hourly_call_bonus_summary or _calculate_hourly_call_bonus(
         company_profile=company_profile,
         active_hours=active_hours,
         bonus_calls=bonus_calls,
@@ -621,7 +881,7 @@ def calculate_staff_payout(
         "call_seconds": int(call_seconds or 0),
         "call_minutes": call_minutes,
         "converted_leads": int(converted_leads or 0),
-        "bonus_calls": int(bonus_calls or 0),
+        "bonus_calls": int(hourly_call_bonus.get("completed_bonus_calls", bonus_calls or 0)),
         "base_pay": base_pay,
         "call_earnings": call_earnings,
         "conversion_bonus": conversion_bonus,
@@ -972,19 +1232,20 @@ def calculate_staff_payout_for_dates(staff, period_start, period_end):
         status=Call.Status.CONVERTED,
         is_qualifying=True,
     ).count()
-    bonus_calls = _hourly_bonus_call_queryset(
-        Call.objects.filter(
-            staff=staff,
-            start_time__range=(start_at, end_at),
-        )
-    ).count()
+    hourly_call_bonus_summary = _hourly_bonus_summary_map(
+        start_at=start_at,
+        end_at=end_at,
+        staff_ids=[staff.id],
+        company_profile=company_profile,
+    ).get(staff.id, _empty_hourly_bonus_summary())
     breakdown = calculate_staff_payout(
         staff,
         active_seconds=active_seconds,
         call_seconds=call_seconds,
         converted_leads=converted_leads,
-        bonus_calls=bonus_calls,
+        bonus_calls=hourly_call_bonus_summary["completed_bonus_calls"],
         company_profile=company_profile,
+        hourly_call_bonus_summary=hourly_call_bonus_summary,
     )
     breakdown["period_start"] = period_start
     breakdown["period_end"] = period_end
@@ -3529,8 +3790,8 @@ def build_dashboard_payload():
         row["staff_id"]: row["total"] or 0
         for row in qualifying_calls_today.values("staff_id").annotate(total=Sum("duration_seconds"))
     }
-    month_session_totals, month_call_totals, month_converted, month_bonus_counts = _staff_period_totals(month_start, month_end)
-    week_session_totals, week_call_totals, week_converted, week_bonus_counts = _staff_period_totals(week_start, week_end)
+    month_session_totals, month_call_totals, month_converted, month_bonus_summaries = _staff_period_totals(month_start, month_end)
+    week_session_totals, week_call_totals, week_converted, week_bonus_summaries = _staff_period_totals(week_start, week_end)
     salary_estimate = Decimal("0.00")
     for staff in staff_queryset:
         weekly_breakdown = calculate_staff_payout(
@@ -3538,14 +3799,16 @@ def build_dashboard_payload():
             active_seconds=week_session_totals.get(staff.id, 0),
             call_seconds=week_call_totals.get(staff.id, 0),
             converted_leads=week_converted.get(staff.id, 0),
-            bonus_calls=week_bonus_counts.get(staff.id, 0),
+            bonus_calls=week_bonus_summaries.get(staff.id, _empty_hourly_bonus_summary())["completed_bonus_calls"],
+            hourly_call_bonus_summary=week_bonus_summaries.get(staff.id, _empty_hourly_bonus_summary()),
         )
         monthly_breakdown = calculate_staff_payout(
             staff,
             active_seconds=month_session_totals.get(staff.id, 0),
             call_seconds=month_call_totals.get(staff.id, 0),
             converted_leads=month_converted.get(staff.id, 0),
-            bonus_calls=month_bonus_counts.get(staff.id, 0),
+            bonus_calls=month_bonus_summaries.get(staff.id, _empty_hourly_bonus_summary())["completed_bonus_calls"],
+            hourly_call_bonus_summary=month_bonus_summaries.get(staff.id, _empty_hourly_bonus_summary()),
         )
         current_payable, _ = _current_cycle_payout(staff, weekly_breakdown, monthly_breakdown)
         salary_estimate += current_payable
@@ -3645,14 +3908,16 @@ def build_dashboard_payload():
             active_seconds=week_session_totals.get(staff.id, 0),
             call_seconds=week_call_totals.get(staff.id, 0),
             converted_leads=week_converted.get(staff.id, 0),
-            bonus_calls=week_bonus_counts.get(staff.id, 0),
+            bonus_calls=week_bonus_summaries.get(staff.id, _empty_hourly_bonus_summary())["completed_bonus_calls"],
+            hourly_call_bonus_summary=week_bonus_summaries.get(staff.id, _empty_hourly_bonus_summary()),
         )
         monthly_breakdown = calculate_staff_payout(
             staff,
             active_seconds=month_session_totals.get(staff.id, 0),
             call_seconds=month_call_totals.get(staff.id, 0),
             converted_leads=month_converted.get(staff.id, 0),
-            bonus_calls=month_bonus_counts.get(staff.id, 0),
+            bonus_calls=month_bonus_summaries.get(staff.id, _empty_hourly_bonus_summary())["completed_bonus_calls"],
+            hourly_call_bonus_summary=month_bonus_summaries.get(staff.id, _empty_hourly_bonus_summary()),
         )
         current_payable, cycle_label = _current_cycle_payout(staff, weekly_breakdown, monthly_breakdown)
         salary_records.append(
