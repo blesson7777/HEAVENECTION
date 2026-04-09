@@ -51,7 +51,9 @@ IDLE_OFFLINE_AFTER_SECONDS = IDLE_WARNING_AFTER_SECONDS + IDLE_WARNING_GRACE_SEC
 LIVE_CALL_STALE_SECONDS = 3 * 60 * 60
 VERIFIED_CALL_ACTIVITY_TIMEOUT_SECONDS = 90
 VERIFIED_CALL_TIME_SKEW_SECONDS = 2 * 60
-CALL_ACTIVITY_IDLE_BREAK_SECONDS = 3 * 60
+CALL_ACTIVITY_IDLE_BREAK_SECONDS = 60
+CONNECTED_CALL_COOLDOWN_SECONDS = 60
+CALL_ACTIVITY_DIAL_LOOKBACK_SECONDS = 60
 MIN_REAL_CALLS_PER_ATTEMPT_BLOCK = 10
 VERIFIED_CALL_SOURCES = {
     "call_log",
@@ -207,6 +209,47 @@ def _format_duration(total_seconds):
     return f"{minutes:02d}:{seconds:02d}"
 
 
+def _call_activity_window(call):
+    raw_start = call.get("start_time") if isinstance(call, dict) else getattr(call, "start_time", None)
+    if not call or not raw_start:
+        return None, None, 0
+
+    raw_end = (
+        call.get("end_time")
+        if isinstance(call, dict)
+        else getattr(call, "end_time", None)
+    ) or raw_start
+    if raw_end < raw_start:
+        raw_end = raw_start
+
+    activity_start = raw_start
+    created_at = call.get("created_at") if isinstance(call, dict) else getattr(call, "created_at", None)
+    if created_at and created_at < activity_start:
+        dial_lead_seconds = max(0, int((activity_start - created_at).total_seconds()))
+        if 0 < dial_lead_seconds <= CALL_ACTIVITY_DIAL_LOOKBACK_SECONDS:
+            activity_start = created_at
+
+    duration_value = call.get("duration_seconds") if isinstance(call, dict) else getattr(call, "duration_seconds", 0)
+    duration_seconds = max(0, int(duration_value or 0))
+    return activity_start, raw_end, duration_seconds
+
+
+def _call_activity_cooldown_seconds(block_end, *, range_end=None):
+    if not block_end:
+        return 0
+
+    cooldown_end = block_end + timedelta(seconds=CONNECTED_CALL_COOLDOWN_SECONDS)
+    if range_end is not None:
+        cooldown_end = min(cooldown_end, range_end)
+
+    local_block_end = timezone.localtime(block_end)
+    day_end = timezone.make_aware(
+        timezone.datetime.combine(local_block_end.date(), timezone.datetime.max.time())
+    )
+    cooldown_end = min(cooldown_end, day_end)
+    return max(0, int((cooldown_end - block_end).total_seconds()))
+
+
 def _split_call_activity_blocks(calls):
     blocks = []
     block_calls = []
@@ -214,16 +257,9 @@ def _split_call_activity_blocks(calls):
     block_end = None
 
     for call in calls:
-        start_time = call.get("start_time") if isinstance(call, dict) else getattr(call, "start_time", None)
-        if not call or not start_time:
+        start_time, end_time, _duration_seconds = _call_activity_window(call)
+        if not start_time:
             continue
-        end_time = (
-            call.get("end_time")
-            if isinstance(call, dict)
-            else getattr(call, "end_time", None)
-        ) or start_time
-        if end_time < start_time:
-            end_time = start_time
 
         if block_start is None:
             block_calls = [call]
@@ -248,10 +284,9 @@ def _split_call_activity_blocks(calls):
     return blocks
 
 
-def _call_activity_block_summary(calls):
+def _call_activity_block_summary(calls, *, range_end=None):
     total_seconds = 0
     attempt_count = 0
-    real_call_count = 0
     suspicious_block_count = 0
     zero_only_block_count = 0
     suspicious_attempt_count = 0
@@ -260,15 +295,18 @@ def _call_activity_block_summary(calls):
 
     for block_calls, block_start, block_end in _split_call_activity_blocks(calls):
         attempt_count += len(block_calls)
-        connected_seconds = 0
+        real_call_activity_seconds = 0
         real_calls_in_block = 0
         zero_seconds_in_block = 0
         for call in block_calls:
-            duration_value = call.get("duration_seconds") if isinstance(call, dict) else getattr(call, "duration_seconds", 0)
-            duration_seconds = max(0, int(duration_value or 0))
+            activity_start, activity_end, duration_seconds = _call_activity_window(call)
+            if not activity_start:
+                continue
+
+            activity_span_seconds = max(0, int((activity_end - activity_start).total_seconds()))
             if duration_seconds > 0:
                 real_calls_in_block += 1
-                connected_seconds += duration_seconds
+                real_call_activity_seconds += max(activity_span_seconds, duration_seconds)
             else:
                 zero_seconds_in_block += 1
 
@@ -286,10 +324,11 @@ def _call_activity_block_summary(calls):
         ):
             suspicious_block_count += 1
             suspicious_attempt_count += len(block_calls)
-            total_seconds += connected_seconds
+            total_seconds += real_call_activity_seconds
             continue
 
-        total_seconds += max(block_seconds, connected_seconds)
+        total_seconds += max(block_seconds, real_call_activity_seconds)
+        total_seconds += _call_activity_cooldown_seconds(block_end, range_end=range_end)
 
     return {
         "active_seconds": total_seconds,
@@ -319,12 +358,16 @@ def _effective_active_seconds_map(*, start_at=None, end_at=None, staff_ids=None)
         "end_time",
         "duration_seconds",
         "is_verified",
+        "created_at",
     ).order_by("staff_id", "start_time", "end_time", "id"):
         calls_by_staff_day[(call.staff_id, getattr(call, "activity_day", None))].append(call)
 
     totals_by_staff = defaultdict(int)
     for day_key, calls in calls_by_staff_day.items():
-        totals_by_staff[day_key[0]] += _call_activity_block_summary(calls)["active_seconds"]
+        totals_by_staff[day_key[0]] += _call_activity_block_summary(
+            calls,
+            range_end=end_at,
+        )["active_seconds"]
 
     if staff_ids is not None:
         for staff_id in staff_ids:
@@ -352,6 +395,7 @@ def _effective_active_insights_map(*, start_at=None, end_at=None, staff_ids=None
             "end_time",
             "duration_seconds",
             "is_verified",
+            "created_at",
         )
         .order_by("staff_id", "start_time", "end_time", "id")
     ):
