@@ -1,3 +1,4 @@
+import logging
 import mimetypes
 from pathlib import Path
 
@@ -125,6 +126,9 @@ from backend.apps.telecalling.services import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 def _admin_web_context(request, current_user, *, active_page, page_title, page_heading, page_subtitle, extra_context=None):
     mark_staff_seen(current_user)
     company_profile = get_company_profile()
@@ -170,6 +174,102 @@ def _normalize_errors(error_dict):
             continue
         normalized[field] = str(value)
     return normalized
+
+
+def _fallback_today_label():
+    return timezone.localdate().strftime("%A, %d %b %Y")
+
+
+def _fallback_dashboard_payload():
+    return {
+        "dashboard": {
+            "today_label": _fallback_today_label(),
+            "staff_active": 0,
+            "calls_today": 0,
+            "conversion_rate": "0.0%",
+            "callbacks": 0,
+            "work_coverage": 0,
+            "short_calls_blocked": 0,
+            "salary_ready": 0,
+            "total_leads": 0,
+            "no_answer": 0,
+            "interested": 0,
+            "converted": 0,
+            "salary_estimate": "Rs. 0.00",
+            "active_hours": "0s",
+        },
+        "chart_payload": {
+            "callVolume": {"labels": [], "calls": [], "conversions": []},
+            "leadPipeline": {"labels": ["New", "Follow Up", "Call Back", "No Response", "Converted"], "values": [0, 0, 0, 0, 0]},
+            "activityBalance": {"labels": [], "activeHours": [], "callMinutes": []},
+        },
+        "live_staff": [],
+        "lead_rows": [],
+        "salary_records": [],
+        "team_directory": [],
+    }
+
+
+def _fallback_team_payload():
+    return {
+        "today_label": _fallback_today_label(),
+        "team_summary": {
+            "total_staff": 0,
+            "active_accounts": 0,
+            "online_now": 0,
+            "attention_needed": 0,
+            "total_assigned": 0,
+            "total_calls_today": 0,
+            "total_converted_today": 0,
+        },
+        "team_rows": [],
+    }
+
+
+def _fallback_work_hours_payload():
+    return {
+        "today_label": _fallback_today_label(),
+        "summary_rows": [],
+        "session_rows": [],
+    }
+
+
+def _fallback_salary_payload():
+    return {
+        "today_label": _fallback_today_label(),
+        "summary": {
+            "pending_total": "Rs. 0.00",
+            "credited_total": "Rs. 0.00",
+            "pending_staff_count": 0,
+            "advance_total": "Rs. 0.00",
+            "advance_staff_count": 0,
+            "pending_referral_total": "Rs. 0.00",
+            "pending_referral_count": 0,
+            "referral_enabled": False,
+            "paid_transaction_count": 0,
+        },
+        "salary_rows": [],
+        "pending_salary_rows": [],
+        "recent_payment_rows": [],
+        "recent_referral_reward_rows": [],
+        "payment_method_options": [
+            {"value": value, "label": label}
+            for value, label in Salary.PaymentMethod.choices
+        ],
+    }
+
+
+def _safe_admin_payload(builder, fallback_factory, *, label, request=None):
+    try:
+        return builder()
+    except Exception:
+        logger.exception("Admin payload build failed for %s", label)
+        if request is not None:
+            messages.error(
+                request,
+                "Some admin data could not be loaded right now. A safe fallback view is being shown.",
+            )
+        return fallback_factory()
 
 
 def _apply_staff_post_save_actions(staff, was_active):
@@ -480,7 +580,12 @@ def dashboard_page(request):
     if not current_user:
         return redirect("web-login")
 
-    payload = build_dashboard_payload()
+    payload = _safe_admin_payload(
+        build_dashboard_payload,
+        _fallback_dashboard_payload,
+        label="dashboard-page",
+        request=request,
+    )
     context = _admin_web_context(
         request,
         current_user,
@@ -616,7 +721,12 @@ def staff_page(request):
     if not current_user:
         return redirect("web-login")
 
-    payload = build_team_management_payload()
+    payload = _safe_admin_payload(
+        build_team_management_payload,
+        _fallback_team_payload,
+        label="staff-page",
+        request=request,
+    )
     context = _admin_web_context(
         request,
         current_user,
@@ -1233,7 +1343,12 @@ def salary_page(request):
         else:
             messages.error(request, "Salary action could not be processed.")
 
-    payload = build_salary_page_payload()
+    payload = _safe_admin_payload(
+        build_salary_page_payload,
+        _fallback_salary_payload,
+        label="salary-page",
+        request=request,
+    )
     for row in payload["pending_salary_rows"]:
         row["payment_errors"] = payment_errors_by_staff.get(row["id"], {})
         row["payment_form"] = {
@@ -1537,7 +1652,12 @@ def working_hours_page(request):
         page_title="Working Hours",
         page_heading="Working Hours",
         page_subtitle="Track work sessions, active time, and the current state of each staff member.",
-        extra_context=build_work_hours_payload(),
+        extra_context=_safe_admin_payload(
+            build_work_hours_payload,
+            _fallback_work_hours_payload,
+            label="working-hours-page",
+            request=request,
+        ),
     )
     return render(request, "admin_working_hours.html", context)
 
@@ -1653,7 +1773,13 @@ def logout_api(request):
 @api_view(["GET"])
 @permission_classes([IsAdminStaff])
 def dashboard_data_api(request):
-    return Response(build_dashboard_payload())
+    return Response(
+        _safe_admin_payload(
+            build_dashboard_payload,
+            _fallback_dashboard_payload,
+            label="dashboard-api",
+        )
+    )
 
 
 @api_view(["GET", "PATCH"])
@@ -1827,14 +1953,22 @@ def calls_api(request):
 @api_view(["GET"])
 @permission_classes([IsAdminStaff])
 def working_hours_api(request):
-    payload = build_work_hours_payload()
+    payload = _safe_admin_payload(
+        build_work_hours_payload,
+        _fallback_work_hours_payload,
+        label="working-hours-api",
+    )
     return Response(payload)
 
 
 @api_view(["GET"])
 @permission_classes([IsAdminStaff])
 def live_staff_api(request):
-    payload = build_dashboard_payload()
+    payload = _safe_admin_payload(
+        build_dashboard_payload,
+        _fallback_dashboard_payload,
+        label="live-staff-api",
+    )
     return Response(payload["live_staff"])
 
 
@@ -1880,7 +2014,12 @@ def team_member_detail_api(request, staff_id):
 @api_view(["GET"])
 @permission_classes([IsAdminStaff])
 def salary_summary_api(request):
-    return Response(build_salary_page_payload()["salary_rows"])
+    payload = _safe_admin_payload(
+        build_salary_page_payload,
+        _fallback_salary_payload,
+        label="salary-summary-api",
+    )
+    return Response(payload["salary_rows"])
 
 
 @api_view(["GET"])
