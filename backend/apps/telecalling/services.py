@@ -6,7 +6,7 @@ import re
 import uuid
 from collections import Counter, defaultdict
 from datetime import date, timedelta
-from decimal import Decimal, ROUND_FLOOR
+from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
 from threading import Thread
 
 from django.conf import settings
@@ -455,6 +455,29 @@ def _money(value):
     return Decimal(value or 0).quantize(TWOPLACES)
 
 
+def _seconds_from_decimal_hours(total_hours):
+    hours_value = Decimal(total_hours or 0)
+    return max(
+        0,
+        int((hours_value * Decimal("3600")).to_integral_value(rounding=ROUND_HALF_UP)),
+    )
+
+
+def _format_work_duration_label(total_seconds):
+    total_seconds = max(0, int(total_seconds or 0))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    parts = []
+    if hours:
+        parts.append(f"{hours}h")
+    if minutes:
+        parts.append(f"{minutes}m")
+    if seconds or not parts:
+        parts.append(f"{seconds}s")
+    return " ".join(parts)
+
+
 def _payable_work_hour_call_queryset():
     return Call.objects.filter(end_time__isnull=False, is_verified=True).exclude(
         status=Call.Status.INVALID_SHORT
@@ -493,6 +516,7 @@ def _calculate_base_pay(staff, active_hours):
 def _calculate_hourly_call_bonus(*, company_profile, active_hours, bonus_calls):
     if not company_profile.hourly_call_bonus_enabled:
         return {
+            "completed_hours": 0,
             "threshold_calls": 0,
             "extra_calls": 0,
             "bonus_amount": Decimal("0.00"),
@@ -500,19 +524,25 @@ def _calculate_hourly_call_bonus(*, company_profile, active_hours, bonus_calls):
 
     threshold_per_hour = int(company_profile.hourly_call_bonus_threshold or 0)
     bonus_rate = _money(company_profile.hourly_call_bonus_rate or 0)
-    if threshold_per_hour <= 0 or bonus_rate <= Decimal("0.00") or active_hours <= Decimal("0.00"):
+    completed_hours = int(Decimal(active_hours or 0).to_integral_value(rounding=ROUND_FLOOR))
+    if (
+        threshold_per_hour <= 0
+        or bonus_rate <= Decimal("0.00")
+        or active_hours <= Decimal("0.00")
+        or completed_hours < 1
+    ):
         return {
+            "completed_hours": max(completed_hours, 0),
             "threshold_calls": 0,
             "extra_calls": 0,
             "bonus_amount": Decimal("0.00"),
         }
 
-    threshold_calls = int(
-        (Decimal(active_hours) * Decimal(threshold_per_hour)).to_integral_value(rounding=ROUND_FLOOR)
-    )
+    threshold_calls = completed_hours * threshold_per_hour
     extra_calls = max(int(bonus_calls or 0) - threshold_calls, 0)
     bonus_amount = _money(Decimal(extra_calls) * bonus_rate)
     return {
+        "completed_hours": completed_hours,
         "threshold_calls": threshold_calls,
         "extra_calls": extra_calls,
         "bonus_amount": bonus_amount,
@@ -542,7 +572,9 @@ def calculate_staff_payout(
     base_pay = _calculate_base_pay(staff, active_hours)
     total_pay = _money(base_pay + call_earnings + bonus_earnings)
     return {
+        "active_seconds": int(active_seconds or 0),
         "active_hours": active_hours,
+        "call_seconds": int(call_seconds or 0),
         "call_minutes": call_minutes,
         "converted_leads": int(converted_leads or 0),
         "bonus_calls": int(bonus_calls or 0),
@@ -550,6 +582,7 @@ def calculate_staff_payout(
         "call_earnings": call_earnings,
         "conversion_bonus": conversion_bonus,
         "hourly_call_bonus": hourly_call_bonus["bonus_amount"],
+        "hourly_call_bonus_completed_hours": hourly_call_bonus["completed_hours"],
         "hourly_call_bonus_threshold_calls": hourly_call_bonus["threshold_calls"],
         "hourly_call_bonus_extra_calls": hourly_call_bonus["extra_calls"],
         "bonus_earnings": bonus_earnings,
@@ -657,8 +690,9 @@ def _salary_period_snapshot(staff, *, period_start, period_end, payout_cycle):
         "period_end": period_end,
         "period_label": f"{period_start.strftime('%d %b %Y')} to {period_end.strftime('%d %b %Y')}",
         "payout_cycle": payout_cycle,
+        "hours_seconds": breakdown["active_seconds"],
         "hours": breakdown["active_hours"],
-        "hours_label": f"{round(float(breakdown['active_hours']), 1)}h",
+        "hours_label": _format_work_duration_label(breakdown["active_seconds"]),
         "earned_total": earned_total,
         "earned_total_label": _format_currency(earned_total),
         "paid_total": paid_total,
@@ -688,7 +722,7 @@ def build_staff_current_salary_summary(staff, *, today=None):
     total_earned = breakdown["total_pay"]
     return {
         "total_working_hours": float(total_hours),
-        "total_working_hours_label": f"{float(total_hours):,.1f}h",
+        "total_working_hours_label": _format_work_duration_label(breakdown["active_seconds"]),
         "total_earned_amount": float(total_earned),
         "total_earned_amount_label": f"Rs. {float(total_earned):,.2f}",
     }
@@ -922,7 +956,9 @@ def _salary_history_row(record):
         "payout_cycle": record.payout_cycle,
         "payout_cycle_label": record.get_payout_cycle_display(),
         "total_hours": float(record.total_hours or 0),
-        "total_hours_label": f"{round(float(record.total_hours or 0), 1)}h",
+        "total_hours_label": _format_work_duration_label(
+            _seconds_from_decimal_hours(record.total_hours)
+        ),
         "final_salary": _format_currency(record.final_salary),
         "paid_amount": _format_currency(record.paid_amount),
         "is_paid": record.is_paid,
@@ -953,7 +989,9 @@ def build_staff_salary_history_rows(staff, limit=20):
                 "payout_cycle": record.payout_cycle,
                 "payout_cycle_label": record.get_payout_cycle_display(),
                 "total_hours": float(record.total_hours or 0),
-                "total_hours_label": f"{round(float(record.total_hours or 0), 1)}h",
+                "total_hours_label": _format_work_duration_label(
+                    _seconds_from_decimal_hours(record.total_hours)
+                ),
                 "final_salary": _format_currency(record.final_salary),
                 "paid_amount": _format_currency(transaction.amount),
                 "is_paid": record.is_paid,
@@ -1184,7 +1222,9 @@ def build_recent_salary_payment_rows(limit=40):
                 "payment_reference": transaction.payment_reference or "--",
                 "payment_note": transaction.payment_note or "--",
                 "final_salary": _format_currency(record.final_salary),
-                "total_hours_label": f"{round(float(record.total_hours or 0), 1)}h",
+                "total_hours_label": _format_work_duration_label(
+                    _seconds_from_decimal_hours(record.total_hours)
+                ),
             }
         )
     return rows
