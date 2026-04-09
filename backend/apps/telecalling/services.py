@@ -2755,6 +2755,102 @@ def assign_imported_leads_to_staff(*, imported_lead_ids, selected_staff):
     }
 
 
+def assign_selected_leads_to_staff_queue(*, selected_lead_ids, target_staff):
+    if not selected_lead_ids or not target_staff or not target_staff.is_active or target_staff.role != Staff.Role.STAFF:
+        return {
+            "selected_count": 0,
+            "eligible_count": 0,
+            "assigned_count": 0,
+            "waiting_count": 0,
+            "skipped_count": 0,
+            "displaced_count": 0,
+        }
+
+    ordered_selected_ids = list(
+        Lead.objects.filter(id__in=list(selected_lead_ids))
+        .order_by("created_at", "id")
+        .values_list("id", flat=True)
+    )
+    selected_leads = list(
+        Lead.objects.filter(id__in=ordered_selected_ids).select_related("assigned_to")
+    )
+    if not selected_leads:
+        return {
+            "selected_count": 0,
+            "eligible_count": 0,
+            "assigned_count": 0,
+            "waiting_count": 0,
+            "skipped_count": 0,
+            "displaced_count": 0,
+        }
+
+    eligible_lead_ids = []
+    previous_staff_ids = set()
+    for lead in selected_leads:
+        if not _is_active_queue_status(lead.status):
+            continue
+        eligible_lead_ids.append(lead.id)
+        if lead.assigned_to_id and lead.assigned_to_id != target_staff.id:
+            previous_staff_ids.add(lead.assigned_to_id)
+
+    skipped_count = max(len(selected_leads) - len(eligible_lead_ids), 0)
+    if not eligible_lead_ids:
+        return {
+            "selected_count": len(selected_leads),
+            "eligible_count": 0,
+            "assigned_count": 0,
+            "waiting_count": 0,
+            "skipped_count": skipped_count,
+            "displaced_count": 0,
+        }
+
+    existing_target_queue_ids = set(
+        _staff_call_queue_queryset(
+            Lead.objects.filter(
+                assigned_to=target_staff,
+                status__in=ACTIVE_QUEUE_STATUSES,
+            ).exclude(id__in=eligible_lead_ids)
+        ).values_list("id", flat=True)
+    )
+
+    assigned_at = timezone.now()
+    Lead.objects.filter(id__in=eligible_lead_ids).update(
+        assigned_to=target_staff,
+        updated_at=assigned_at,
+    )
+    auto_allocate_leads(
+        target_staff=target_staff,
+        prioritized_lead_ids=eligible_lead_ids,
+    )
+
+    for previous_staff in Staff.objects.filter(
+        id__in=list(previous_staff_ids),
+        role=Staff.Role.STAFF,
+        is_active=True,
+    ).exclude(id=target_staff.id):
+        auto_allocate_leads(target_staff=previous_staff)
+
+    assigned_count = Lead.objects.filter(
+        id__in=eligible_lead_ids,
+        assigned_to=target_staff,
+    ).count()
+    waiting_count = max(len(eligible_lead_ids) - assigned_count, 0)
+    displaced_count = 0
+    if existing_target_queue_ids:
+        displaced_count = Lead.objects.filter(
+            id__in=list(existing_target_queue_ids)
+        ).exclude(assigned_to=target_staff).count()
+
+    return {
+        "selected_count": len(selected_leads),
+        "eligible_count": len(eligible_lead_ids),
+        "assigned_count": assigned_count,
+        "waiting_count": waiting_count,
+        "skipped_count": skipped_count,
+        "displaced_count": displaced_count,
+    }
+
+
 def _decode_csv_bytes(file_bytes):
     for encoding in ("utf-8-sig", "utf-8", "latin-1"):
         try:

@@ -65,6 +65,7 @@ from backend.apps.telecalling.serializers import (
     UpdateTrainingLessonSerializer,
 )
 from backend.apps.telecalling.services import (
+    assign_selected_leads_to_staff_queue,
     auto_allocate_leads,
     authenticate_staff,
     build_app_update_payload,
@@ -875,6 +876,55 @@ def leads_page(request):
             Lead.objects.filter(id__in=selected_lead_ids).delete()
             auto_allocate_leads()
             messages.success(request, f"Deleted {deleted_count} selected leads successfully.")
+            return redirect("leads-page")
+
+        if lead_action == "bulk_allocate":
+            selected_lead_ids = [
+                lead_id.strip()
+                for lead_id in request.POST.getlist("selected_lead_ids")
+                if lead_id.strip()
+            ]
+            if not selected_lead_ids:
+                messages.error(request, "Select at least one lead to allocate.")
+                return redirect("leads-page")
+
+            target_staff_id = request.POST.get("target_staff_id", "").strip()
+            target_staff = Staff.objects.filter(
+                id=target_staff_id,
+                role=Staff.Role.STAFF,
+                is_active=True,
+            ).first()
+            if not target_staff:
+                messages.error(request, "Choose an active staff member for allocation.")
+                return redirect("leads-page")
+
+            summary = assign_selected_leads_to_staff_queue(
+                selected_lead_ids=selected_lead_ids,
+                target_staff=target_staff,
+            )
+            if summary["selected_count"] == 0:
+                messages.error(request, "The selected leads could not be found.")
+                return redirect("leads-page")
+            if summary["eligible_count"] == 0:
+                messages.error(
+                    request,
+                    "Only New, Call Back, or Follow Up leads can be moved into a staff queue.",
+                )
+                return redirect("leads-page")
+
+            message = (
+                f"Allocated {summary['assigned_count']} selected lead(s) to {target_staff.name}. "
+                f"{summary['waiting_count']} remain waiting for the next queue slot."
+            )
+            if summary["displaced_count"]:
+                message += (
+                    f" {summary['displaced_count']} bottom queue lead(s) were moved out first."
+                )
+            if summary["skipped_count"]:
+                message += (
+                    f" {summary['skipped_count']} non-active lead(s) were skipped."
+                )
+            messages.success(request, message)
             return redirect("leads-page")
 
         messages.error(request, "Lead request could not be processed.")
