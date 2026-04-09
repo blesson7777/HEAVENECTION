@@ -209,29 +209,52 @@ def _format_duration(total_seconds):
     return f"{minutes:02d}:{seconds:02d}"
 
 
+def _normalize_datetime_value(value):
+    if not value or not isinstance(value, datetime):
+        return value
+    if timezone.is_naive(value):
+        return timezone.make_aware(value, timezone.get_current_timezone())
+    return value
+
+
 def _call_activity_window(call):
-    raw_start = call.get("start_time") if isinstance(call, dict) else getattr(call, "start_time", None)
-    if not call or not raw_start:
+    try:
+        raw_start = _normalize_datetime_value(
+            call.get("start_time") if isinstance(call, dict) else getattr(call, "start_time", None)
+        )
+        if not call or not raw_start:
+            return None, None, 0
+
+        raw_end = _normalize_datetime_value(
+            (
+                call.get("end_time")
+                if isinstance(call, dict)
+                else getattr(call, "end_time", None)
+            )
+            or raw_start
+        )
+        if raw_end < raw_start:
+            raw_end = raw_start
+
+        activity_start = raw_start
+        created_at = _normalize_datetime_value(
+            call.get("created_at") if isinstance(call, dict) else getattr(call, "created_at", None)
+        )
+        if created_at and created_at < activity_start:
+            dial_lead_seconds = max(0, int((activity_start - created_at).total_seconds()))
+            if 0 < dial_lead_seconds <= CALL_ACTIVITY_DIAL_LOOKBACK_SECONDS:
+                activity_start = created_at
+
+        duration_value = call.get("duration_seconds") if isinstance(call, dict) else getattr(call, "duration_seconds", 0)
+        duration_seconds = max(0, int(duration_value or 0))
+        return activity_start, raw_end, duration_seconds
+    except Exception:
+        logger.warning(
+            "Skipping malformed call activity window",
+            extra={"call_id": str(getattr(call, "id", ""))},
+            exc_info=True,
+        )
         return None, None, 0
-
-    raw_end = (
-        call.get("end_time")
-        if isinstance(call, dict)
-        else getattr(call, "end_time", None)
-    ) or raw_start
-    if raw_end < raw_start:
-        raw_end = raw_start
-
-    activity_start = raw_start
-    created_at = call.get("created_at") if isinstance(call, dict) else getattr(call, "created_at", None)
-    if created_at and created_at < activity_start:
-        dial_lead_seconds = max(0, int((activity_start - created_at).total_seconds()))
-        if 0 < dial_lead_seconds <= CALL_ACTIVITY_DIAL_LOOKBACK_SECONDS:
-            activity_start = created_at
-
-    duration_value = call.get("duration_seconds") if isinstance(call, dict) else getattr(call, "duration_seconds", 0)
-    duration_seconds = max(0, int(duration_value or 0))
-    return activity_start, raw_end, duration_seconds
 
 
 def _call_activity_cooldown_seconds(block_end, *, range_end=None):
@@ -449,9 +472,7 @@ def _format_datetime(value, fallback="--"):
     try:
         if isinstance(value, date) and not isinstance(value, datetime):
             return value.strftime("%d %b %Y")
-
-        if timezone.is_naive(value):
-            value = timezone.make_aware(value, timezone.get_current_timezone())
+        value = _normalize_datetime_value(value)
         return timezone.localtime(value).strftime("%d %b %Y, %I:%M %p")
     except Exception:
         logger.warning("Unable to format datetime value safely", exc_info=True)
@@ -613,7 +634,7 @@ def _split_segments_into_buckets(segments, bucket_seconds):
 
 
 def _call_bonus_timestamp(call):
-    return (
+    return _normalize_datetime_value((
         call.get("end_time")
         if isinstance(call, dict)
         else getattr(call, "end_time", None)
@@ -621,7 +642,7 @@ def _call_bonus_timestamp(call):
         call.get("start_time")
         if isinstance(call, dict)
         else getattr(call, "start_time", None)
-    )
+    ))
 
 
 def _count_calls_in_segments(calls, segments):
@@ -1531,29 +1552,36 @@ def build_recent_salary_payment_rows(limit=40):
     )
     rows = []
     for transaction in transactions:
-        record = transaction.salary_record
-        rows.append(
-            {
-                "id": str(transaction.id),
-                "staff_id": str(record.staff_id),
-                "staff_name": record.staff.name,
-                "staff_phone": record.staff.phone,
-                "period_label": f"{record.period_start.strftime('%d %b %Y')} to {record.period_end.strftime('%d %b %Y')}",
-                "payout_cycle_label": record.get_payout_cycle_display(),
-                "paid_amount": _format_currency(transaction.amount),
-                "paid_at": _format_datetime(transaction.paid_at),
-                "payment_kind_label": transaction.get_payment_kind_display(),
-                "payment_method_label": transaction.get_payment_method_display()
-                if transaction.payment_method
-                else "Manual",
-                "payment_reference": transaction.payment_reference or "--",
-                "payment_note": transaction.payment_note or "--",
-                "final_salary": _format_currency(record.final_salary),
-                "total_hours_label": _format_work_duration_label(
-                    _seconds_from_decimal_hours(record.total_hours)
-                ),
-            }
-        )
+        try:
+            record = transaction.salary_record
+            rows.append(
+                {
+                    "id": str(transaction.id),
+                    "staff_id": str(record.staff_id),
+                    "staff_name": record.staff.name,
+                    "staff_phone": record.staff.phone,
+                    "period_label": f"{record.period_start.strftime('%d %b %Y')} to {record.period_end.strftime('%d %b %Y')}",
+                    "payout_cycle_label": record.get_payout_cycle_display(),
+                    "paid_amount": _format_currency(transaction.amount),
+                    "paid_at": _format_datetime(transaction.paid_at),
+                    "payment_kind_label": transaction.get_payment_kind_display(),
+                    "payment_method_label": transaction.get_payment_method_display()
+                    if transaction.payment_method
+                    else "Manual",
+                    "payment_reference": transaction.payment_reference or "--",
+                    "payment_note": transaction.payment_note or "--",
+                    "final_salary": _format_currency(record.final_salary),
+                    "total_hours_label": _format_work_duration_label(
+                        _seconds_from_decimal_hours(record.total_hours)
+                    ),
+                }
+            )
+        except Exception:
+            logger.warning(
+                "Skipping malformed salary payment transaction row",
+                extra={"transaction_id": str(getattr(transaction, "id", ""))},
+                exc_info=True,
+            )
     return rows
 
 
