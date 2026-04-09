@@ -5,7 +5,7 @@ import logging
 import re
 import uuid
 from collections import Counter, defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
 from threading import Thread
 
@@ -446,7 +446,19 @@ def _effective_active_seconds_for_staff(*, staff, start_at=None, end_at=None):
 def _format_datetime(value, fallback="--"):
     if not value:
         return fallback
-    return timezone.localtime(value).strftime("%d %b %Y, %I:%M %p")
+    try:
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value.strftime("%d %b %Y")
+
+        if timezone.is_naive(value):
+            value = timezone.make_aware(value, timezone.get_current_timezone())
+        return timezone.localtime(value).strftime("%d %b %Y, %I:%M %p")
+    except Exception:
+        logger.warning("Unable to format datetime value safely", exc_info=True)
+        try:
+            return str(value)
+        except Exception:
+            return fallback
 
 
 def build_staff_document_url(staff, document_type, *, request=None, route_name="staff-document-page"):
