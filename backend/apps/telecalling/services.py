@@ -4471,7 +4471,14 @@ def build_settings_payload(current_user):
 
 
 def build_lead_management_payload():
-    leads = Lead.objects.select_related("assigned_to").order_by("-updated_at")
+    leads = (
+        Lead.objects.select_related("assigned_to")
+        .exclude(
+            status__in=RECOVERY_LEAD_STATUSES,
+            assigned_to=None,
+        )
+        .order_by("-updated_at")
+    )
     active_queue = _lead_queue_queryset()
     queue_limit = get_lead_queue_limit()
     staff_options = [
