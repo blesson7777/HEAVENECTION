@@ -180,21 +180,96 @@ def _fallback_today_label():
     return timezone.localdate().strftime("%A, %d %b %Y")
 
 
+def _fallback_schedule_label(staff):
+    if staff.compensation_type == Staff.CompensationType.WEEKLY:
+        return f"Every {staff.get_weekly_payout_day_display()}"
+    if staff.compensation_type == Staff.CompensationType.MONTHLY:
+        return "Last day of every month"
+    return "Running earned amount"
+
+
+def _fallback_basic_staff_rows():
+    staff_queryset = Staff.objects.filter(role=Staff.Role.STAFF).order_by("name")
+    rows = []
+    for staff in staff_queryset:
+        active_lead_count = Lead.objects.filter(
+            assigned_to=staff,
+            status__in=[Lead.Status.NEW, Lead.Status.CALL_BACK, Lead.Status.INTERESTED],
+        ).count()
+        rows.append(
+            {
+                "id": str(staff.id),
+                "name": staff.name,
+                "phone": staff.phone,
+                "email": staff.email or "",
+                "is_active": staff.is_active,
+                "compensation_type": staff.compensation_type,
+                "compensation_type_label": staff.get_compensation_type_display(),
+                "hourly_rate": f"Rs. {float(staff.hourly_rate or 0):,.2f}",
+                "weekly_salary": f"Rs. {float(staff.weekly_salary or 0):,.2f}",
+                "monthly_salary": f"Rs. {float(staff.monthly_salary or 0):,.2f}",
+                "target_hours_per_week": float(staff.target_hours_per_week or 0),
+                "target_hours_per_month": float(staff.target_hours_per_month or 0),
+                "call_rate": f"Rs. {float(staff.call_rate or 0):,.2f}",
+                "bonus_per_conversion": f"Rs. {float(staff.bonus_per_conversion or 0):,.2f}",
+                "online_label": "Offline",
+                "status_filter": "offline" if staff.is_active else "inactive",
+                "status_tone": "muted",
+                "session_state": "stopped",
+                "active_hours_today": "0s",
+                "active_seconds_today": 0,
+                "calls_today": 0,
+                "converted_today": 0,
+                "assigned_leads": active_lead_count,
+                "last_seen": "--",
+                "is_available": False,
+                "quality_score": 0,
+                "quality_label": "Temporarily Unavailable",
+                "quality_tone": "muted",
+                "quality_note": "Live activity metrics are temporarily unavailable. Basic staff details are still shown.",
+                "outcome_consistency_label": "--",
+                "followup_completion_label": "--",
+                "missed_callbacks": 0,
+                "attempt_review_label": "--",
+                "away_review_label": "Unavailable",
+                "suspicious_block_count": 0,
+                "zero_only_block_count": 0,
+                "zero_second_attempt_count": 0,
+                "real_call_count": 0,
+            }
+        )
+    return rows
+
+
 def _fallback_dashboard_payload():
+    staff_rows = _fallback_basic_staff_rows()
+    live_staff = [
+        {
+            "name": row["name"],
+            "status_text": "Activity metrics are temporarily unavailable",
+            "is_online": False,
+        }
+        for row in staff_rows[:8]
+    ]
+    total_leads = Lead.objects.count()
+    no_answer = Lead.objects.filter(status=Lead.Status.NO_ANSWER).count()
+    interested = Lead.objects.filter(status=Lead.Status.INTERESTED).count()
+    converted = Lead.objects.filter(status=Lead.Status.CONVERTED).count()
+    callbacks = Lead.objects.filter(status=Lead.Status.CALL_BACK).count()
     return {
         "dashboard": {
             "today_label": _fallback_today_label(),
             "staff_active": 0,
             "calls_today": 0,
             "conversion_rate": "0.0%",
-            "callbacks": 0,
+            "callbacks": callbacks,
             "work_coverage": 0,
             "short_calls_blocked": 0,
             "salary_ready": 0,
-            "total_leads": 0,
-            "no_answer": 0,
-            "interested": 0,
-            "converted": 0,
+            "total_leads": total_leads,
+            "no_answer": no_answer,
+            "interested": interested,
+            "converted": converted,
             "salary_estimate": "Rs. 0.00",
             "active_hours": "0s",
         },
@@ -203,38 +278,95 @@ def _fallback_dashboard_payload():
             "leadPipeline": {"labels": ["New", "Follow Up", "Call Back", "No Response", "Converted"], "values": [0, 0, 0, 0, 0]},
             "activityBalance": {"labels": [], "activeHours": [], "callMinutes": []},
         },
-        "live_staff": [],
+        "live_staff": live_staff,
         "lead_rows": [],
         "salary_records": [],
-        "team_directory": [],
+        "team_directory": staff_rows,
     }
 
 
 def _fallback_team_payload():
+    team_rows = _fallback_basic_staff_rows()
     return {
         "today_label": _fallback_today_label(),
         "team_summary": {
-            "total_staff": 0,
-            "active_accounts": 0,
+            "total_staff": len(team_rows),
+            "active_accounts": sum(1 for row in team_rows if row["is_active"]),
             "online_now": 0,
-            "attention_needed": 0,
-            "total_assigned": 0,
+            "attention_needed": sum(1 for row in team_rows if row["is_active"]),
+            "total_assigned": sum(row["assigned_leads"] for row in team_rows),
             "total_calls_today": 0,
             "total_converted_today": 0,
         },
-        "team_rows": [],
+        "team_rows": team_rows,
     }
 
 
 def _fallback_work_hours_payload():
+    summary_rows = [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "phone": row["phone"],
+            "active_hours_today": "0s",
+            "active_seconds_today": 0,
+            "session_count_today": 0,
+            "first_login": "--",
+            "last_logout": "--",
+            "state_label": "Unavailable",
+            "online_label": "Offline",
+        }
+        for row in _fallback_basic_staff_rows()
+    ]
     return {
         "today_label": _fallback_today_label(),
-        "summary_rows": [],
+        "summary_rows": summary_rows,
         "session_rows": [],
     }
 
 
 def _fallback_salary_payload():
+    salary_rows = []
+    for row in _fallback_basic_staff_rows():
+        staff = Staff.objects.filter(id=row["id"]).first()
+        schedule_label = _fallback_schedule_label(staff) if staff else "Running earned amount"
+        weekly_payout_day_label = staff.get_weekly_payout_day_display() if staff and staff.weekly_payout_day else ""
+        salary_rows.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "phone": row["phone"],
+                "email": row["email"],
+                "compensation_type": row["compensation_type"],
+                "compensation_type_label": row["compensation_type_label"],
+                "schedule_label": schedule_label,
+                "weekly_payout_day_label": weekly_payout_day_label,
+                "hourly_rate": row["hourly_rate"],
+                "bank_name": "Bank details available in staff profile" if staff and staff.bank_name else "Bank details not added",
+                "bank_account_number": staff.bank_account_number if staff and staff.bank_account_number else "Account number not added",
+                "due_balance_raw": "0.00",
+                "due_balance": "Rs. 0.00",
+                "due_period_label": "Temporarily unavailable",
+                "due_earned_total": "Rs. 0.00",
+                "due_paid_total": "Rs. 0.00",
+                "due_hours_label": "0s",
+                "due_base_pay": "Rs. 0.00",
+                "due_call_earnings": "Rs. 0.00",
+                "due_bonus_earnings": "Rs. 0.00",
+                "advance_available_raw": "0.00",
+                "advance_available": "Rs. 0.00",
+                "running_period_label": "Temporarily unavailable",
+                "running_earned_total": "Rs. 0.00",
+                "running_paid_total": "Rs. 0.00",
+                "can_pay_salary": False,
+                "can_pay_advance": False,
+                "can_pay_referral_rewards": False,
+                "pending_referral_reward_total": "Rs. 0.00",
+                "pending_referral_reward_total_raw": "0.00",
+                "pending_referral_reward_count": 0,
+                "pending_referral_rewards": [],
+            }
+        )
     return {
         "today_label": _fallback_today_label(),
         "summary": {
@@ -248,8 +380,8 @@ def _fallback_salary_payload():
             "referral_enabled": False,
             "paid_transaction_count": 0,
         },
-        "salary_rows": [],
-        "pending_salary_rows": [],
+        "salary_rows": salary_rows,
+        "pending_salary_rows": salary_rows,
         "recent_payment_rows": [],
         "recent_referral_reward_rows": [],
         "payment_method_options": [
@@ -262,12 +394,13 @@ def _fallback_salary_payload():
 def _safe_admin_payload(builder, fallback_factory, *, label, request=None):
     try:
         return builder()
-    except Exception:
+    except Exception as error:
         logger.exception("Admin payload build failed for %s", label)
         if request is not None:
             messages.error(
                 request,
-                "Some admin data could not be loaded right now. A safe fallback view is being shown.",
+                f"Some admin data could not be loaded right now. "
+                f"{error.__class__.__name__}: {error}. A safe fallback view is being shown.",
             )
         return fallback_factory()
 
