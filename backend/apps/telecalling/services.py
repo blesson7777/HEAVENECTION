@@ -340,6 +340,7 @@ def _call_activity_block_summary(calls, *, range_end=None):
             zero_only_block_count += 1
             continue
 
+        block_seconds = max(0, int((block_end - block_start).total_seconds()))
         if (
             len(block_calls) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
             and (real_calls_in_block * MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) < len(block_calls)
