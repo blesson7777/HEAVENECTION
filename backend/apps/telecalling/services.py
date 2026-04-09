@@ -4847,6 +4847,10 @@ def build_recovery_lead_payload():
         .select_related("assigned_to")
         .order_by("updated_at", "last_contacted_at", "created_at", "id")
     )
+    staff_options = [
+        {"id": str(staff.id), "name": staff.name}
+        for staff in _staff_queryset().filter(is_active=True)
+    ]
 
     recovery_rows = []
     for lead in recovery_leads:
@@ -4857,6 +4861,9 @@ def build_recovery_lead_payload():
                 "phone": lead.phone,
                 "status": lead.status,
                 "status_label": lead.get_status_display(),
+                "callback_window": lead.callback_window,
+                "callback_date": lead.callback_date.isoformat() if lead.callback_date else "",
+                "assigned_to_id": str(lead.assigned_to_id) if lead.assigned_to_id else "",
                 "assigned_to": lead.assigned_to.name if lead.assigned_to else "Unassigned",
                 "notes": lead.notes,
                 "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
@@ -4870,6 +4877,7 @@ def build_recovery_lead_payload():
     oldest_row = recovery_rows[0] if recovery_rows else None
     return {
         "recovery_rows": recovery_rows,
+        "staff_options": staff_options,
         "recovery_summary": {
             "total_count": len(recovery_rows),
             "rejected_count": rejected_count,
