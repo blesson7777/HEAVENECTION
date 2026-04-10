@@ -4777,6 +4777,25 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
         )
     )
 
+    zero_talk_staff_rows = []
+    for row in team_rows:
+        try:
+            staff_uuid = uuid.UUID(str(row["id"]))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        blocks = (zero_talk_blocks.get(staff_uuid) or {}).get("blocks", [])
+        if not blocks:
+            continue
+        zero_talk_staff_rows.append(
+            {
+                "id": row.get("id"),
+                "name": row.get("name"),
+                "phone": row.get("phone"),
+                "block_count": len(blocks),
+                "blocks": blocks,
+            }
+        )
+
     return {
         "today_label": team_payload["today_label"],
         "lookback_days": QUALITY_SCORE_LOOKBACK_DAYS,
@@ -4802,6 +4821,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
             "flagged_day_total": flagged_day_total,
         },
         "review_rows": review_rows,
+        "zero_talk_staff_rows": zero_talk_staff_rows,
     }
 
 

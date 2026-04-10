@@ -90,6 +90,103 @@
         </div>
     </form>
 
+    {% if zero_talk_staff_rows %}
+    <div class="hc-surface-card mt-4">
+        <div class="mf-db2-panel-head mb-3">
+            <div>
+                <span class="mf-db2-kicker">Zero-Talk Streaks</span>
+                <h5>Zero-only streaks detected for this month</h5>
+            </div>
+            <span class="hc-sync-pill">{{ zero_talk_staff_rows|length }} staff</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table hc-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Staff</th>
+                        <th>Streak Blocks</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in zero_talk_staff_rows %}
+                    <tr>
+                        <td>
+                            <strong>{{ row.name }}</strong>
+                            <div class="text-muted small">{{ row.phone }}</div>
+                        </td>
+                        <td>{{ row.block_count }} block{{ row.block_count|pluralize }}</td>
+                        <td class="text-end">
+                            <button
+                                type="button"
+                                class="btn btn-outline-danger btn-sm js-zero-talk-blocks"
+                                data-staff-name="{{ row.name }}"
+                                data-target="#workReviewZeroBlocks-summary-{{ row.id }}"
+                            >
+                                View Zero-Talk Blocks
+                            </button>
+                            <div id="workReviewZeroBlocks-summary-{{ row.id }}" class="d-none">
+                                <div class="hc-work-review-day-list">
+                                    {% for block in row.blocks %}
+                                    <div class="hc-work-review-day hc-work-review-day-danger">
+                                        <div class="hc-work-review-day-head">
+                                            <strong>{{ block.date_label }}</strong>
+                                            <span>{{ block.time_range }}</span>
+                                        </div>
+                                        <small>{{ block.attempt_count }} attempts · {{ block.zero_second_count }} zero-second · Not counted in work hours</small>
+                                        {% if block.streak_note %}
+                                        <div class="hc-work-review-caption">{{ block.streak_note }}</div>
+                                        {% endif %}
+                                        {% if block.next_call_gap_label %}
+                                        <div class="hc-work-review-caption">
+                                            Next connected call after {{ block.next_call_gap_label }} · {{ block.next_connected_call_time }}
+                                        </div>
+                                        {% endif %}
+                                        {% if block.streak_gap_label %}
+                                        <div class="hc-work-review-caption">Total idle gap inside streak: {{ block.streak_gap_label }}</div>
+                                        {% endif %}
+                                        <div class="hc-work-review-day-meta">
+                                            <span>{{ block.duration_label }} block length</span>
+                                            <span>{{ block.call_count }} call{{ block.call_count|pluralize }} shown</span>
+                                        </div>
+                                        <div class="table-responsive mt-2">
+                                            <table class="table table-sm hc-table mb-0">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Lead</th>
+                                                        <th>Time</th>
+                                                        <th>Duration</th>
+                                                        <th>Result</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for call in block.calls %}
+                                                    <tr>
+                                                        <td>
+                                                            <strong>{{ call.lead_name }}</strong>
+                                                            <div class="text-muted small">{{ call.lead_phone }}</div>
+                                                        </td>
+                                                        <td>{{ call.start_time }}</td>
+                                                        <td>{{ call.duration_label }}</td>
+                                                        <td>{{ call.status_label }}</td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="table-responsive hc-work-review-table-scroller">
         <table class="table hc-table align-middle mb-0">
             <thead>
