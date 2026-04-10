@@ -73,15 +73,15 @@
                                     <div class="hc-work-review-day-list">
                                         {% for gap in row.gap_rows %}
                                         <div class="hc-work-review-day hc-work-review-day-warning">
-                                            <div class="hc-work-review-day-head">
-                                                <strong>{{ gap.start_time }}</strong>
-                                                <span>{{ gap.end_time }}</span>
-                                            </div>
-                                            <small>Gap {{ gap.gap_label }} · Uncounted {{ gap.uncounted_label }}</small>
-                                            <div class="hc-work-review-day-meta">
-                                                <span>Counted buffer {{ gap.buffer_label }}</span>
-                                            </div>
+                                        <div class="hc-work-review-day-head">
+                                            <strong>{{ gap.start_time }}</strong>
+                                            <span>{{ gap.end_time }}</span>
                                         </div>
+                                        <small>Gap {{ gap.gap_label }} · Counted {{ gap.buffer_label }} · Uncounted {{ gap.uncounted_label }}</small>
+                                        <div class="hc-work-review-day-meta">
+                                            <span>Uncounted time starts after 90 seconds of idle gap.</span>
+                                        </div>
+                                    </div>
                                         {% endfor %}
                                     </div>
                                     {% if row.gap_extra_count %}
@@ -157,6 +157,9 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body pt-3">
+                <div class="hc-work-review-caption mb-3">
+                    Only the first 90 seconds after a call are counted as buffer time. Any extra gap time is not counted.
+                </div>
                 <div class="hc-work-review-modal-body" id="workGapDetailsModalBody">
                     <div class="hc-work-review-empty-note">No gap details available.</div>
                 </div>
