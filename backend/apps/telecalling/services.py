@@ -323,6 +323,7 @@ def _call_activity_blocks_with_stats(calls):
         real_calls_in_block = 0
         zero_seconds_in_block = 0
         real_call_segments = []
+        first_real_call_start = None
 
         for call in block_calls:
             activity_start, activity_end, duration_seconds = _call_activity_window(call)
@@ -334,6 +335,8 @@ def _call_activity_blocks_with_stats(calls):
                 real_calls_in_block += 1
                 real_call_activity_seconds += max(activity_span_seconds, duration_seconds)
                 real_call_segments.append((activity_start, activity_end))
+                if not first_real_call_start or activity_start < first_real_call_start:
+                    first_real_call_start = activity_start
             else:
                 zero_seconds_in_block += 1
 
@@ -348,6 +351,7 @@ def _call_activity_blocks_with_stats(calls):
                 "real_calls_in_block": real_calls_in_block,
                 "zero_seconds_in_block": zero_seconds_in_block,
                 "real_call_segments": real_call_segments,
+                "first_real_call_start": first_real_call_start,
             }
         )
     return blocks
@@ -371,12 +375,12 @@ def _call_activity_block_summary(calls, *, range_end=None):
     zero_streak = []
     zero_streak_attempts = 0
 
-    def flush_zero_streak():
+    def flush_zero_streak(*, force_zero_only=False):
         nonlocal total_seconds, suspicious_block_count, suspicious_attempt_count, zero_only_block_count
         nonlocal zero_streak, zero_streak_attempts
         if not zero_streak:
             return
-        if zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+        if force_zero_only or zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
             zero_only_block_count += len(zero_streak)
         else:
             for block in zero_streak:
@@ -392,7 +396,8 @@ def _call_activity_block_summary(calls, *, range_end=None):
             zero_streak_attempts += len(block["calls"])
             continue
 
-        flush_zero_streak()
+        streak_reached = zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
+        flush_zero_streak(force_zero_only=streak_reached)
 
         block_seconds = block["block_seconds"]
         if (
@@ -404,8 +409,17 @@ def _call_activity_block_summary(calls, *, range_end=None):
             total_seconds += block["real_call_activity_seconds"]
             continue
 
-        total_seconds += max(block_seconds, block["real_call_activity_seconds"])
-        total_seconds += _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
+        if streak_reached and block["first_real_call_start"]:
+            cooldown_seconds = _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
+            adjusted_start = block["first_real_call_start"]
+            adjusted_segment = (
+                adjusted_start,
+                block["block_end"] + timedelta(seconds=cooldown_seconds),
+            )
+            total_seconds += _segment_seconds(adjusted_segment)
+        else:
+            total_seconds += max(block_seconds, block["real_call_activity_seconds"])
+            total_seconds += _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
 
     flush_zero_streak()
 
@@ -827,11 +841,11 @@ def _call_activity_block_analysis(calls, *, range_end=None):
     zero_streak = []
     zero_streak_attempts = 0
 
-    def flush_zero_streak():
+    def flush_zero_streak(*, force_zero_only=False):
         nonlocal zero_streak, zero_streak_attempts
         if not zero_streak:
             return
-        if zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+        if force_zero_only or zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
             analysis["zero_only_block_count"] += len(zero_streak)
         else:
             for block in zero_streak:
@@ -851,7 +865,8 @@ def _call_activity_block_analysis(calls, *, range_end=None):
             zero_streak_attempts += len(block["calls"])
             continue
 
-        flush_zero_streak()
+        streak_reached = zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
+        flush_zero_streak(force_zero_only=streak_reached)
 
         if (
             len(block["calls"]) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
@@ -864,8 +879,11 @@ def _call_activity_block_analysis(calls, *, range_end=None):
             continue
 
         cooldown_seconds = _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
+        block_start = block["block_start"]
+        if streak_reached and block["first_real_call_start"]:
+            block_start = block["first_real_call_start"]
         block_segment = (
-            block["block_start"],
+            block_start,
             block["block_end"] + timedelta(seconds=cooldown_seconds),
         )
         analysis["active_seconds"] += _segment_seconds(block_segment)
