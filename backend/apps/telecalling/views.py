@@ -1112,6 +1112,7 @@ def staff_profile_report_pdf(request, staff_id):
         return redirect("staff-page")
 
     try:
+        from reportlab.lib import colors
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.utils import ImageReader
         from reportlab.pdfgen import canvas
@@ -1163,43 +1164,77 @@ def staff_profile_report_pdf(request, staff_id):
 
     page_width, page_height = A4
     pdf = canvas.Canvas(response, pagesize=A4)
-    margin = 48
+    margin = 40
+    content_width = page_width - (margin * 2)
     y = page_height - margin
+
+    brand_color = colors.HexColor("#203054")
+    accent_color = colors.HexColor("#4d5c90")
+    muted_color = colors.HexColor("#5d6c85")
+    light_fill = colors.HexColor("#f3f6fd")
+
+    def draw_section_box(title, rows, *, start_y):
+        box_padding = 12
+        line_height = 14
+        box_height = (len(rows) + 1) * line_height + box_padding * 2
+        pdf.setFillColor(light_fill)
+        pdf.setStrokeColor(colors.HexColor("#dbe4f3"))
+        pdf.roundRect(margin, start_y - box_height, content_width, box_height, 12, fill=1, stroke=1)
+        text_y = start_y - box_padding - 12
+        pdf.setFillColor(brand_color)
+        pdf.setFont("Helvetica-Bold", 11)
+        pdf.drawString(margin + box_padding, text_y, title)
+        pdf.setFillColor(colors.black)
+        pdf.setFont("Helvetica", 9.5)
+        text_y -= 16
+        for label, value in rows:
+            pdf.drawString(margin + box_padding, text_y, f"{label}: {value}")
+            text_y -= line_height
+        return start_y - box_height - 16
+
+    pdf.setFillColor(brand_color)
+    pdf.rect(0, page_height - 90, page_width, 90, fill=1, stroke=0)
+    pdf.setFillColor(colors.white)
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(margin, page_height - 40, company_profile.company_name or "Heavenection")
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(margin, page_height - 58, "Staff Performance Report")
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawRightString(page_width - margin, page_height - 48, month_date.strftime("%B %Y"))
 
     if company_profile.logo and company_profile.logo.path:
         try:
             logo_reader = ImageReader(company_profile.logo.path)
-            pdf.drawImage(logo_reader, margin, y - 48, width=48, height=48, mask="auto")
+            pdf.drawImage(logo_reader, page_width - margin - 54, page_height - 78, width=44, height=44, mask="auto")
         except Exception:
             pass
 
-    pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(margin + 60, y - 10, company_profile.company_name or "Heavenection")
-    pdf.setFont("Helvetica", 10)
-    pdf.drawString(margin + 60, y - 26, "Staff Performance Report")
-    pdf.drawRightString(page_width - margin, y - 18, month_date.strftime("%B %Y"))
-    y -= 70
+    y = page_height - 110
+    pdf.setFillColor(muted_color)
+    pdf.setFont("Helvetica", 9)
+    contact_line = " | ".join(
+        part
+        for part in (
+            company_profile.company_email,
+            company_profile.company_phone,
+            company_profile.website,
+        )
+        if part
+    )
+    if contact_line:
+        pdf.drawString(margin, y, contact_line)
+        y -= 18
 
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin, y, "Staff Details")
-    y -= 16
-    pdf.setFont("Helvetica", 10)
-    details = [
+    pdf.setFillColor(colors.black)
+    staff_rows = [
         ("Name", staff.name),
         ("Phone", staff.phone),
         ("Email", staff.email or "--"),
         ("Role", staff.get_role_display()),
         ("Compensation", staff.get_compensation_type_display()),
     ]
-    for label, value in details:
-        pdf.drawString(margin, y, f"{label}: {value}")
-        y -= 14
+    y = draw_section_box("Staff Details", staff_rows, start_y=y)
 
-    y -= 6
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin, y, "Performance Summary")
-    y -= 16
-    pdf.setFont("Helvetica", 10)
     summary_rows = [
         ("Period", f"{range_start.date().strftime('%d %b %Y')} to {range_end.date().strftime('%d %b %Y')}"),
         ("Work Hours", _format_work_duration_label(breakdown["active_seconds"])),
@@ -1216,39 +1251,26 @@ def staff_profile_report_pdf(request, staff_id):
         ("First Login", _format_datetime(first_login.login_time) if first_login else "--"),
         ("Last Logout", _format_datetime(last_logout.logout_time) if last_logout else "--"),
     ]
-    for label, value in summary_rows:
-        pdf.drawString(margin, y, f"{label}: {value}")
-        y -= 14
+    y = draw_section_box("Performance Summary", summary_rows, start_y=y)
 
-    y -= 6
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin, y, "Earnings Breakdown")
-    y -= 16
-    pdf.setFont("Helvetica", 10)
     earnings_rows = [
         ("Base Pay", _format_currency(breakdown["base_pay"])),
         ("Call Earnings", _format_currency(breakdown["call_earnings"])),
         ("Bonus Earnings", _format_currency(breakdown["bonus_earnings"])),
         ("Total Earnings", _format_currency(breakdown["total_pay"])),
     ]
-    for label, value in earnings_rows:
-        pdf.drawString(margin, y, f"{label}: {value}")
-        y -= 14
+    y = draw_section_box("Earnings Breakdown", earnings_rows, start_y=y)
 
-    y -= 6
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawString(margin, y, "Review Score")
-    y -= 16
-    pdf.setFont("Helvetica", 10)
-    pdf.drawString(margin, y, f"Score: {quality.get('score', 0)} / 100")
-    y -= 14
-    pdf.drawString(margin, y, f"Status: {quality.get('label', 'No Recent Activity')}")
-    y -= 14
-    pdf.drawString(margin, y, f"Note: {quality.get('note', '--')}")
-    y -= 18
+    review_rows = [
+        ("Score", f"{quality.get('score', 0)} / 100"),
+        ("Status", quality.get("label", "No Recent Activity")),
+        ("Note", quality.get("note", "--")),
+    ]
+    y = draw_section_box("Review Score", review_rows, start_y=y)
 
-    pdf.setFont("Helvetica", 9)
-    pdf.drawString(margin, 36, f"Generated on {timezone.localdate().strftime('%d %b %Y')}")
+    pdf.setFillColor(muted_color)
+    pdf.setFont("Helvetica", 8.5)
+    pdf.drawString(margin, 32, f"Generated on {timezone.localdate().strftime('%d %b %Y')}")
     pdf.showPage()
     pdf.save()
     return response
