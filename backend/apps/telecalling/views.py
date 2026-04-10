@@ -2,6 +2,7 @@ import logging
 import mimetypes
 from pathlib import Path
 
+from django.conf import settings
 from django.db.models import Count, Q
 from django.core.exceptions import ValidationError
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
@@ -1262,9 +1263,15 @@ def staff_profile_report_pdf(request, staff_id):
     pdf.setFont("Helvetica-Bold", 12)
     pdf.drawRightString(page_width - margin, page_height - 58, month_date.strftime("%B %Y"))
 
-    if company_profile.logo:
-        try:
+    logo_stream = None
+    try:
+        if company_profile.logo and company_profile.logo.storage.exists(company_profile.logo.name):
             logo_stream = company_profile.logo.open("rb")
+        else:
+            default_logo_path = settings.BASE_DIR / "static" / "images" / "heavenection-logo.png"
+            if default_logo_path.exists():
+                logo_stream = default_logo_path.open("rb")
+        if logo_stream:
             logo_reader = ImageReader(logo_stream)
             pdf.drawImage(
                 logo_reader,
@@ -1274,9 +1281,14 @@ def staff_profile_report_pdf(request, staff_id):
                 height=50,
                 mask="auto",
             )
-            logo_stream.close()
-        except Exception:
-            pass
+    except Exception:
+        pass
+    finally:
+        if logo_stream:
+            try:
+                logo_stream.close()
+            except Exception:
+                pass
 
     y = page_height - 140
     pdf.setFillColor(muted_color)
@@ -1363,12 +1375,22 @@ def staff_profile_report_pdf(request, staff_id):
 @require_GET
 def company_logo_view(request):
     company_profile = get_company_profile()
-    if not company_profile.logo:
-        raise Http404("Logo not found.")
-    try:
-        return FileResponse(company_profile.logo.open("rb"))
-    except Exception as exc:
-        raise Http404("Logo not found.") from exc
+    logo_file = None
+    logo_name = None
+    if company_profile.logo and company_profile.logo.storage.exists(company_profile.logo.name):
+        try:
+            logo_file = company_profile.logo.open("rb")
+            logo_name = company_profile.logo.name
+        except Exception:
+            logo_file = None
+    if logo_file is None:
+        default_logo_path = settings.BASE_DIR / "static" / "images" / "heavenection-logo.png"
+        if not default_logo_path.exists():
+            raise Http404("Logo not found.")
+        logo_file = default_logo_path.open("rb")
+        logo_name = str(default_logo_path)
+    content_type, _ = mimetypes.guess_type(logo_name or "")
+    return FileResponse(logo_file, content_type=content_type or "image/png")
 
 
 @require_GET
