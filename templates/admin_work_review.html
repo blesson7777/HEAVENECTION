@@ -134,7 +134,10 @@
                                             <span>{{ block.date_label }}</span>
                                             <span>{{ block.time_range }}</span>
                                         </div>
-                                        <small>{{ block.attempt_count }} attempts - {{ block.zero_second_count }} zero-second - Not counted in work hours</small>
+                                        <small>
+                                            {{ block.attempt_count }} attempts - {{ block.zero_second_count }} zero-second -
+                                            {% if block.is_zero_talk %}Not counted in work hours{% else %}Counted (below 10 attempts){% endif %}
+                                        </small>
                                         {% if block.streak_note %}
                                         <div class="hc-work-review-caption">{{ block.streak_note }}</div>
                                         {% endif %}
