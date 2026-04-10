@@ -1074,6 +1074,12 @@
     gap: 0.8rem;
 }
 
+.hc-staff-profile-right-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
 .hc-staff-profile-primary,
 .hc-staff-profile-editor,
 .hc-staff-profile-referrals,

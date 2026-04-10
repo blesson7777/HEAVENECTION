@@ -407,6 +407,7 @@
     </div>
 
     <div class="col-xl-8">
+        <div class="hc-staff-profile-right-stack">
         <div class="hc-surface-card hc-staff-profile-editor">
             <div class="mf-db2-panel-head mb-3">
                 <div>
@@ -535,223 +536,227 @@
                 </div>
             </form>
         </div>
-    </div>
-</section>
-
-<section class="row g-4 mt-1 align-items-start">
-    <div class="col-xl-6">
-        <div class="hc-surface-card animate-on-scroll">
-            <div class="mf-db2-panel-head mb-3">
-                <div>
-                    <span class="mf-db2-kicker">Assigned Leads</span>
-                    <h5>Current active lead queue</h5>
+        <section class="row g-3 align-items-start">
+            <div class="col-12">
+                <div class="hc-surface-card animate-on-scroll">
+                    <div class="mf-db2-panel-head mb-3">
+                        <div>
+                            <span class="mf-db2-kicker">Assigned Leads</span>
+                            <h5>Current active lead queue</h5>
+                        </div>
+                    </div>
+                    <div class="table-responsive hc-card-scroll-table hc-card-scroll-table-10">
+                        <table class="table hc-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Lead</th>
+                                    <th>Status</th>
+                                    <th>Last Contact</th>
+                                    <th>Updated</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for lead in assigned_lead_rows %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ lead.name }}</strong>
+                                        <div class="text-muted small">{{ lead.phone }}</div>
+                                    </td>
+                                    <td>{{ lead.status_label }}</td>
+                                    <td>{{ lead.last_contacted }}</td>
+                                    <td>{{ lead.updated_at }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="4" class="text-center py-4">No active leads assigned.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
-            <div class="table-responsive hc-card-scroll-table hc-card-scroll-table-10">
-                <table class="table hc-table align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Lead</th>
-                            <th>Status</th>
-                            <th>Last Contact</th>
-                            <th>Updated</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for lead in assigned_lead_rows %}
-                        <tr>
-                            <td>
-                                <strong>{{ lead.name }}</strong>
-                                <div class="text-muted small">{{ lead.phone }}</div>
-                            </td>
-                            <td>{{ lead.status_label }}</td>
-                            <td>{{ lead.last_contacted }}</td>
-                            <td>{{ lead.updated_at }}</td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="4" class="text-center py-4">No active leads assigned.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
 
-    <div class="col-xl-6">
-        <div class="hc-surface-card animate-on-scroll">
-            <div class="mf-db2-panel-head mb-3">
-                <div>
-                    <span class="mf-db2-kicker">Call Activity</span>
-                    <h5>View all call activity</h5>
+            <div class="col-12">
+                <div class="hc-surface-card animate-on-scroll">
+                    <div class="mf-db2-panel-head mb-3">
+                        <div>
+                            <span class="mf-db2-kicker">Call Activity</span>
+                            <h5>View all call activity</h5>
+                        </div>
+                    </div>
+                    <div class="hc-staff-call-log-toolbar">
+                        <div class="hc-staff-call-log-note">
+                            Review call details day by day, or search by customer, phone number, time, duration, or result.
+                        </div>
+                        <div class="hc-staff-call-log-controls">
+                            <input
+                                type="date"
+                                id="staffCallActivityDateFilter"
+                                class="form-control form-control-sm hc-staff-call-log-date-filter"
+                            />
+                            <input
+                                type="search"
+                                id="staffCallActivitySearch"
+                                class="form-control form-control-sm hc-staff-call-log-search"
+                                placeholder="Search call activity"
+                                autocomplete="off"
+                            />
+                        </div>
+                    </div>
+                    <div class="table-responsive hc-staff-call-log-scroller hc-card-scroll-table-10">
+                        <table class="table hc-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Lead</th>
+                                    <th>Started</th>
+                                    <th>Duration</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="staffCallActivityBody">
+                                {% for group in recent_call_groups %}
+                                <tr class="hc-staff-call-log-group" data-group-header="{{ group.date_key }}">
+                                    <td colspan="4">
+                                        <div class="hc-staff-call-log-group-row">
+                                            <div>
+                                                <strong>{{ group.date_label }}</strong>
+                                                {% if group.day_label %}<span>{{ group.day_label }}</span>{% endif %}
+                                            </div>
+                                            <small>{{ group.call_count }} call{{ group.call_count|pluralize }}</small>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% for call in group.rows %}
+                                <tr data-search-text="{{ call.search_text }}" data-date-group="{{ group.date_key }}">
+                                    <td>
+                                        <strong>{{ call.lead_name }}</strong>
+                                        <div class="text-muted small">{{ call.lead_phone }}</div>
+                                    </td>
+                                    <td>
+                                        <strong>{{ call.start_clock_label }}</strong>
+                                        <div class="text-muted small">{{ call.start_time }}</div>
+                                    </td>
+                                    <td>{{ call.duration_label }}</td>
+                                    <td>
+                                        <div>{{ call.status_label }}</div>
+                                        {% if call.callback_schedule_label %}
+                                        <div class="text-muted small">{{ call.callback_schedule_label }}</div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% empty %}
+                                <tr><td colspan="4" class="text-center py-4">No recent calls recorded.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="staffCallActivityEmpty" class="hc-empty-state d-none mt-3">
+                        <p class="mb-0">No call activity matches this search.</p>
+                    </div>
                 </div>
             </div>
-            <div class="hc-staff-call-log-toolbar">
-                <div class="hc-staff-call-log-note">
-                    Review call details day by day, or search by customer, phone number, time, duration, or result.
-                </div>
-                <div class="hc-staff-call-log-controls">
-                    <input
-                        type="date"
-                        id="staffCallActivityDateFilter"
-                        class="form-control form-control-sm hc-staff-call-log-date-filter"
-                    />
-                    <input
-                        type="search"
-                        id="staffCallActivitySearch"
-                        class="form-control form-control-sm hc-staff-call-log-search"
-                        placeholder="Search call activity"
-                        autocomplete="off"
-                    />
-                </div>
-            </div>
-            <div class="table-responsive hc-staff-call-log-scroller hc-card-scroll-table-10">
-                <table class="table hc-table align-middle mb-0">
-                    <thead>
-                        <tr>
-                            <th>Lead</th>
-                            <th>Started</th>
-                            <th>Duration</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="staffCallActivityBody">
-                        {% for group in recent_call_groups %}
-                        <tr class="hc-staff-call-log-group" data-group-header="{{ group.date_key }}">
-                            <td colspan="4">
-                                <div class="hc-staff-call-log-group-row">
-                                    <div>
-                                        <strong>{{ group.date_label }}</strong>
-                                        {% if group.day_label %}<span>{{ group.day_label }}</span>{% endif %}
-                                    </div>
-                                    <small>{{ group.call_count }} call{{ group.call_count|pluralize }}</small>
-                                </div>
-                            </td>
-                        </tr>
-                        {% for call in group.rows %}
-                        <tr data-search-text="{{ call.search_text }}" data-date-group="{{ group.date_key }}">
-                            <td>
-                                <strong>{{ call.lead_name }}</strong>
-                                <div class="text-muted small">{{ call.lead_phone }}</div>
-                            </td>
-                            <td>
-                                <strong>{{ call.start_clock_label }}</strong>
-                                <div class="text-muted small">{{ call.start_time }}</div>
-                            </td>
-                            <td>{{ call.duration_label }}</td>
-                            <td>
-                                <div>{{ call.status_label }}</div>
-                                {% if call.callback_schedule_label %}
-                                <div class="text-muted small">{{ call.callback_schedule_label }}</div>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                        {% empty %}
-                        <tr><td colspan="4" class="text-center py-4">No recent calls recorded.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            <div id="staffCallActivityEmpty" class="hc-empty-state d-none mt-3">
-                <p class="mb-0">No call activity matches this search.</p>
-            </div>
-        </div>
-    </div>
-</section>
 
-<section class="hc-surface-card hc-staff-profile-referrals mt-4 animate-on-scroll">
-    <div class="mf-db2-panel-head mb-3">
-        <div>
-            <span class="mf-db2-kicker">Referral Entries</span>
-            <h5>Friends referred by this staff member</h5>
-        </div>
-        <span class="hc-sync-pill">
-            <i class="bi bi-people"></i>
-            {{ referral_summary.submitted_count }} submitted
-        </span>
-    </div>
-    <div class="d-flex flex-wrap gap-2 mb-3 hc-staff-profile-referral-pills">
-        <span class="hc-sync-pill"><i class="bi bi-person-dash"></i>{{ referral_summary.not_joined_count }} not joined</span>
-        <span class="hc-sync-pill"><i class="bi bi-person-check"></i>{{ referral_summary.joined_count }} joined</span>
-        <span class="hc-sync-pill"><i class="bi bi-briefcase"></i>{{ referral_summary.started_working_count }} started working</span>
-        <span class="hc-sync-pill"><i class="bi bi-award"></i>{{ referral_summary.completed_count }} completed</span>
-    </div>
-    {% if not referral_summary.enabled %}
-    <div class="hc-empty-state">
-        <p class="mb-0">Referral rewards are currently disabled, but any saved entries will still appear here.</p>
-    </div>
-    {% endif %}
-    <div class="table-responsive hc-staff-profile-table-scroller">
-        <table class="table hc-table align-middle mb-0">
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Phone</th>
-                    <th>Stage</th>
-                    <th>Progress</th>
-                    <th>Reward</th>
-                    <th>Joined Staff</th>
-                    <th>Submitted</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for referral in referral_submission_rows %}
-                <tr>
-                    <td><strong>{{ referral.referred_name }}</strong></td>
-                    <td>{{ referral.referred_phone }}</td>
-                    <td>{{ referral.workflow_stage_label }}</td>
-                    <td>{{ referral.progress_label }}</td>
-                    <td>
-                        {% if referral.reward_amount_label != '--' %}
-                        <strong>{{ referral.reward_amount_label }}</strong>
-                        <div class="small text-muted">{{ referral.reward_status_label }}</div>
-                        {% else %}
-                        <span class="text-muted">{{ referral.reward_status_label }}</span>
-                        {% endif %}
-                    </td>
-                    <td>{{ referral.joined_staff_name|default:"--" }}</td>
-                    <td>{{ referral.created_at }}</td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="7" class="text-center py-4">No referral entries submitted yet.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</section>
+            <div class="col-12">
+                <div class="hc-surface-card hc-staff-profile-referrals animate-on-scroll">
+                    <div class="mf-db2-panel-head mb-3">
+                        <div>
+                            <span class="mf-db2-kicker">Referral Entries</span>
+                            <h5>Friends referred by this staff member</h5>
+                        </div>
+                        <span class="hc-sync-pill">
+                            <i class="bi bi-people"></i>
+                            {{ referral_summary.submitted_count }} submitted
+                        </span>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 mb-3 hc-staff-profile-referral-pills">
+                        <span class="hc-sync-pill"><i class="bi bi-person-dash"></i>{{ referral_summary.not_joined_count }} not joined</span>
+                        <span class="hc-sync-pill"><i class="bi bi-person-check"></i>{{ referral_summary.joined_count }} joined</span>
+                        <span class="hc-sync-pill"><i class="bi bi-briefcase"></i>{{ referral_summary.started_working_count }} started working</span>
+                        <span class="hc-sync-pill"><i class="bi bi-award"></i>{{ referral_summary.completed_count }} completed</span>
+                    </div>
+                    {% if not referral_summary.enabled %}
+                    <div class="hc-empty-state">
+                        <p class="mb-0">Referral rewards are currently disabled, but any saved entries will still appear here.</p>
+                    </div>
+                    {% endif %}
+                    <div class="table-responsive hc-staff-profile-table-scroller">
+                        <table class="table hc-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Phone</th>
+                                    <th>Stage</th>
+                                    <th>Progress</th>
+                                    <th>Reward</th>
+                                    <th>Joined Staff</th>
+                                    <th>Submitted</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for referral in referral_submission_rows %}
+                                <tr>
+                                    <td><strong>{{ referral.referred_name }}</strong></td>
+                                    <td>{{ referral.referred_phone }}</td>
+                                    <td>{{ referral.workflow_stage_label }}</td>
+                                    <td>{{ referral.progress_label }}</td>
+                                    <td>
+                                        {% if referral.reward_amount_label != '--' %}
+                                        <strong>{{ referral.reward_amount_label }}</strong>
+                                        <div class="small text-muted">{{ referral.reward_status_label }}</div>
+                                        {% else %}
+                                        <span class="text-muted">{{ referral.reward_status_label }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ referral.joined_staff_name|default:"--" }}</td>
+                                    <td>{{ referral.created_at }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="7" class="text-center py-4">No referral entries submitted yet.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 
-<section class="hc-surface-card hc-staff-profile-sessions mt-4 animate-on-scroll">
-    <div class="mf-db2-panel-head mb-3">
-        <div>
-            <span class="mf-db2-kicker">Recent Sessions</span>
-            <h5>Work login history</h5>
+            <div class="col-12">
+                <div class="hc-surface-card hc-staff-profile-sessions animate-on-scroll">
+                    <div class="mf-db2-panel-head mb-3">
+                        <div>
+                            <span class="mf-db2-kicker">Recent Sessions</span>
+                            <h5>Work login history</h5>
+                        </div>
+                    </div>
+                    <div class="table-responsive hc-staff-profile-table-scroller">
+                        <table class="table hc-table align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Login</th>
+                                    <th>Logout</th>
+                                    <th>Active Time</th>
+                                    <th>Status</th>
+                                    <th>Close Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for session in recent_session_rows %}
+                                <tr>
+                                    <td>{{ session.login_time }}</td>
+                                    <td>{{ session.logout_time }}</td>
+                                    <td>{{ session.active_label }}</td>
+                                    <td>{{ session.state_label }}</td>
+                                    <td>{{ session.close_reason }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="5" class="text-center py-4">No session history available.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
         </div>
-    </div>
-    <div class="table-responsive hc-staff-profile-table-scroller">
-        <table class="table hc-table align-middle mb-0">
-            <thead>
-                <tr>
-                    <th>Login</th>
-                    <th>Logout</th>
-                    <th>Active Time</th>
-                    <th>Status</th>
-                    <th>Close Reason</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for session in recent_session_rows %}
-                <tr>
-                    <td>{{ session.login_time }}</td>
-                    <td>{{ session.logout_time }}</td>
-                    <td>{{ session.active_label }}</td>
-                    <td>{{ session.state_label }}</td>
-                    <td>{{ session.close_reason }}</td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="5" class="text-center py-4">No session history available.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
     </div>
 </section>
 {% endblock %}
