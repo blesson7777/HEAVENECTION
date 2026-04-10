@@ -1159,11 +1159,14 @@ def staff_profile_report_pdf(request, staff_id):
     company_profile = get_company_profile()
     response = HttpResponse(content_type="application/pdf")
     file_month = month_date.strftime("%b-%Y")
+    generated_stamp = timezone.localtime(timezone.now()).strftime("%Y%m%d-%H%M")
     safe_name = "".join(char for char in staff.name if char.isalnum() or char in (" ", "-", "_")).strip()
     safe_name = safe_name.replace(" ", "-") or "staff"
     response["Content-Disposition"] = (
-        f'attachment; filename="staff-report-{safe_name}-{file_month}.pdf"'
+        f'attachment; filename="staff-report-{safe_name}-{file_month}-{generated_stamp}.pdf"'
     )
+    response["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response["Pragma"] = "no-cache"
 
     page_width, page_height = A4
     pdf = canvas.Canvas(response, pagesize=A4)
