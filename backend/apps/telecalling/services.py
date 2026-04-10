@@ -4662,6 +4662,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
             staff_uuid = uuid.UUID(str(row["id"]))
         except (TypeError, ValueError, AttributeError):
             staff_uuid = None
+        zero_streak_blocks = (zero_talk_blocks.get(staff_uuid) or {}).get("blocks", [])
         quality_label = str(row.get("quality_label") or "")
         verified_attempt_count = int(row.get("verified_attempt_count") or 0)
         real_call_count = int(row.get("real_call_count") or 0)
@@ -4684,6 +4685,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
             quality_label == "Review Needed"
             or suspicious_block_count > 0
             or zero_only_block_count > 0
+            or zero_streak_blocks
             or (verified_attempt_count >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK and real_call_count == 0)
         ):
             review_state = "review"
@@ -4734,7 +4736,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
             "review_day_rows": review_day_rows,
             "review_day_count": int(preview_payload.get("count") or 0),
             "extra_review_day_count": extra_review_day_count,
-            "zero_only_block_details": (zero_talk_blocks.get(staff_uuid) or {}).get("blocks", []),
+            "zero_only_block_details": zero_streak_blocks,
             "zero_only_block_extra": (zero_talk_blocks.get(staff_uuid) or {}).get("extra_count", 0),
             "search_text": " ".join(
                 part.lower()
