@@ -35,6 +35,10 @@
                         <tr>
                             <th>Staff</th>
                             <th>Hours Today</th>
+                            <th>Call Time</th>
+                            <th>Counted Buffer</th>
+                            <th>Uncounted Gaps</th>
+                            <th>Gap Events</th>
                             <th>Sessions Today</th>
                             <th>First Login</th>
                             <th>Last Logout</th>
@@ -49,13 +53,52 @@
                                 <div class="text-muted small">{{ row.phone }}</div>
                             </td>
                             <td>{{ row.active_hours_today }}</td>
+                            <td>{{ row.call_time_label }}</td>
+                            <td>{{ row.gap_buffer_label }}</td>
+                            <td>{{ row.gap_uncounted_label }}</td>
+                            <td>
+                                {% if row.gap_count %}
+                                <div class="d-flex flex-column align-items-start gap-1">
+                                    <span class="hc-status hc-status-warning">{{ row.gap_count }} gap{% if row.gap_count != 1 %}s{% endif %}</span>
+                                    <button
+                                        type="button"
+                                        class="btn btn-outline-danger btn-sm js-gap-details"
+                                        data-staff-name="{{ row.name }}"
+                                        data-target="#workGapDetails-{{ row.id }}"
+                                    >
+                                        View gaps
+                                    </button>
+                                </div>
+                                <div id="workGapDetails-{{ row.id }}" class="d-none">
+                                    <div class="hc-work-review-day-list">
+                                        {% for gap in row.gap_rows %}
+                                        <div class="hc-work-review-day hc-work-review-day-warning">
+                                            <div class="hc-work-review-day-head">
+                                                <strong>{{ gap.start_time }}</strong>
+                                                <span>{{ gap.end_time }}</span>
+                                            </div>
+                                            <small>Gap {{ gap.gap_label }} · Uncounted {{ gap.uncounted_label }}</small>
+                                            <div class="hc-work-review-day-meta">
+                                                <span>Counted buffer {{ gap.buffer_label }}</span>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    {% if row.gap_extra_count %}
+                                    <div class="hc-work-review-caption">+{{ row.gap_extra_count }} more gap{% if row.gap_extra_count != 1 %}s{% endif %} not shown.</div>
+                                    {% endif %}
+                                </div>
+                                {% else %}
+                                <span class="text-muted small">No long gaps</span>
+                                {% endif %}
+                            </td>
                             <td>{{ row.session_count_today }}</td>
                             <td>{{ row.first_login }}</td>
                             <td>{{ row.last_logout }}</td>
                             <td><span class="hc-status {% if row.online_label == 'Online' %}hc-status-success{% elif row.online_label == 'Away' or row.online_label == 'Warning' %}hc-status-warning{% else %}hc-status-muted{% endif %}">{{ row.state_label }}</span></td>
                         </tr>
                         {% empty %}
-                        <tr><td colspan="6" class="text-center py-4">No work-hour summary available.</td></tr>
+                        <tr><td colspan="10" class="text-center py-4">No work-hour summary available.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -102,4 +145,52 @@
         </div>
     </div>
 </section>
+
+<div class="modal fade" id="workGapDetailsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content hc-modal-card">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <span class="mf-db2-kicker">Worktime Explanation</span>
+                    <h5 class="modal-title mt-1" id="workGapDetailsModalTitle">Uncounted Gaps</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <div class="hc-work-review-modal-body" id="workGapDetailsModalBody">
+                    <div class="hc-work-review-empty-note">No gap details available.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    (function () {
+        const modalElement = document.getElementById('workGapDetailsModal');
+        if (!modalElement) {
+            return;
+        }
+        const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+        const modalTitle = document.getElementById('workGapDetailsModalTitle');
+        const modalBody = document.getElementById('workGapDetailsModalBody');
+
+        document.querySelectorAll('.js-gap-details').forEach((button) => {
+            button.addEventListener('click', () => {
+                const targetSelector = button.getAttribute('data-target');
+                const staffName = button.getAttribute('data-staff-name') || 'Staff';
+                const contentNode = targetSelector ? document.querySelector(targetSelector) : null;
+                if (modalTitle) {
+                    modalTitle.textContent = `Uncounted Gaps - ${staffName}`;
+                }
+                if (modalBody) {
+                    modalBody.innerHTML = contentNode ? contentNode.innerHTML : '<div class="hc-work-review-empty-note">No gap details available.</div>';
+                }
+                modal.show();
+            });
+        });
+    })();
+</script>
 {% endblock %}

@@ -6124,6 +6124,11 @@ def build_work_hours_payload(*, date_value=""):
         end_at=end,
         staff_ids=[staff.id for staff in staff_list],
     )
+    gap_summary_map = _work_gap_summary_map(
+        start_at=start,
+        end_at=end,
+        staff_ids=[staff.id for staff in staff_list],
+    )
     session_counts = {
         row["staff_id"]: row["count"]
         for row in sessions_today.values("staff_id").annotate(count=Count("id"))
@@ -6144,6 +6149,7 @@ def build_work_hours_payload(*, date_value=""):
     summary_rows = []
     for staff in staff_list:
         session = open_sessions.get(staff.id)
+        gap_summary = gap_summary_map.get(staff.id, {})
         summary_rows.append(
             {
                 "id": str(staff.id),
@@ -6160,6 +6166,15 @@ def build_work_hours_payload(*, date_value=""):
                     active_cutoff,
                     is_in_customer_call=staff.id in live_call_staff_ids,
                 ),
+                "gap_count": gap_summary.get("gap_count", 0),
+                "gap_total_label": gap_summary.get("gap_total_label", "0s"),
+                "gap_uncounted_label": gap_summary.get("gap_uncounted_label", "0s"),
+                "gap_buffer_label": gap_summary.get("gap_buffer_label", "0s"),
+                "gap_rows": gap_summary.get("gap_rows", []),
+                "gap_extra_count": gap_summary.get("gap_extra_count", 0),
+                "call_time_label": gap_summary.get("call_time_label", "0s"),
+                "first_call": gap_summary.get("first_call", "--"),
+                "last_call": gap_summary.get("last_call", "--"),
             }
         )
 
@@ -6185,6 +6200,95 @@ def build_work_hours_payload(*, date_value=""):
         "summary_rows": summary_rows,
         "session_rows": session_rows,
     }
+
+
+def _work_gap_summary_map(*, start_at=None, end_at=None, staff_ids=None):
+    call_queryset = _payable_work_hour_call_queryset()
+
+    if start_at is not None and end_at is not None:
+        call_queryset = call_queryset.filter(start_time__range=(start_at, end_at))
+
+    if staff_ids is not None:
+        staff_ids = list(staff_ids)
+        call_queryset = call_queryset.filter(staff_id__in=staff_ids)
+
+    calls_by_staff = defaultdict(list)
+    for call in call_queryset.only(
+        "staff_id",
+        "start_time",
+        "end_time",
+        "duration_seconds",
+    ).order_by("staff_id", "start_time", "end_time", "id"):
+        calls_by_staff[call.staff_id].append(call)
+
+    summary_map = {}
+    for staff_id in staff_ids or []:
+        summary_map[staff_id] = {
+            "gap_count": 0,
+            "gap_total_label": "0s",
+            "gap_uncounted_label": "0s",
+            "gap_buffer_label": "0s",
+            "gap_rows": [],
+            "gap_extra_count": 0,
+            "call_time_label": "0s",
+            "first_call": "--",
+            "last_call": "--",
+        }
+
+    for staff_id, calls in calls_by_staff.items():
+        gap_rows = []
+        gap_total_seconds = 0
+        gap_uncounted_seconds = 0
+        gap_buffer_seconds = 0
+        total_call_seconds = 0
+        first_call = None
+        last_call = None
+        previous_end = None
+
+        for call in calls:
+            start_time, end_time, duration_seconds = _call_activity_window(call)
+            if not start_time:
+                continue
+            if duration_seconds is None:
+                duration_seconds = 0
+            total_call_seconds += max(0, int(duration_seconds))
+            first_call = min(first_call, start_time) if first_call else start_time
+            last_call = max(last_call, end_time) if last_call else end_time
+
+            if previous_end:
+                gap_seconds = max(0, int((start_time - previous_end).total_seconds()))
+                if gap_seconds > CALL_ACTIVITY_IDLE_BREAK_SECONDS:
+                    buffer_seconds = min(gap_seconds, CONNECTED_CALL_COOLDOWN_SECONDS)
+                    uncounted_seconds = max(0, gap_seconds - CONNECTED_CALL_COOLDOWN_SECONDS)
+                    gap_total_seconds += gap_seconds
+                    gap_buffer_seconds += buffer_seconds
+                    gap_uncounted_seconds += uncounted_seconds
+                    gap_rows.append(
+                        {
+                            "start_time": _format_datetime(previous_end),
+                            "end_time": _format_datetime(start_time),
+                            "gap_label": _format_duration(gap_seconds),
+                            "uncounted_label": _format_duration(uncounted_seconds),
+                            "buffer_label": _format_duration(buffer_seconds),
+                        }
+                    )
+
+            previous_end = end_time
+
+        visible_rows = gap_rows[:10]
+        summary_map[staff_id] = {
+            "gap_count": len(gap_rows),
+            "gap_total_label": _format_duration(gap_total_seconds),
+            "gap_uncounted_label": _format_duration(gap_uncounted_seconds),
+            "gap_buffer_label": _format_duration(gap_buffer_seconds),
+            "gap_rows": visible_rows,
+            "gap_extra_count": max(len(gap_rows) - len(visible_rows), 0),
+            "call_time_label": _format_duration(total_call_seconds),
+            "first_call": _format_datetime(first_call),
+            "last_call": _format_datetime(last_call),
+        }
+
+    return summary_map
 
 
 def start_staff_session(staff, *, source="manual_start"):

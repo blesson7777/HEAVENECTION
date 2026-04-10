@@ -327,6 +327,15 @@ def _fallback_work_hours_payload():
             "last_logout": "--",
             "state_label": "Unavailable",
             "online_label": "Offline",
+            "gap_count": 0,
+            "gap_total_label": "0s",
+            "gap_uncounted_label": "0s",
+            "gap_buffer_label": "0s",
+            "gap_rows": [],
+            "gap_extra_count": 0,
+            "call_time_label": "0s",
+            "first_call": "--",
+            "last_call": "--",
         }
         for row in _fallback_basic_staff_rows()
     ]
