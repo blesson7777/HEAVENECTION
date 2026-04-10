@@ -131,6 +131,13 @@
         return payload;
     }
 
+    async function confirmAction(message, options) {
+        if (typeof window.heavenectionConfirm === "function") {
+            return window.heavenectionConfirm({ message, ...(options || {}) });
+        }
+        return window.confirm(message);
+    }
+
     function extractErrorMessage(payload) {
         if (!payload || typeof payload !== "object") {
             return "Unable to complete the request right now.";
@@ -415,7 +422,11 @@
             button.addEventListener("click", async () => {
                 const staffId = button.dataset.staffId;
                 const staffName = button.dataset.name || "this staff member";
-                if (!staffId || !window.confirm(`Delete ${staffName}?`)) {
+                const confirmed = await confirmAction(`Delete ${staffName}?`, {
+                    title: "Delete staff",
+                    confirmText: "Delete",
+                });
+                if (!staffId || !confirmed) {
                     return;
                 }
                 try {
@@ -613,7 +624,7 @@
         });
 
         deleteSelectedButtons.forEach((button) => {
-            button.addEventListener("click", () => {
+            button.addEventListener("click", async () => {
                 const selectedIds = selectionCheckboxes
                     .filter((checkbox) => checkbox.checked)
                     .map((checkbox) => checkbox.value);
@@ -624,7 +635,11 @@
                 if (!bulkDeleteForm || !bulkDeleteInputs) {
                     return;
                 }
-                if (!window.confirm(`Delete ${selectedIds.length} selected lead(s)?`)) {
+                const confirmed = await confirmAction(`Delete ${selectedIds.length} selected lead(s)?`, {
+                    title: "Delete leads",
+                    confirmText: "Delete",
+                });
+                if (!confirmed) {
                     return;
                 }
                 bulkDeleteInputs.innerHTML = "";
@@ -703,7 +718,11 @@
             button.addEventListener("click", async () => {
                 const leadId = button.dataset.leadId;
                 const leadName = button.dataset.name || "this lead";
-                if (!leadId || !window.confirm(`Delete ${leadName}?`)) {
+                const confirmed = await confirmAction(`Delete ${leadName}?`, {
+                    title: "Delete lead",
+                    confirmText: "Delete",
+                });
+                if (!leadId || !confirmed) {
                     return;
                 }
                 try {
@@ -973,7 +992,11 @@
             button.addEventListener("click", async () => {
                 const lessonId = button.dataset.lessonId;
                 const lessonTitle = button.dataset.title || "this lesson";
-                if (!lessonId || !window.confirm(`Delete ${lessonTitle}?`)) {
+                const confirmed = await confirmAction(`Delete ${lessonTitle}?`, {
+                    title: "Delete lesson",
+                    confirmText: "Delete",
+                });
+                if (!lessonId || !confirmed) {
                     return;
                 }
                 try {

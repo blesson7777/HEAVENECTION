@@ -393,7 +393,7 @@
                     <td>{{ row.payment_method_label }}</td>
                     <td>{{ row.paid_at }}</td>
                     <td class="text-end">
-                        <form method="post" class="m-0 d-inline-block" onsubmit="return confirm('Delete this payment transaction?');">
+                        <form method="post" class="m-0 d-inline-block" data-confirm-title="Delete payment" data-confirm-message="Delete this payment transaction?" data-confirm-ok="Delete" data-confirm-class="btn-danger">
                             {% csrf_token %}
                             <input type="hidden" name="payment_action" value="delete_payment_transaction">
                             <input type="hidden" name="transaction_id" value="{{ row.id }}">

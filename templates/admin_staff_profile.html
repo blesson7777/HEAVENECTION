@@ -8,19 +8,31 @@
 {{ block.super }}
 <script>
   (function () {
+    const confirmAction = async (message, title) => {
+      if (window.heavenectionConfirm) {
+        return window.heavenectionConfirm({
+          title: title || 'Please confirm',
+          message,
+          confirmText: 'Confirm',
+          confirmClass: 'btn-danger',
+        });
+      }
+      return window.confirm(message);
+    };
+
     const removeCheckboxes = document.querySelectorAll(
       '#staffProfileRemoveAadharPhoto, #staffProfileRemovePassbookPhoto'
     );
 
     removeCheckboxes.forEach((checkbox) => {
-      checkbox.addEventListener('change', () => {
+      checkbox.addEventListener('change', async () => {
         if (!checkbox.checked) {
           return;
         }
         const label = checkbox.id === 'staffProfileRemoveAadharPhoto'
           ? 'Aadhaar photo'
           : 'passbook photo';
-        const confirmed = window.confirm(`Remove the current ${label}?`);
+        const confirmed = await confirmAction(`Remove the current ${label}?`, 'Remove photo');
         if (!confirmed) {
           checkbox.checked = false;
         }
@@ -315,12 +327,12 @@
                     </span>
                 </div>
                 <div class="d-flex flex-wrap gap-2 mb-3">
-                    <form method="post" action="{% url 'staff-profile-page' staff_member.id %}" onsubmit="return window.confirm('Return these review leads to this staff queue? Current queue leads will be released first.');">
+                    <form method="post" action="{% url 'staff-profile-page' staff_member.id %}" data-confirm-title="Reallocate review leads" data-confirm-message="Return these review leads to this staff queue? Current queue leads will be released first." data-confirm-ok="Reallocate" data-confirm-class="btn-primary">
                         {% csrf_token %}
                         <input type="hidden" name="staff_action" value="reassign_review_leads">
                         <button type="submit" class="btn btn-outline-primary btn-sm" {% if not review_lead_summary.count %}disabled{% endif %}>Reallocate To Same Staff</button>
                     </form>
-                    <form method="post" action="{% url 'staff-profile-page' staff_member.id %}" onsubmit="return window.confirm('Reopen these review leads as new leads in the main queue?');">
+                    <form method="post" action="{% url 'staff-profile-page' staff_member.id %}" data-confirm-title="Reset review leads" data-confirm-message="Reopen these review leads as new leads in the main queue?" data-confirm-ok="Create" data-confirm-class="btn-secondary">
                         {% csrf_token %}
                         <input type="hidden" name="staff_action" value="reset_review_leads">
                         <button type="submit" class="btn btn-outline-secondary btn-sm" {% if not review_lead_summary.count %}disabled{% endif %}>Create As New Lead</button>

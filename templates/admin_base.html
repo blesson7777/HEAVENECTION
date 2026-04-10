@@ -263,7 +263,7 @@
                             <i class="bi bi-code-square"></i>
                             <span>Release Center</span>
                         </a>
-                        <form method="post" action="{% url 'web-logout' %}" class="m-0" onsubmit="return window.confirm('Do you want to logout now?');">
+                        <form method="post" action="{% url 'web-logout' %}" class="m-0" data-confirm-title="Logout" data-confirm-message="Do you want to logout now?" data-confirm-ok="Logout" data-confirm-class="btn-outline-danger">
                             {% csrf_token %}
                             <button type="submit" class="dropdown-item hc-profile-menu-item hc-profile-menu-item-danger">
                                 <i class="bi bi-box-arrow-right"></i>
@@ -358,6 +358,27 @@
     </div>
 </div>
 
+<div class="modal fade" id="heavenectionConfirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content hc-modal-card">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <span class="mf-db2-kicker">Confirmation</span>
+                    <h5 class="modal-title mt-1" data-confirm-title>Please confirm</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <p class="mb-0" data-confirm-body>Are you sure you want to continue?</p>
+            </div>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" data-confirm-ok>Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 window.heavenectionPwa = { serviceWorkerUrl: "{% url 'pwa-service-worker' %}" };
 window.heavenectionNetwork = { offlinePath: "{% url 'offline-page' %}" };
@@ -377,7 +398,8 @@ window.heavenectionAdmin = {
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="{% static 'js/heavenection-network.js' %}?v=20260402c"></script>
 <script src="{% static 'js/dashboard-ux.js' %}?v=20260402c"></script>
-  <script src="{% static 'js/heavenection-calltrack.js' %}?v=20260410c"></script>
+<script src="{% static 'js/heavenection-confirm.js' %}?v=20260410d"></script>
+  <script src="{% static 'js/heavenection-calltrack.js' %}?v=20260410d"></script>
 <script src="{% static 'js/heavenection-pwa.js' %}?v=20260402c"></script>
 {% block extra_scripts %}{% endblock %}
 </body>

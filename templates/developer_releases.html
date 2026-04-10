@@ -234,7 +234,7 @@
                                 <input type="hidden" name="release_id" value="{{ row.id }}">
                                 <button type="submit" class="btn btn-outline-primary btn-sm">Make Active</button>
                             </form>
-                            <form method="post" action="{% url 'developer-releases-page' %}" class="m-0 d-inline-block" onsubmit="return confirm('Delete this stored update file?');">
+                            <form method="post" action="{% url 'developer-releases-page' %}" class="m-0 d-inline-block" data-confirm-title="Delete update" data-confirm-message="Delete this stored update file?" data-confirm-ok="Delete" data-confirm-class="btn-danger">
                                 {% csrf_token %}
                                 <input type="hidden" name="release_action" value="delete_release">
                                 <input type="hidden" name="release_id" value="{{ row.id }}">
