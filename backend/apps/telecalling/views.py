@@ -1196,7 +1196,7 @@ def staff_profile_report_pdf(request, staff_id):
         pdf.setLineWidth(1)
         pdf.rect(margin - 12, margin - 16, content_width + 24, page_height - (margin * 2) + 32, stroke=1, fill=0)
 
-    def draw_kv_block(title, rows, *, columns=2, box_height=0):
+    def draw_kv_block(title, rows, *, columns=2, box_height=0, row_font=9.5):
         nonlocal y
         line_height = 14
         box_padding = 12
@@ -1213,7 +1213,7 @@ def staff_profile_report_pdf(request, staff_id):
         pdf.drawString(margin + box_padding, y - box_padding - 8, title)
 
         pdf.setFillColor(colors.black)
-        pdf.setFont("Helvetica", 9.5)
+        pdf.setFont("Helvetica", row_font)
         column_width = (content_width - box_padding * 2) / columns
         text_y_start = y - box_padding - 24
         for col in range(columns):
@@ -1231,7 +1231,7 @@ def staff_profile_report_pdf(request, staff_id):
         card_gap = 10
         card_count = len(stats)
         card_width = (content_width - (card_gap * (card_count - 1))) / card_count
-        card_height = 70
+        card_height = 62
         ensure_space(card_height + 12)
         for index, (label, value, helper) in enumerate(stats):
             x = margin + index * (card_width + card_gap)
@@ -1242,12 +1242,12 @@ def staff_profile_report_pdf(request, staff_id):
             pdf.setFont("Helvetica-Bold", 8.5)
             pdf.drawString(x + 10, start_y - 18, label.upper())
             pdf.setFillColor(brand_color)
-            pdf.setFont("Helvetica-Bold", 14)
-            pdf.drawString(x + 10, start_y - 38, value)
+            pdf.setFont("Helvetica-Bold", 13)
+            pdf.drawString(x + 10, start_y - 36, value)
             if helper:
                 pdf.setFillColor(muted_color)
                 pdf.setFont("Helvetica", 8)
-                pdf.drawString(x + 10, start_y - 54, helper)
+                pdf.drawString(x + 10, start_y - 50, helper)
         y = start_y - card_height - 18
 
     draw_page_border()
@@ -1282,7 +1282,7 @@ def staff_profile_report_pdf(request, staff_id):
             pdf.drawImage(
                 logo_reader,
                 margin,
-                page_height - 112,
+                page_height - 122,
                 width=46,
                 height=46,
                 mask="auto",
@@ -1339,9 +1339,9 @@ def staff_profile_report_pdf(request, staff_id):
     draw_stat_row(stat_rows, start_y=y)
 
     pdf.setFillColor(colors.black)
-    pdf.setFont("Helvetica-Bold", 22)
+    pdf.setFont("Helvetica-Bold", 21)
     pdf.drawString(margin, y - 8, staff.name)
-    pdf.setFont("Helvetica", 10.5)
+    pdf.setFont("Helvetica", 10)
     pdf.setFillColor(muted_color)
     pdf.drawString(margin, y - 28, f"{staff.phone} | {staff.get_compensation_type_display()} staff")
     pdf.drawRightString(
@@ -1362,7 +1362,7 @@ def staff_profile_report_pdf(request, staff_id):
         ("Work Hours", _format_work_duration_label(breakdown["active_seconds"])),
         ("Total Earnings", _format_currency(breakdown["total_pay"])),
     ]
-    draw_kv_block("Executive Summary", cover_summary_rows, columns=2, box_height=120)
+    draw_kv_block("Executive Summary", cover_summary_rows, columns=2, box_height=108, row_font=9)
 
     pdf.setFillColor(muted_color)
     pdf.setFont("Helvetica", 8.5)
@@ -1387,7 +1387,7 @@ def staff_profile_report_pdf(request, staff_id):
         ("Role", staff.get_role_display()),
         ("Compensation", staff.get_compensation_type_display()),
     ]
-    draw_kv_block("Staff Details", staff_rows, columns=2)
+    draw_kv_block("Staff Details", staff_rows, columns=2, row_font=9)
 
     summary_rows = [
         ("Call Minutes", f"{float(breakdown['call_minutes']):,.1f} min"),
@@ -1401,7 +1401,7 @@ def staff_profile_report_pdf(request, staff_id):
         ("First Login", _format_datetime(first_login.login_time) if first_login else "--"),
         ("Last Logout", _format_datetime(last_logout.logout_time) if last_logout else "--"),
     ]
-    draw_kv_block("Call & Session Summary", summary_rows, columns=2)
+    draw_kv_block("Call & Session Summary", summary_rows, columns=2, row_font=9)
 
     earnings_rows = [
         ("Base Pay", _format_currency(breakdown["base_pay"])),
@@ -1411,14 +1411,14 @@ def staff_profile_report_pdf(request, staff_id):
         ("Qualifying Calls", str(qualifying_calls)),
         ("Converted Leads", str(converted_calls)),
     ]
-    draw_kv_block("Earnings Breakdown", earnings_rows, columns=2)
+    draw_kv_block("Earnings Breakdown", earnings_rows, columns=2, row_font=9)
 
     review_rows = [
         ("Score", f"{quality.get('score', 0)} / 100"),
         ("Status", quality.get("label", "No Recent Activity")),
         ("Note", quality.get("note", "--")),
     ]
-    draw_kv_block("Review Score", review_rows, columns=1)
+    draw_kv_block("Review Score", review_rows, columns=1, row_font=9)
 
     ensure_space(60)
     pdf.setFillColor(muted_color)
