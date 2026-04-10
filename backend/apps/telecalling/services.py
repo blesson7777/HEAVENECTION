@@ -529,6 +529,62 @@ def _month_range(now=None):
     return start, now
 
 
+def _month_start(value):
+    return value.replace(day=1)
+
+
+def _month_end(value):
+    return date(value.year, value.month, calendar.monthrange(value.year, value.month)[1])
+
+
+def _month_range_for_reference(reference_date, *, end_at=None):
+    start_date = _month_start(reference_date)
+    end_date = _month_end(reference_date)
+    start = timezone.make_aware(timezone.datetime.combine(start_date, timezone.datetime.min.time()))
+    end = timezone.make_aware(timezone.datetime.combine(end_date, timezone.datetime.max.time()))
+    if end_at:
+        end = min(end, end_at)
+    return start, end
+
+
+def _shift_month(value, delta_months):
+    month_index = (value.month - 1) + delta_months
+    year = value.year + (month_index // 12)
+    month = (month_index % 12) + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _parse_month_value(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        year_str, month_str = raw.split("-", 1)
+        year = int(year_str)
+        month = int(month_str)
+        if month < 1 or month > 12:
+            return None
+        return date(year, month, 1)
+    except (ValueError, AttributeError):
+        return None
+
+
+def _month_option_rows(*, reference_date, selected_value="", months_back=6):
+    options = []
+    for offset in range(months_back):
+        month_date = _shift_month(reference_date.replace(day=1), -offset)
+        value = month_date.strftime("%Y-%m")
+        options.append(
+            {
+                "value": value,
+                "label": month_date.strftime("%b %Y"),
+                "is_selected": value == selected_value,
+            }
+        )
+    return options
+
+
 def _decimal_hours(total_seconds):
     return Decimal(str(total_seconds or 0)) / Decimal("3600")
 
@@ -2526,18 +2582,28 @@ def _build_quality_note(
     return "Build more recent call activity for a fuller review."
 
 
-def _build_staff_quality_metrics(staff_ids, *, now=None):
+def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range_end=None):
     if not staff_ids:
         return {}
 
-    current_time = timezone.localtime(now or timezone.now())
-    lookback_start = current_time - timedelta(days=QUALITY_SCORE_LOOKBACK_DAYS)
+    current_time = timezone.localtime(range_end or now or timezone.now())
+    if range_start:
+        lookback_start = timezone.localtime(range_start)
+    else:
+        lookback_start = timezone.make_aware(
+            timezone.datetime.combine(_month_start(current_time.date()), timezone.datetime.min.time())
+        )
     missed_callback_cutoff = current_time - timedelta(hours=MISSED_CALLBACK_AFTER_HOURS)
+    lookback_days = max((current_time.date() - lookback_start.date()).days + 1, 1)
+    period_label = lookback_start.strftime("%b %Y")
 
     recent_calls = Call.objects.filter(
         staff_id__in=staff_ids,
         start_time__gte=lookback_start,
-    ).annotate(activity_day=TruncDate("start_time")).values(
+    )
+    if range_end:
+        recent_calls = recent_calls.filter(start_time__lte=range_end)
+    recent_calls = recent_calls.annotate(activity_day=TruncDate("start_time")).values(
         "staff_id",
         "lead_id",
         "status",
@@ -2629,6 +2695,8 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
         .values("staff_id", "action_type", "created_at")
         .order_by("staff_id", "created_at")
     )
+    if range_end:
+        away_rows = away_rows.filter(created_at__lte=range_end)
     open_away_since = {}
     for row in away_rows:
         staff_id = row["staff_id"]
@@ -2768,10 +2836,40 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
             "attempt_review_label": attempt_review_label,
             "away_review_label": away_review_label,
             "long_away_count": long_away_count,
-            "lookback_days": QUALITY_SCORE_LOOKBACK_DAYS,
+            "lookback_days": lookback_days,
+            "period_label": period_label,
+            "period_start": lookback_start.date().isoformat(),
         }
 
     return quality_payload
+
+
+def build_staff_quality_history(staff, *, months=6, now=None):
+    if not staff:
+        return []
+    reference_date = timezone.localdate()
+    history_rows = []
+    for offset in range(max(int(months or 0), 0)):
+        month_date = _shift_month(reference_date.replace(day=1), -offset)
+        range_start, range_end = _month_range_for_reference(
+            month_date,
+            end_at=timezone.localtime(now or timezone.now()),
+        )
+        quality = _build_staff_quality_metrics(
+            [staff.id],
+            range_start=range_start,
+            range_end=range_end,
+        ).get(staff.id, {})
+        history_rows.append(
+            {
+                "month_label": month_date.strftime("%b %Y"),
+                "score": quality.get("score", 0),
+                "label": quality.get("label", "No Recent Activity"),
+                "tone": quality.get("tone", "muted"),
+                "note": quality.get("note", "Build more recent call activity for a fuller review."),
+            }
+        )
+    return history_rows
 
 
 def _staff_review_call_rows(staff, *, now=None):
@@ -4171,14 +4269,18 @@ def build_dashboard_payload():
     }
 
 
-def build_team_management_payload():
+def build_team_management_payload(*, quality_range_start=None, quality_range_end=None):
     today, start, end = _today_range()
     active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
     staff_queryset = _staff_queryset()
     staff_ids = [staff.id for staff in staff_queryset]
     open_sessions = _open_sessions_by_staff()
     live_call_staff_ids = _live_call_staff_ids()
-    quality_by_staff = _build_staff_quality_metrics(staff_ids)
+    quality_by_staff = _build_staff_quality_metrics(
+        staff_ids,
+        range_start=quality_range_start,
+        range_end=quality_range_end,
+    )
 
     call_totals = {
         row["staff_id"]: row["count"]
@@ -4298,8 +4400,17 @@ def build_team_management_payload():
     }
 
 
-def build_work_review_payload(*, search_query="", review_filter="all", now=None):
-    team_payload = build_team_management_payload()
+def build_work_review_payload(*, search_query="", review_filter="all", now=None, month_value=""):
+    reference_date = _parse_month_value(month_value)
+    reference_date = reference_date or timezone.localdate()
+    range_start, range_end = _month_range_for_reference(
+        reference_date,
+        end_at=timezone.localtime(now or timezone.now()),
+    )
+    team_payload = build_team_management_payload(
+        quality_range_start=range_start,
+        quality_range_end=range_end,
+    )
     team_rows = list(team_payload["team_rows"])
     staff_ids = []
     for row in team_rows:
@@ -4434,6 +4545,13 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None)
         "lookback_days": QUALITY_SCORE_LOOKBACK_DAYS,
         "search_query": search_query,
         "review_filter": review_filter,
+        "month_value": reference_date.strftime("%Y-%m"),
+        "month_options": _month_option_rows(
+            reference_date=timezone.localdate(),
+            selected_value=reference_date.strftime("%Y-%m"),
+            months_back=6,
+        ),
+        "period_label": reference_date.strftime("%b %Y"),
         "review_summary": {
             "total_staff": len(team_rows),
             "filtered_staff_count": len(review_rows),
@@ -4614,6 +4732,10 @@ def build_staff_profile_payload(request, staff):
         company_profile=company_profile,
     )
     today, start, end = _today_range()
+    current_month_start, current_month_end = _month_range_for_reference(
+        timezone.localdate(),
+        end_at=timezone.localtime(timezone.now()),
+    )
     active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
     open_session = get_open_session(staff, reconcile=True)
     live_call_staff_ids = _live_call_staff_ids()
@@ -4627,7 +4749,11 @@ def build_staff_profile_payload(request, staff):
         Lead.objects.filter(assigned_to=staff, status__in=ACTIVE_QUEUE_STATUSES).select_related("assigned_to"),
         now=timezone.now(),
     )
-    quality = _build_staff_quality_metrics([staff.id]).get(staff.id, {})
+    quality = _build_staff_quality_metrics(
+        [staff.id],
+        range_start=current_month_start,
+        range_end=current_month_end,
+    ).get(staff.id, {})
     review_lead_rows = _staff_review_call_rows(staff)
 
     active_seconds_today = _effective_active_seconds_for_staff(
@@ -4759,6 +4885,7 @@ def build_staff_profile_payload(request, staff):
             "quality_tone": quality.get("tone", "muted"),
             "quality_note": quality.get("note", "Build more recent call activity for a fuller review."),
             "quality_lookback_days": quality.get("lookback_days", QUALITY_SCORE_LOOKBACK_DAYS),
+            "quality_period_label": quality.get("period_label", ""),
             "outcome_consistency_label": quality.get("outcome_consistency_label", "--"),
             "callback_discipline_label": quality.get("callback_discipline_label", "--"),
             "callback_total": quality.get("callback_total", 0),
@@ -4791,6 +4918,7 @@ def build_staff_profile_payload(request, staff):
             "invalid_short_count": sum(1 for row in review_lead_rows if row["is_invalid_short"]),
         },
         "review_lead_rows": review_lead_rows,
+        "quality_history_rows": build_staff_quality_history(staff, months=6),
         "assigned_lead_rows": assigned_lead_rows,
         "recent_call_rows": recent_call_rows,
         "recent_call_groups": recent_call_groups,

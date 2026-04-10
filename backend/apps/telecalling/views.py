@@ -352,6 +352,9 @@ def _fallback_work_review_payload():
         "lookback_days": 30,
         "search_query": "",
         "review_filter": "all",
+        "month_value": timezone.localdate().strftime("%Y-%m"),
+        "month_options": [],
+        "period_label": timezone.localdate().strftime("%b %Y"),
         "review_summary": {
             "total_staff": len(review_rows),
             "filtered_staff_count": len(review_rows),
@@ -1424,6 +1427,7 @@ def work_review_page(request):
 
     search_query = request.GET.get("q", "").strip()
     review_filter = request.GET.get("review", "all").strip().lower() or "all"
+    month_value = request.GET.get("month", "").strip()
     context = _admin_web_context(
         request,
         current_user,
@@ -1435,6 +1439,7 @@ def work_review_page(request):
             lambda: build_work_review_payload(
                 search_query=search_query,
                 review_filter=review_filter,
+                month_value=month_value,
             ),
             _fallback_work_review_payload,
             label="work-review-page",

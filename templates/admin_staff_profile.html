@@ -213,7 +213,13 @@
                         <div class="hc-profile-meta-card">
                             <span class="hc-profile-meta-label">Call Outcome Consistency</span>
                             <strong>{{ summary.outcome_consistency_label }}</strong>
-                            <small>Recorded over the last {{ summary.quality_lookback_days }} days.</small>
+                            <small>
+                                {% if summary.quality_period_label %}
+                                Recorded for {{ summary.quality_period_label }}.
+                                {% else %}
+                                Recorded over the last {{ summary.quality_lookback_days }} days.
+                                {% endif %}
+                            </small>
                         </div>
                         <div class="hc-profile-meta-card">
                             <span class="hc-profile-meta-label">Callback Discipline</span>
@@ -235,8 +241,42 @@
                             <strong>{{ summary.no_answer_today }}</strong>
                             <small>{{ summary.status_label }}</small>
                         </div>
+                </div>
+            </div>
+
+            <div class="hc-summary-card hc-staff-profile-review mb-4">
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                    <div>
+                        <span class="mf-db2-kicker">Review Score History</span>
+                        <h5 class="mb-1">Past monthly review scores</h5>
+                        <p class="text-muted mb-0">Each month resets and is scored separately.</p>
                     </div>
                 </div>
+                <div class="table-responsive">
+                    <table class="table hc-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Month</th>
+                                <th>Score</th>
+                                <th>Status</th>
+                                <th>Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in quality_history_rows %}
+                            <tr>
+                                <td>{{ row.month_label }}</td>
+                                <td><strong>{{ row.score }}</strong></td>
+                                <td><span class="hc-status hc-status-{{ row.tone }}">{{ row.label }}</span></td>
+                                <td class="text-muted">{{ row.note }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="4" class="text-center py-4">No review history yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
 
             <div class="hc-summary-card hc-staff-profile-review mb-4">
                 <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
