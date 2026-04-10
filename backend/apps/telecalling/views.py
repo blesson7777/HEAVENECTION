@@ -1251,16 +1251,13 @@ def staff_profile_report_pdf(request, staff_id):
     pdf.setFillColor(brand_color)
     pdf.rect(0, page_height - 140, page_width, 140, fill=1, stroke=0)
     pdf.setFillColor(accent_color)
-    pdf.polygon(
-        [
-            (0, page_height - 140),
-            (page_width * 0.55, page_height - 140),
-            (page_width, page_height - 230),
-            (page_width, page_height - 140),
-        ],
-        fill=1,
-        stroke=0,
-    )
+    accent_path = pdf.beginPath()
+    accent_path.moveTo(0, page_height - 140)
+    accent_path.lineTo(page_width * 0.55, page_height - 140)
+    accent_path.lineTo(page_width, page_height - 230)
+    accent_path.lineTo(page_width, page_height - 140)
+    accent_path.close()
+    pdf.drawPath(accent_path, fill=1, stroke=0)
     pdf.setFillColor(colors.white)
     pdf.setFont("Helvetica-Bold", 20)
     pdf.drawString(margin, page_height - 50, company_profile.company_name or "Heavenection")
