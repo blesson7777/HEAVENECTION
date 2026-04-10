@@ -3163,47 +3163,54 @@ def _zero_talk_block_details_by_staff(
             if not zero_streak:
                 return
             if zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+                merged_calls = []
+                total_zero_seconds = 0
+                streak_start = None
+                streak_end = None
                 for block in zero_streak:
-                    block_calls = block["calls"]
-                    block_start = block["block_start"]
-                    block_end = block["block_end"]
-                    local_start = timezone.localtime(block_start) if block_start else None
-                    local_end = timezone.localtime(block_end) if block_end else None
-                    date_label = local_start.strftime("%d %b %Y") if local_start else "Unknown date"
-                    time_range = (
-                        f"{local_start.strftime('%I:%M %p').lstrip('0')} - {local_end.strftime('%I:%M %p').lstrip('0')}"
-                        if local_start and local_end
-                        else "--"
-                    )
-                    block_seconds = block["block_seconds"]
-                    zero_seconds_in_block = block["zero_seconds_in_block"]
-                    call_rows = []
-                    for call in block_calls:
-                        call_rows.append(
-                            {
-                                "lead_name": call.lead.name,
-                                "lead_phone": call.lead.phone,
-                                "start_time": _format_datetime(call.start_time),
-                                "duration_label": _format_duration(call.duration_seconds),
-                                "status_label": call.get_status_display(),
-                            }
-                        )
+                    merged_calls.extend(block["calls"])
+                    total_zero_seconds += block["zero_seconds_in_block"]
+                    if block["block_start"]:
+                        streak_start = block["block_start"] if not streak_start else min(streak_start, block["block_start"])
+                    if block["block_end"]:
+                        streak_end = block["block_end"] if not streak_end else max(streak_end, block["block_end"])
 
-                    zero_blocks.append(
+                local_start = timezone.localtime(streak_start) if streak_start else None
+                local_end = timezone.localtime(streak_end) if streak_end else None
+                date_label = local_start.strftime("%d %b %Y") if local_start else "Unknown date"
+                time_range = (
+                    f"{local_start.strftime('%I:%M %p').lstrip('0')} - {local_end.strftime('%I:%M %p').lstrip('0')}"
+                    if local_start and local_end
+                    else "--"
+                )
+                block_seconds = max(0, int((streak_end - streak_start).total_seconds())) if streak_start and streak_end else 0
+                call_rows = []
+                for call in merged_calls:
+                    call_rows.append(
                         {
-                            "date_label": date_label,
-                            "time_range": time_range,
-                            "attempt_count": len(block_calls),
-                            "zero_second_count": zero_seconds_in_block,
-                            "duration_label": _format_duration(block_seconds),
-                            "calls": call_rows,
-                            "call_count": len(call_rows),
-                            "extra_calls": 0,
-                            "streak_note": "Part of a zero-only streak (10+ attempts reached)",
-                            "next_call_gap_label": pending_gap_label,
-                            "next_connected_call_time": pending_next_call_time,
+                            "lead_name": call.lead.name,
+                            "lead_phone": call.lead.phone,
+                            "start_time": _format_datetime(call.start_time),
+                            "duration_label": _format_duration(call.duration_seconds),
+                            "status_label": call.get_status_display(),
                         }
                     )
+
+                zero_blocks.append(
+                    {
+                        "date_label": date_label,
+                        "time_range": time_range,
+                        "attempt_count": len(merged_calls),
+                        "zero_second_count": total_zero_seconds,
+                        "duration_label": _format_duration(block_seconds),
+                        "calls": call_rows,
+                        "call_count": len(call_rows),
+                        "extra_calls": 0,
+                        "streak_note": "Zero-only streak (10+ attempts reached)",
+                        "next_call_gap_label": pending_gap_label,
+                        "next_connected_call_time": pending_next_call_time,
+                    }
+                )
             zero_streak = []
             zero_streak_attempts = 0
             pending_gap_label = "0s"
