@@ -345,7 +345,7 @@ def _call_activity_block_summary(calls, *, range_end=None):
         zero_second_attempt_count += zero_seconds_in_block
         real_call_attempt_count += real_calls_in_block
 
-        if real_calls_in_block <= 0 and len(block_calls) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+        if real_calls_in_block <= 0:
             zero_only_block_count += 1
             continue
 
@@ -794,7 +794,7 @@ def _call_activity_block_analysis(calls, *, range_end=None):
         analysis["zero_second_attempt_count"] += zero_seconds_in_block
         analysis["real_call_count"] += real_calls_in_block
 
-        if real_calls_in_block <= 0 and len(block_calls) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+        if real_calls_in_block <= 0:
             analysis["zero_only_block_count"] += 1
             continue
 
@@ -3077,7 +3077,7 @@ def _zero_talk_block_details_by_staff(
         zero_blocks = []
         for block_calls, block_start, block_end in _split_call_activity_blocks(staff_calls):
             real_calls_in_block = sum(1 for call in block_calls if (call.duration_seconds or 0) > 0)
-            if real_calls_in_block > 0 or len(block_calls) < MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+            if real_calls_in_block > 0:
                 continue
 
             local_start = timezone.localtime(block_start) if block_start else None
