@@ -87,6 +87,7 @@ from backend.apps.telecalling.services import (
     build_salary_detail_payload,
     build_salary_page_payload,
     build_settings_payload,
+    build_work_review_payload,
     build_staff_profile_payload,
     build_staff_learning_payload,
     build_staff_today_payload,
@@ -322,6 +323,47 @@ def _fallback_work_hours_payload():
         "today_label": _fallback_today_label(),
         "summary_rows": summary_rows,
         "session_rows": [],
+    }
+
+
+def _fallback_work_review_payload():
+    team_payload = _fallback_team_payload()
+    review_rows = []
+    for row in team_payload["team_rows"]:
+        review_rows.append(
+            {
+                **row,
+                "review_state": "quiet",
+                "review_state_label": "Temporarily Unavailable",
+                "review_state_tone": "muted",
+                "review_state_note": "Detailed review metrics are temporarily unavailable right now.",
+                "review_day_rows": [],
+                "review_day_count": 0,
+                "extra_review_day_count": 0,
+                "real_call_ratio_label": "--",
+                "invalid_short_count": row.get("invalid_short_count", 0),
+                "verified_attempt_count": row.get("verified_attempt_count", 0),
+            }
+        )
+
+    return {
+        "today_label": team_payload["today_label"],
+        "lookback_days": 30,
+        "search_query": "",
+        "review_filter": "all",
+        "review_summary": {
+            "total_staff": len(review_rows),
+            "filtered_staff_count": len(review_rows),
+            "review_needed_count": 0,
+            "attention_count": 0,
+            "stable_count": 0,
+            "quiet_count": len(review_rows),
+            "zero_talk_total": 0,
+            "invalid_short_total": 0,
+            "missed_callbacks_total": 0,
+            "flagged_day_total": 0,
+        },
+        "review_rows": review_rows,
     }
 
 
@@ -1348,6 +1390,34 @@ def learning_page(request):
         extra_context=build_learning_management_payload(),
     )
     return render(request, "admin_learning.html", context)
+
+
+@require_GET
+def work_review_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    search_query = request.GET.get("q", "").strip()
+    review_filter = request.GET.get("review", "all").strip().lower() or "all"
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="work-review",
+        page_title="Work Review Center",
+        page_heading="Work Review Center",
+        page_subtitle="Review calling patterns, empty attempts, and callback gaps from one dedicated monitoring page.",
+        extra_context=_safe_admin_payload(
+            lambda: build_work_review_payload(
+                search_query=search_query,
+                review_filter=review_filter,
+            ),
+            _fallback_work_review_payload,
+            label="work-review-page",
+            request=request,
+        ),
+    )
+    return render(request, "admin_work_review.html", context)
 
 
 @require_http_methods(["GET", "POST"])

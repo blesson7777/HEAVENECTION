@@ -1,0 +1,189 @@
+{% extends "admin_base.html" %}
+
+{% block page_actions %}
+<a href="{% url 'staff-page' %}" class="btn btn-outline-primary btn-sm">
+    <i class="bi bi-people-fill"></i>
+    <span>Staff Management</span>
+</a>
+{% endblock %}
+
+{% block admin_content %}
+<section class="hc-surface-card animate-on-scroll">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Monitoring Desk</span>
+            <h5>Work review center</h5>
+        </div>
+        <span class="hc-sync-pill"><i class="bi bi-calendar2-week"></i> {{ today_label }}</span>
+    </div>
+    <p class="text-muted mb-0">
+        Review staff calling patterns from the last {{ lookback_days }} days, highlight empty-attempt blocks,
+        and spot callback or invalid-short patterns before final decisions are made.
+    </p>
+</section>
+
+<section class="row g-3 mt-1 animate-on-scroll">
+    <div class="col-xl-3 col-md-6">
+        <div class="hc-summary-card h-100">
+            <span class="mf-db2-kicker">Review Needed</span>
+            <h3 class="mb-1">{{ review_summary.review_needed_count }}</h3>
+            <p class="mb-0 text-muted">{{ review_summary.filtered_staff_count }} staff shown in the current filter.</p>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="hc-summary-card h-100">
+            <span class="mf-db2-kicker">Needs Attention</span>
+            <h3 class="mb-1">{{ review_summary.attention_count }}</h3>
+            <p class="mb-0 text-muted">{{ review_summary.invalid_short_total }} invalid short calls need review.</p>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="hc-summary-card h-100">
+            <span class="mf-db2-kicker">Zero-Talk Blocks</span>
+            <h3 class="mb-1">{{ review_summary.zero_talk_total }}</h3>
+            <p class="mb-0 text-muted">{{ review_summary.flagged_day_total }} recent flagged day{% if review_summary.flagged_day_total != 1 %}s{% endif %} found.</p>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="hc-summary-card h-100">
+            <span class="mf-db2-kicker">Callback Review</span>
+            <h3 class="mb-1">{{ review_summary.missed_callbacks_total }}</h3>
+            <p class="mb-0 text-muted">{{ review_summary.stable_count }} staff currently look stable.</p>
+        </div>
+    </div>
+</section>
+
+<section class="hc-surface-card animate-on-scroll">
+    <div class="alert alert-primary border-0 mb-4" role="alert">
+        Use this page to review empty call attempts, low real-call patterns, missed callbacks, and invalid short calls.
+        It is meant for guided review, not automatic final judgment.
+    </div>
+
+    <form method="get" class="hc-work-review-toolbar">
+        <div class="hc-search-box mb-0">
+            <i class="bi bi-search"></i>
+            <input type="search" name="q" value="{{ search_query }}" placeholder="Search staff, phone, review note, or calling pattern">
+        </div>
+        <div class="hc-work-review-toolbar-actions">
+            <div class="hc-work-review-filter">
+                <label class="form-label fw-semibold mb-2" for="workReviewFilter">Review Filter</label>
+                <select class="form-select" id="workReviewFilter" name="review">
+                    <option value="all" {% if review_filter == 'all' %}selected{% endif %}>All Staff</option>
+                    <option value="review" {% if review_filter == 'review' %}selected{% endif %}>Review Needed</option>
+                    <option value="attention" {% if review_filter == 'attention' %}selected{% endif %}>Needs Attention</option>
+                    <option value="stable" {% if review_filter == 'stable' %}selected{% endif %}>Stable</option>
+                    <option value="quiet" {% if review_filter == 'quiet' %}selected{% endif %}>No Recent Activity</option>
+                </select>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <button type="submit" class="btn btn-primary">Apply</button>
+                <a href="{% url 'work-review-page' %}" class="btn btn-outline-primary">Clear</a>
+            </div>
+        </div>
+    </form>
+
+    <div class="table-responsive hc-work-review-table-scroller">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Staff</th>
+                    <th>Review Status</th>
+                    <th>Call Pattern</th>
+                    <th>Recent Review Days</th>
+                    <th>Today</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in review_rows %}
+                <tr>
+                    <td>
+                        <div class="hc-staff-persona">
+                            <span class="hc-staff-avatar">{{ row.name|slice:":1"|upper }}</span>
+                            <div class="hc-staff-persona-copy">
+                                <strong>{{ row.name }}</strong>
+                                <span>{{ row.phone }}</span>
+                                <small>{{ row.compensation_type_label }} payout</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="hc-work-review-status">
+                            <div class="hc-quality-card-head">
+                                <strong>{{ row.quality_score }}</strong>
+                                <span class="hc-status hc-status-{{ row.review_state_tone }}">{{ row.review_state_label }}</span>
+                            </div>
+                            <small>{{ row.quality_note }}</small>
+                            <div class="hc-work-review-caption">{{ row.review_state_note }}</div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="hc-work-review-pattern">
+                            <div class="hc-work-review-chip-row">
+                                <span class="hc-work-review-chip">{{ row.real_call_count }} real</span>
+                                <span class="hc-work-review-chip">{{ row.verified_attempt_count }} verified</span>
+                                <span class="hc-work-review-chip">{{ row.real_call_ratio_label }} ratio</span>
+                            </div>
+                            <div class="hc-work-review-chip-row">
+                                <span class="hc-work-review-chip">{{ row.zero_second_attempt_count }} zero-second</span>
+                                <span class="hc-work-review-chip">{{ row.invalid_short_count }} invalid short</span>
+                                <span class="hc-work-review-chip">{{ row.missed_callbacks }} callback review</span>
+                            </div>
+                            <div class="hc-work-review-caption">
+                                {{ row.suspicious_block_count }} review block(s) and {{ row.zero_only_block_count }} zero-talk block(s)
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        {% if row.review_day_rows %}
+                        <div class="hc-work-review-day-list">
+                            {% for day in row.review_day_rows %}
+                            <div class="hc-work-review-day hc-work-review-day-{{ day.review_tone }}">
+                                <div class="hc-work-review-day-head">
+                                    <strong>{{ day.date_label }}</strong>
+                                    <span>{{ day.day_label }}</span>
+                                </div>
+                                <small>{{ day.review_label }}</small>
+                                <div class="hc-work-review-day-meta">
+                                    <span>{{ day.real_call_count }} real / {{ day.attempt_count }} attempts</span>
+                                    <span>{{ day.zero_second_attempt_count }} zero-second</span>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            {% if row.extra_review_day_count > 0 %}
+                            <div class="hc-work-review-caption">+{{ row.extra_review_day_count }} more flagged day{% if row.extra_review_day_count != 1 %}s{% endif %}</div>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <div class="hc-work-review-empty-note">No flagged recent days.</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="hc-work-review-today">
+                            <div><strong>{{ row.active_hours_today }}</strong> worked</div>
+                            <div>{{ row.calls_today }} call{% if row.calls_today != 1 %}s{% endif %} today</div>
+                            <div>{{ row.assigned_leads }} lead{% if row.assigned_leads != 1 %}s{% endif %} in queue</div>
+                            <div class="text-muted small">{{ row.online_label }} | {{ row.last_seen }}</div>
+                        </div>
+                    </td>
+                    <td class="text-end">
+                        <div class="d-flex justify-content-end gap-2 flex-wrap">
+                            <a href="{% url 'staff-profile-page' row.id %}" class="btn btn-dark btn-sm">
+                                <i class="bi bi-person-vcard"></i>
+                                <span>Open Profile</span>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-5">
+                        <div class="hc-work-review-empty-note">No staff matched the current review filters.</div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

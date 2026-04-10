@@ -838,7 +838,7 @@
 }
 
 .hc-card-scroll-table-10 {
-    max-height: 41rem;
+    max-height: 32rem;
 }
 
 .hc-card-scroll-table thead th {
@@ -1209,6 +1209,124 @@
     top: 0;
     z-index: 1;
     background: #f7f9fd;
+}
+
+.hc-work-review-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.hc-work-review-toolbar .hc-search-box {
+    flex: 1 1 320px;
+}
+
+.hc-work-review-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 1rem;
+}
+
+.hc-work-review-filter {
+    min-width: 220px;
+}
+
+.hc-work-review-table-scroller {
+    max-height: 40rem;
+    overflow-y: auto;
+    border-radius: 18px;
+}
+
+.hc-work-review-table-scroller thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f7f9fd;
+}
+
+.hc-work-review-status,
+.hc-work-review-pattern,
+.hc-work-review-today {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.hc-work-review-chip-row,
+.hc-work-review-day-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.hc-work-review-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.32rem 0.72rem;
+    border-radius: 999px;
+    background: #edf3ff;
+    color: #304062;
+    font-size: 0.76rem;
+    font-weight: 700;
+}
+
+.hc-work-review-caption {
+    color: #6a7b96;
+    font-size: 0.82rem;
+}
+
+.hc-work-review-day-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    min-width: 220px;
+}
+
+.hc-work-review-day {
+    padding: 0.75rem 0.85rem;
+    border-radius: 16px;
+    border: 1px solid #e5ebf8;
+    background: linear-gradient(160deg, #ffffff 0%, #f7faff 100%);
+}
+
+.hc-work-review-day-danger {
+    border-color: rgba(220, 53, 69, 0.18);
+    background: rgba(220, 53, 69, 0.05);
+}
+
+.hc-work-review-day-warning {
+    border-color: rgba(241, 170, 47, 0.18);
+    background: rgba(241, 170, 47, 0.08);
+}
+
+.hc-work-review-day-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.2rem;
+}
+
+.hc-work-review-day-head strong {
+    color: #203054;
+    font-size: 0.92rem;
+}
+
+.hc-work-review-day-head span,
+.hc-work-review-day small,
+.hc-work-review-day-meta span {
+    color: #667791;
+}
+
+.hc-work-review-empty-note {
+    color: #6a7b96;
+    font-size: 0.92rem;
 }
 
 .hc-staff-profile-editor .form-label {

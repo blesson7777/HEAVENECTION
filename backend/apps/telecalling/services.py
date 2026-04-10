@@ -2741,6 +2741,7 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
                 verified_attempt_count=verified_attempt_count,
             ),
             "has_activity": has_activity,
+            "invalid_short_count": invalid_short_calls,
             "outcome_consistency": outcome_value,
             "outcome_consistency_label": f"{outcome_value}%" if outcome_value is not None else "--",
             "followup_completion": followup_value,
@@ -2829,6 +2830,105 @@ def _staff_review_call_rows(staff, *, now=None):
 
 def _review_lead_ids_for_staff(staff, *, now=None):
     return [uuid.UUID(row["lead_id"]) for row in _staff_review_call_rows(staff, now=now)]
+
+
+def _build_work_review_day_previews(staff_ids, *, now=None, preview_days=7, preview_limit=2):
+    if not staff_ids:
+        return {}
+
+    current_time = timezone.localtime(now or timezone.now())
+    preview_start_date = current_time.date() - timedelta(days=max(preview_days - 1, 0))
+    preview_start = timezone.make_aware(
+        timezone.datetime.combine(preview_start_date, timezone.datetime.min.time())
+    )
+
+    recent_calls = (
+        Call.objects.filter(
+            staff_id__in=staff_ids,
+            start_time__gte=preview_start,
+            is_verified=True,
+        )
+        .annotate(activity_day=TruncDate("start_time"))
+        .values(
+            "staff_id",
+            "status",
+            "duration_seconds",
+            "activity_day",
+            "start_time",
+            "end_time",
+            "created_at",
+        )
+    )
+
+    calls_by_staff_day = defaultdict(list)
+    invalid_short_totals = defaultdict(int)
+    for row in recent_calls:
+        if row["status"] == Call.Status.STARTED or not row["activity_day"]:
+            continue
+        key = (row["staff_id"], row["activity_day"])
+        calls_by_staff_day[key].append(
+            {
+                "start_time": row["start_time"],
+                "end_time": row["end_time"],
+                "created_at": row["created_at"],
+                "duration_seconds": max(0, int(row["duration_seconds"] or 0)),
+            }
+        )
+        if row["status"] == Call.Status.INVALID_SHORT:
+            invalid_short_totals[key] += 1
+
+    previews_by_staff = defaultdict(list)
+    for (staff_id, activity_day), day_calls in calls_by_staff_day.items():
+        summary = _call_activity_block_summary(day_calls)
+        attempt_count = summary["attempt_count"]
+        real_call_count = summary["real_call_count"]
+        zero_second_attempt_count = summary["zero_second_attempt_count"]
+        suspicious_block_count = summary["suspicious_block_count"]
+        zero_only_block_count = summary["zero_only_block_count"]
+        invalid_short_count = invalid_short_totals[(staff_id, activity_day)]
+
+        review_state = "stable"
+        review_label = "Stable day"
+        review_tone = "success"
+        if attempt_count >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK and real_call_count == 0:
+            review_state = "review"
+            review_label = "No real conversations"
+            review_tone = "danger"
+        elif suspicious_block_count or zero_only_block_count:
+            review_state = "review"
+            review_label = "Call pattern needs review"
+            review_tone = "danger"
+        elif invalid_short_count or zero_second_attempt_count:
+            review_state = "attention"
+            review_label = "Some empty call attempts"
+            review_tone = "warning"
+
+        if review_state == "stable":
+            continue
+
+        previews_by_staff[staff_id].append(
+            {
+                "date": activity_day,
+                "date_label": activity_day.strftime("%d %b %Y"),
+                "day_label": activity_day.strftime("%a"),
+                "attempt_count": attempt_count,
+                "real_call_count": real_call_count,
+                "zero_second_attempt_count": zero_second_attempt_count,
+                "invalid_short_count": invalid_short_count,
+                "review_state": review_state,
+                "review_label": review_label,
+                "review_tone": review_tone,
+            }
+        )
+
+    preview_payload = {}
+    for staff_id, rows in previews_by_staff.items():
+        ordered_rows = sorted(rows, key=lambda row: row["date"], reverse=True)
+        preview_payload[staff_id] = {
+            "count": len(ordered_rows),
+            "rows": ordered_rows[:preview_limit],
+        }
+    return preview_payload
 
 
 def reassign_staff_review_leads(staff):
@@ -4147,11 +4247,14 @@ def build_team_management_payload():
                 "quality_label": quality.get("label", "No Recent Activity"),
                 "quality_tone": quality.get("tone", "muted"),
                 "quality_note": quality.get("note", "Build more recent call activity for a fuller review."),
+                "invalid_short_count": quality.get("invalid_short_count", 0),
                 "outcome_consistency_label": quality.get("outcome_consistency_label", "--"),
                 "followup_completion_label": quality.get("followup_completion_label", "--"),
                 "missed_callbacks": quality.get("missed_callbacks", 0),
+                "verified_attempt_count": quality.get("verified_attempt_count", 0),
                 "attempt_review_label": quality.get("attempt_review_label", "--"),
                 "away_review_label": quality.get("away_review_label", "Within limit"),
+                "long_away_count": quality.get("long_away_count", 0),
                 "suspicious_block_count": quality.get("suspicious_block_count", 0),
                 "zero_only_block_count": quality.get("zero_only_block_count", 0),
                 "zero_second_attempt_count": quality.get("zero_second_attempt_count", 0),
@@ -4171,6 +4274,158 @@ def build_team_management_payload():
             "total_converted_today": total_converted_today,
         },
         "team_rows": team_rows,
+    }
+
+
+def build_work_review_payload(*, search_query="", review_filter="all", now=None):
+    team_payload = build_team_management_payload()
+    team_rows = list(team_payload["team_rows"])
+    staff_ids = []
+    for row in team_rows:
+        try:
+            staff_ids.append(uuid.UUID(str(row["id"])))
+        except (TypeError, ValueError, AttributeError):
+            continue
+
+    day_previews = _build_work_review_day_previews(staff_ids, now=now)
+    normalized_query = " ".join(str(search_query or "").strip().lower().split())
+    review_filter = str(review_filter or "all").strip().lower() or "all"
+    if review_filter not in {"all", "review", "attention", "stable", "quiet"}:
+        review_filter = "all"
+
+    review_needed_count = 0
+    attention_count = 0
+    stable_count = 0
+    quiet_count = 0
+    zero_talk_total = 0
+    invalid_short_total = 0
+    missed_callbacks_total = 0
+    flagged_day_total = 0
+
+    review_rows = []
+    for row in team_rows:
+        quality_label = str(row.get("quality_label") or "")
+        verified_attempt_count = int(row.get("verified_attempt_count") or 0)
+        real_call_count = int(row.get("real_call_count") or 0)
+        zero_second_attempt_count = int(row.get("zero_second_attempt_count") or 0)
+        invalid_short_count = int(row.get("invalid_short_count") or 0)
+        suspicious_block_count = int(row.get("suspicious_block_count") or 0)
+        zero_only_block_count = int(row.get("zero_only_block_count") or 0)
+        missed_callbacks = int(row.get("missed_callbacks") or 0)
+
+        review_state = "stable"
+        review_state_label = "Stable"
+        review_state_tone = "success"
+        review_state_note = "Recent verified activity looks healthy."
+        if quality_label == "No Recent Activity" and verified_attempt_count <= 0:
+            review_state = "quiet"
+            review_state_label = "No Recent Activity"
+            review_state_tone = "muted"
+            review_state_note = "No recent verified activity is available for review."
+        elif (
+            quality_label == "Review Needed"
+            or suspicious_block_count > 0
+            or zero_only_block_count > 0
+            or (verified_attempt_count >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK and real_call_count == 0)
+        ):
+            review_state = "review"
+            review_state_label = "Review Needed"
+            review_state_tone = "danger"
+            review_state_note = "Review calling patterns, empty attempt blocks, and low real-call activity."
+        elif (
+            quality_label == "Needs Attention"
+            or invalid_short_count > 0
+            or zero_second_attempt_count > 0
+            or missed_callbacks > 0
+        ):
+            review_state = "attention"
+            review_state_label = "Needs Attention"
+            review_state_tone = "warning"
+            review_state_note = "Some calling patterns should be reviewed before final decisions are made."
+
+        if review_state == "review":
+            review_needed_count += 1
+        elif review_state == "attention":
+            attention_count += 1
+        elif review_state == "quiet":
+            quiet_count += 1
+        else:
+            stable_count += 1
+
+        zero_talk_total += zero_only_block_count
+        invalid_short_total += invalid_short_count
+        missed_callbacks_total += missed_callbacks
+
+        preview_payload = day_previews.get(uuid.UUID(str(row["id"])), {"count": 0, "rows": []})
+        flagged_day_total += int(preview_payload.get("count") or 0)
+        review_day_rows = preview_payload.get("rows") or []
+        extra_review_day_count = max(int(preview_payload.get("count") or 0) - len(review_day_rows), 0)
+        if verified_attempt_count > 0:
+            ratio_value = (Decimal(real_call_count) / Decimal(verified_attempt_count)) * Decimal("100")
+            real_call_ratio_label = f"{int(ratio_value.quantize(Decimal('1')))}%"
+        else:
+            real_call_ratio_label = "--"
+
+        review_row = {
+            **row,
+            "review_state": review_state,
+            "review_state_label": review_state_label,
+            "review_state_tone": review_state_tone,
+            "review_state_note": review_state_note,
+            "real_call_ratio_label": real_call_ratio_label,
+            "review_day_rows": review_day_rows,
+            "review_day_count": int(preview_payload.get("count") or 0),
+            "extra_review_day_count": extra_review_day_count,
+            "search_text": " ".join(
+                part.lower()
+                for part in (
+                    row.get("name", ""),
+                    row.get("phone", ""),
+                    quality_label,
+                    row.get("quality_note", ""),
+                    review_state_label,
+                    review_state_note,
+                    row.get("attempt_review_label", ""),
+                    row.get("away_review_label", ""),
+                )
+                if part
+            ),
+        }
+
+        if normalized_query and normalized_query not in review_row["search_text"]:
+            continue
+        if review_filter != "all" and review_state != review_filter:
+            continue
+        review_rows.append(review_row)
+
+    state_rank = {"review": 0, "attention": 1, "stable": 2, "quiet": 3}
+    review_rows.sort(
+        key=lambda row: (
+            state_rank.get(row["review_state"], 9),
+            int(row.get("quality_score") or 0),
+            -int(row.get("verified_attempt_count") or 0),
+            str(row.get("name") or "").lower(),
+        )
+    )
+
+    return {
+        "today_label": team_payload["today_label"],
+        "lookback_days": QUALITY_SCORE_LOOKBACK_DAYS,
+        "search_query": search_query,
+        "review_filter": review_filter,
+        "review_summary": {
+            "total_staff": len(team_rows),
+            "filtered_staff_count": len(review_rows),
+            "review_needed_count": review_needed_count,
+            "attention_count": attention_count,
+            "stable_count": stable_count,
+            "quiet_count": quiet_count,
+            "zero_talk_total": zero_talk_total,
+            "invalid_short_total": invalid_short_total,
+            "missed_callbacks_total": missed_callbacks_total,
+            "flagged_day_total": flagged_day_total,
+        },
+        "review_rows": review_rows,
     }
 
 
