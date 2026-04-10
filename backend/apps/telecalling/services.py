@@ -4450,6 +4450,162 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None)
     }
 
 
+def build_referral_monitoring_payload(*, search_query="", stage_filter="all", reward_filter="all"):
+    company_profile = get_company_profile()
+    sync_referral_rewards(company_profile)
+    required_hours = _quantized_decimal(company_profile.referral_required_hours or 0)
+    reward_amount = _money(company_profile.referral_reward_amount or 0)
+
+    submissions = list(
+        ReferralSubmission.objects.select_related("referrer", "joined_staff").order_by("-created_at")
+    )
+    joined_staff_ids = [submission.joined_staff_id for submission in submissions if submission.joined_staff_id]
+    active_hours_map = _staff_active_hours_map(joined_staff_ids)
+    rewards = {
+        reward.referred_staff_id: reward
+        for reward in ReferralReward.objects.filter(referred_staff_id__in=joined_staff_ids).select_related(
+            "referred_staff",
+            "referrer",
+        )
+    }
+
+    normalized_query = " ".join(str(search_query or "").strip().lower().split())
+    stage_filter = str(stage_filter or "all").strip().lower() or "all"
+    if stage_filter not in {"all", "not_joined", "joined", "started_working", "completed"}:
+        stage_filter = "all"
+    reward_filter = str(reward_filter or "all").strip().lower() or "all"
+    if reward_filter not in {"all", "pending", "paid", "none"}:
+        reward_filter = "all"
+
+    summary = {
+        "total": len(submissions),
+        "not_joined": 0,
+        "joined": 0,
+        "started_working": 0,
+        "completed": 0,
+        "pending_rewards": 0,
+        "paid_rewards": 0,
+        "pending_total_label": _format_currency(0),
+        "program_enabled": company_profile.referral_program_enabled,
+        "required_hours_label": f"{float(company_profile.referral_required_hours or 0):,.1f}h",
+        "reward_amount_label": _format_currency(company_profile.referral_reward_amount or 0),
+    }
+    pending_total = Decimal("0.00")
+    rows = []
+
+    for submission in submissions:
+        referrer = submission.referrer
+        joined_staff = submission.joined_staff
+        active_hours = active_hours_map.get(joined_staff.id, Decimal("0.00")) if joined_staff else Decimal("0.00")
+        reward = rewards.get(joined_staff.id) if joined_staff else None
+        is_completed = bool(reward) or (
+            joined_staff is not None
+            and required_hours <= Decimal("0.00")
+        ) or (
+            joined_staff is not None
+            and required_hours > Decimal("0.00")
+            and active_hours >= required_hours
+        )
+
+        if joined_staff is None:
+            stage = "not_joined"
+            stage_label = "Not Joined"
+            progress_label = "Waiting to join the team."
+            reward_status_label = "Reward unlocks after completion"
+            reward_amount_label = "--"
+            reward_state = "none"
+            summary["not_joined"] += 1
+        elif is_completed:
+            stage = "completed"
+            stage_label = "Completed"
+            progress_label = (
+                f"{float(active_hours):,.1f}h completed"
+                if required_hours <= Decimal("0.00")
+                else f"{float(active_hours):,.1f}h of {float(required_hours):,.1f}h completed"
+            )
+            reward_status_label = "Reward Paid" if reward and reward.is_paid else "Pending Reward"
+            reward_amount_label = _format_currency(reward.reward_amount if reward else reward_amount)
+            reward_state = "paid" if reward and reward.is_paid else "pending" if reward_amount_label != "--" else "none"
+            summary["completed"] += 1
+            if reward and reward.is_paid:
+                summary["paid_rewards"] += 1
+            else:
+                summary["pending_rewards"] += 1
+                pending_total += reward.reward_amount if reward else reward_amount
+        elif active_hours > Decimal("0.00"):
+            stage = "started_working"
+            stage_label = "Started Working"
+            progress_label = (
+                f"{float(active_hours):,.1f}h started"
+                if required_hours <= Decimal("0.00")
+                else f"{float(active_hours):,.1f}h of {float(required_hours):,.1f}h completed"
+            )
+            reward_status_label = "Reward unlocks after completion"
+            reward_amount_label = "--"
+            reward_state = "none"
+            summary["started_working"] += 1
+        else:
+            stage = "joined"
+            stage_label = "Joined"
+            progress_label = "Joined the team and waiting for work hours to begin."
+            reward_status_label = "Reward unlocks after completion"
+            reward_amount_label = "--"
+            reward_state = "none"
+            summary["joined"] += 1
+
+        search_text = " ".join(
+            part.lower()
+            for part in (
+                submission.referred_name,
+                submission.referred_phone,
+                referrer.name if referrer else "",
+                referrer.phone if referrer else "",
+                joined_staff.name if joined_staff else "",
+                joined_staff.phone if joined_staff else "",
+                stage_label,
+                reward_status_label,
+            )
+            if part
+        )
+        if normalized_query and normalized_query not in search_text:
+            continue
+        if stage_filter != "all" and stage != stage_filter:
+            continue
+        if reward_filter != "all" and reward_state != reward_filter:
+            continue
+
+        rows.append(
+            {
+                "id": str(submission.id),
+                "referrer_name": referrer.name if referrer else "",
+                "referrer_phone": referrer.phone if referrer else "",
+                "referred_name": submission.referred_name,
+                "referred_phone": submission.referred_phone,
+                "workflow_stage": stage,
+                "workflow_stage_label": stage_label,
+                "progress_label": progress_label,
+                "active_hours_label": f"{float(active_hours):,.1f}h",
+                "required_hours_label": f"{float(required_hours):,.1f}h",
+                "reward_amount_label": reward_amount_label,
+                "reward_status_label": reward_status_label,
+                "reward_state": reward_state,
+                "joined_staff_name": joined_staff.name if joined_staff else "",
+                "created_at": _format_datetime(submission.created_at),
+                "program_label": "Active at submit" if submission.program_enabled_at_submit else "Submitted while paused",
+            }
+        )
+
+    summary["pending_total_label"] = _format_currency(pending_total)
+    return {
+        "today_label": timezone.localdate().strftime("%A, %d %b %Y"),
+        "search_query": search_query,
+        "stage_filter": stage_filter,
+        "reward_filter": reward_filter,
+        "summary": summary,
+        "rows": rows,
+    }
+
+
 def build_staff_profile_payload(request, staff):
     company_profile = get_company_profile()
     sync_referral_rewards(company_profile)

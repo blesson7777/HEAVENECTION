@@ -1,0 +1,144 @@
+{% extends "admin_base.html" %}
+
+{% block admin_content %}
+<div class="hc-referral-shell">
+    <section class="hc-surface-card">
+        <div class="hc-referral-hero">
+            <div>
+                <span class="hc-referral-tag">Referral Monitoring</span>
+                <h3 class="mt-2 mb-1">Track referral progress across the full team.</h3>
+                <p class="text-muted mb-0">See who referred, who joined, and when rewards are ready to pay.</p>
+            </div>
+            <div class="hc-referral-hero-meta">
+                <span class="hc-sync-pill"><i class="bi bi-calendar2-week"></i>{{ today_label }}</span>
+                <span class="hc-sync-pill"><i class="bi bi-gift"></i>{{ summary.pending_total_label }} pending rewards</span>
+            </div>
+        </div>
+        <div class="hc-referral-summary-grid mt-4">
+            <article class="hc-referral-summary-card">
+                <span>Total Referrals</span>
+                <strong>{{ summary.total }}</strong>
+                <small>Submitted by staff so far.</small>
+            </article>
+            <article class="hc-referral-summary-card">
+                <span>Not Joined</span>
+                <strong>{{ summary.not_joined }}</strong>
+                <small>Waiting for the referred member.</small>
+            </article>
+            <article class="hc-referral-summary-card">
+                <span>Joined</span>
+                <strong>{{ summary.joined }}</strong>
+                <small>Joined but not started working.</small>
+            </article>
+            <article class="hc-referral-summary-card">
+                <span>Started Working</span>
+                <strong>{{ summary.started_working }}</strong>
+                <small>Work hours are building now.</small>
+            </article>
+            <article class="hc-referral-summary-card">
+                <span>Completed</span>
+                <strong>{{ summary.completed }}</strong>
+                <small>Reached the required hours.</small>
+            </article>
+            <article class="hc-referral-summary-card">
+                <span>Pending Rewards</span>
+                <strong>{{ summary.pending_rewards }}</strong>
+                <small>Ready for payout.</small>
+            </article>
+            <article class="hc-referral-summary-card">
+                <span>Paid Rewards</span>
+                <strong>{{ summary.paid_rewards }}</strong>
+                <small>Already settled.</small>
+            </article>
+            <article class="hc-referral-summary-card hc-referral-summary-card-contrast">
+                <span>Program Rules</span>
+                <strong>{{ summary.required_hours_label }}</strong>
+                <small>Reward {{ summary.reward_amount_label }}</small>
+            </article>
+        </div>
+    </section>
+
+    <section class="hc-surface-card">
+        <form method="get" class="hc-referral-toolbar">
+            <div class="hc-search-box mb-0">
+                <i class="bi bi-search"></i>
+                <input type="text" name="q" value="{{ search_query }}" placeholder="Search by staff, referred name, or phone number">
+            </div>
+            <div class="hc-referral-toolbar-actions">
+                <div class="hc-referral-filter">
+                    <label class="form-label">Stage</label>
+                    <select class="form-select" name="stage">
+                        <option value="all" {% if stage_filter == "all" %}selected{% endif %}>All stages</option>
+                        <option value="not_joined" {% if stage_filter == "not_joined" %}selected{% endif %}>Not joined</option>
+                        <option value="joined" {% if stage_filter == "joined" %}selected{% endif %}>Joined</option>
+                        <option value="started_working" {% if stage_filter == "started_working" %}selected{% endif %}>Started working</option>
+                        <option value="completed" {% if stage_filter == "completed" %}selected{% endif %}>Completed</option>
+                    </select>
+                </div>
+                <div class="hc-referral-filter">
+                    <label class="form-label">Reward</label>
+                    <select class="form-select" name="reward">
+                        <option value="all" {% if reward_filter == "all" %}selected{% endif %}>All rewards</option>
+                        <option value="pending" {% if reward_filter == "pending" %}selected{% endif %}>Pending rewards</option>
+                        <option value="paid" {% if reward_filter == "paid" %}selected{% endif %}>Paid rewards</option>
+                        <option value="none" {% if reward_filter == "none" %}selected{% endif %}>No reward yet</option>
+                    </select>
+                </div>
+                <div class="d-flex gap-2 align-items-end">
+                    <button type="submit" class="btn btn-primary">Apply</button>
+                    <a href="{% url 'referral-monitoring-page' %}" class="btn btn-outline-primary">Clear</a>
+                </div>
+            </div>
+        </form>
+
+        <div class="table-responsive hc-referral-table-scroller mt-4">
+            <table class="table hc-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Referrer</th>
+                        <th>Referred Staff</th>
+                        <th>Stage</th>
+                        <th>Progress</th>
+                        <th>Reward</th>
+                        <th>Joined Staff</th>
+                        <th>Submitted</th>
+                        <th>Status Note</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    <tr>
+                        <td>
+                            <strong>{{ row.referrer_name }}</strong>
+                            <div class="text-muted small">{{ row.referrer_phone }}</div>
+                        </td>
+                        <td>
+                            <strong>{{ row.referred_name }}</strong>
+                            <div class="text-muted small">{{ row.referred_phone }}</div>
+                        </td>
+                        <td><span class="hc-status hc-status-{% if row.workflow_stage == 'completed' %}success{% elif row.workflow_stage == 'started_working' %}primary{% elif row.workflow_stage == 'joined' %}warning{% else %}muted{% endif %}">{{ row.workflow_stage_label }}</span></td>
+                        <td>
+                            <div>{{ row.progress_label }}</div>
+                            <div class="text-muted small">{{ row.active_hours_label }} active</div>
+                        </td>
+                        <td>
+                            {% if row.reward_amount_label != '--' %}
+                            <strong>{{ row.reward_amount_label }}</strong>
+                            <div class="text-muted small">{{ row.reward_status_label }}</div>
+                            {% else %}
+                            <span class="text-muted">{{ row.reward_status_label }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ row.joined_staff_name|default:"--" }}</td>
+                        <td>{{ row.created_at }}</td>
+                        <td><span class="hc-status hc-status-muted">{{ row.program_label }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="8" class="text-center py-4">No referral entries matched the current filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

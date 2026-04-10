@@ -29,6 +29,7 @@ urlpatterns = [
     path("recovery-leads/", views.recovery_leads_page, name="recovery-leads-page"),
     path("learning/", views.learning_page, name="learning-page"),
     path("work-review/", views.work_review_page, name="work-review-page"),
+    path("referrals/", views.referral_monitoring_page, name="referral-monitoring-page"),
     path("salary/", views.salary_page, name="salary-page"),
     path("salary/<uuid:staff_id>/", views.salary_detail_page, name="salary-detail-page"),
     path("salary-control/", views.salary_control_page, name="salary-control-page"),

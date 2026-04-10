@@ -1363,6 +1363,128 @@
     overflow-y: auto;
 }
 
+.hc-referral-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+}
+
+.hc-referral-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.hc-referral-tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    background: rgba(77, 92, 144, 0.12);
+    color: #415176;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.hc-referral-hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.hc-referral-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.9rem;
+}
+
+.hc-referral-summary-card {
+    padding: 1rem 1.05rem;
+    border-radius: 20px;
+    border: 1px solid #e1e9f8;
+    background: linear-gradient(150deg, #ffffff 0%, #f6faff 100%);
+}
+
+.hc-referral-summary-card span {
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #6a7a96;
+    font-weight: 800;
+}
+
+.hc-referral-summary-card strong {
+    display: block;
+    margin: 0.35rem 0 0.2rem;
+    font-size: 1.7rem;
+    line-height: 1;
+    font-weight: 800;
+    color: #1b2a47;
+}
+
+.hc-referral-summary-card small {
+    color: #61718d;
+    line-height: 1.45;
+}
+
+.hc-referral-summary-card-contrast {
+    background: linear-gradient(150deg, #f0f5ff 0%, #e6eeff 100%);
+    border-color: #cfd9f3;
+}
+
+.hc-referral-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.hc-referral-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: flex-end;
+    gap: 1rem;
+}
+
+.hc-referral-filter {
+    min-width: 200px;
+}
+
+.hc-referral-table-scroller {
+    max-height: 40rem;
+    overflow-y: auto;
+    border-radius: 18px;
+}
+
+.hc-referral-table-scroller thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f7f9fd;
+}
+
+@media (max-width: 1199.98px) {
+    .hc-referral-summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 767.98px) {
+    .hc-referral-summary-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .hc-referral-hero {
+        align-items: flex-start;
+    }
+}
+
 .hc-staff-profile-editor .form-label {
     margin-bottom: 0.35rem;
     font-size: 0.87rem;

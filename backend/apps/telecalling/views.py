@@ -86,6 +86,7 @@ from backend.apps.telecalling.services import (
     build_staff_salary_details_payload,
     build_salary_detail_payload,
     build_salary_page_payload,
+    build_referral_monitoring_payload,
     build_settings_payload,
     build_work_review_payload,
     build_staff_profile_payload,
@@ -364,6 +365,29 @@ def _fallback_work_review_payload():
             "flagged_day_total": 0,
         },
         "review_rows": review_rows,
+    }
+
+
+def _fallback_referral_monitoring_payload():
+    return {
+        "today_label": _fallback_today_label(),
+        "search_query": "",
+        "stage_filter": "all",
+        "reward_filter": "all",
+        "summary": {
+            "total": 0,
+            "not_joined": 0,
+            "joined": 0,
+            "started_working": 0,
+            "completed": 0,
+            "pending_rewards": 0,
+            "paid_rewards": 0,
+            "pending_total_label": "Rs. 0.00",
+            "program_enabled": False,
+            "required_hours_label": "0.0h",
+            "reward_amount_label": "Rs. 0.00",
+        },
+        "rows": [],
     }
 
 
@@ -1418,6 +1442,35 @@ def work_review_page(request):
         ),
     )
     return render(request, "admin_work_review.html", context)
+
+
+def referral_monitoring_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    search_query = request.GET.get("q", "").strip()
+    stage_filter = request.GET.get("stage", "all").strip().lower() or "all"
+    reward_filter = request.GET.get("reward", "all").strip().lower() or "all"
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="referrals",
+        page_title="Referral Monitoring",
+        page_heading="Referral Monitoring",
+        page_subtitle="Track who referred, who joined, and where rewards stand across the team.",
+        extra_context=_safe_admin_payload(
+            lambda: build_referral_monitoring_payload(
+                search_query=search_query,
+                stage_filter=stage_filter,
+                reward_filter=reward_filter,
+            ),
+            _fallback_referral_monitoring_payload,
+            label="referral-monitoring-page",
+            request=request,
+        ),
+    )
+    return render(request, "admin_referral_monitoring.html", context)
 
 
 @require_http_methods(["GET", "POST"])
