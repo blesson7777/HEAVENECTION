@@ -4748,8 +4748,8 @@ def build_staff_profile_payload(request, staff):
         company_profile=company_profile,
     )
     today, start, end = _today_range()
-    previous_month = _shift_month(today.replace(day=1), -1)
-    report_month_default = previous_month.strftime("%Y-%m")
+    current_month = today.replace(day=1)
+    report_month_default = current_month.strftime("%Y-%m")
     current_month_start, current_month_end = _month_range_for_reference(
         timezone.localdate(),
         end_at=timezone.localtime(timezone.now()),

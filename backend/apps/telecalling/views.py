@@ -1122,7 +1122,7 @@ def staff_profile_report_pdf(request, staff_id):
     month_value = request.GET.get("month", "").strip()
     month_date = _parse_month_value(month_value)
     if not month_date:
-        month_date = _shift_month(timezone.localdate().replace(day=1), -1)
+        month_date = timezone.localdate().replace(day=1)
     range_start, range_end = _month_range_for_reference(
         month_date,
         end_at=timezone.localtime(timezone.now()),
