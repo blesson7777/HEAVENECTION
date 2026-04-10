@@ -3197,6 +3197,7 @@ def _zero_talk_block_details_by_staff(
                             "calls": call_rows,
                             "call_count": len(call_rows),
                             "extra_calls": 0,
+                            "streak_note": "Part of a zero-only streak (10+ attempts reached)",
                         }
                     )
             zero_streak = []
