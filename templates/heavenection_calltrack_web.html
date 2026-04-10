@@ -5,91 +5,221 @@
 {% endblock %}
 
 {% block admin_content %}
-<div class="mf-db2-shell">
-    <section class="mf-db2-hero animate-on-scroll">
-        <div class="mf-db2-hero-main">
-            <div class="mf-db2-topline">
-                <span class="mf-db2-kicker">Heavenection CallTrack System</span>
-                <span class="mf-db2-date-pill"><i class="bi bi-calendar2-week"></i> {{ dashboard.today_label }}</span>
+<div class="hc-dashboard-shell">
+    <section class="hc-dashboard-hero animate-on-scroll">
+        <div class="hc-dashboard-hero-main">
+            <div class="hc-dashboard-hero-top">
+                <span class="hc-dashboard-tag">Heavenection Control Desk</span>
+                <span class="hc-dashboard-date"><i class="bi bi-calendar2-week"></i> {{ dashboard.today_label }}</span>
             </div>
-            <h1>Telecalling control room for faster follow-up and cleaner payouts.</h1>
-            <p>Review active staff, lead movement, call outcomes, and payout trends from one connected admin dashboard.</p>
+            <h1>Run the calling floor, payout flow, and lead progress from one admin cockpit.</h1>
+            <p>See live activity, track workload coverage, and review lead movement with a single, clean command view.</p>
 
-            <div class="mf-db2-snapshot-row">
-                <article class="mf-db2-snapshot-card">
-                    <span class="mf-db2-label">Team Active</span>
+            <div class="hc-dashboard-kpi-grid">
+                <article class="hc-dashboard-kpi-card">
+                    <span>Team Active</span>
                     <strong class="hc-animate-value" data-count="{{ dashboard.staff_active }}">{{ dashboard.staff_active }}</strong>
-                    <small>Live heartbeat received from active calling sessions.</small>
+                    <small>Live sessions connected right now.</small>
                 </article>
-                <article class="mf-db2-snapshot-card">
-                    <span class="mf-db2-label">Calls Today</span>
+                <article class="hc-dashboard-kpi-card">
+                    <span>Calls Today</span>
                     <strong class="hc-animate-value" data-count="{{ dashboard.calls_today }}">{{ dashboard.calls_today }}</strong>
-                    <small>Calls shorter than 5 seconds are excluded.</small>
+                    <small>Verified calls across all staff.</small>
                 </article>
-                <article class="mf-db2-snapshot-card">
-                    <span class="mf-db2-label">Conversion Rate</span>
+                <article class="hc-dashboard-kpi-card">
+                    <span>Conversion Rate</span>
                     <strong>{{ dashboard.conversion_rate }}</strong>
-                    <small>Follow up and converted outcomes across active team members.</small>
+                    <small>Follow-up and conversions combined.</small>
                 </article>
-                <article class="mf-db2-snapshot-card">
-                    <span class="mf-db2-label">Call Backs</span>
+                <article class="hc-dashboard-kpi-card">
+                    <span>Callbacks Due</span>
                     <strong class="hc-animate-value" data-count="{{ dashboard.callbacks }}">{{ dashboard.callbacks }}</strong>
-                    <small>Priority leads still waiting for another attempt.</small>
+                    <small>Priority return calls waiting.</small>
                 </article>
             </div>
 
-            <div class="mf-db2-command-row">
-                <a href="{% url 'staff-page' %}" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-people-fill"></i></span><span><strong>Manage Staff</strong><small>Create and update team accounts</small></span></a>
-                <a href="{% url 'leads-page' %}" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-person-lines-fill"></i></span><span><strong>Manage Leads</strong><small>Add, assign, and review</small></span></a>
-                <a href="{% url 'calls-page' %}" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-telephone-forward-fill"></i></span><span><strong>Call Details</strong><small>Review completed call history</small></span></a>
-                <a href="{% url 'working-hours-page' %}" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-clock-history"></i></span><span><strong>Working Hours</strong><small>Track sessions and time</small></span></a>
-                <a href="{% url 'salary-page' %}" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-wallet2"></i></span><span><strong>Salary Overview</strong><small>Review pay from tracked working hours</small></span></a>
-                <a href="{% url 'salary-control-page' %}" class="mf-db2-command-btn"><span class="mf-db2-command-icon"><i class="bi bi-sliders2-vertical"></i></span><span><strong>Salary Control</strong><small>Configure weekly, monthly, and hourly pay</small></span></a>
+            <div class="hc-dashboard-action-grid">
+                <a href="{% url 'staff-page' %}" class="hc-dashboard-action-card">
+                    <span class="hc-dashboard-action-icon"><i class="bi bi-people-fill"></i></span>
+                    <div>
+                        <strong>Manage Staff</strong>
+                        <small>Create and update team accounts.</small>
+                    </div>
+                    <i class="bi bi-arrow-up-right hc-dashboard-action-arrow"></i>
+                </a>
+                <a href="{% url 'leads-page' %}" class="hc-dashboard-action-card">
+                    <span class="hc-dashboard-action-icon"><i class="bi bi-person-lines-fill"></i></span>
+                    <div>
+                        <strong>Manage Leads</strong>
+                        <small>Assign, review, and rework queues.</small>
+                    </div>
+                    <i class="bi bi-arrow-up-right hc-dashboard-action-arrow"></i>
+                </a>
+                <a href="{% url 'followups-page' %}" class="hc-dashboard-action-card">
+                    <span class="hc-dashboard-action-icon"><i class="bi bi-list-check"></i></span>
+                    <div>
+                        <strong>Follow-Up Queue</strong>
+                        <small>View positive lead pipeline.</small>
+                    </div>
+                    <i class="bi bi-arrow-up-right hc-dashboard-action-arrow"></i>
+                </a>
+                <a href="{% url 'callbacks-page' %}" class="hc-dashboard-action-card">
+                    <span class="hc-dashboard-action-icon"><i class="bi bi-calendar2-check"></i></span>
+                    <div>
+                        <strong>Call Back Tracker</strong>
+                        <small>Schedule and prioritize return calls.</small>
+                    </div>
+                    <i class="bi bi-arrow-up-right hc-dashboard-action-arrow"></i>
+                </a>
+                <a href="{% url 'calls-page' %}" class="hc-dashboard-action-card">
+                    <span class="hc-dashboard-action-icon"><i class="bi bi-telephone-forward-fill"></i></span>
+                    <div>
+                        <strong>Call Details</strong>
+                        <small>Review completed call history.</small>
+                    </div>
+                    <i class="bi bi-arrow-up-right hc-dashboard-action-arrow"></i>
+                </a>
+                <a href="{% url 'working-hours-page' %}" class="hc-dashboard-action-card">
+                    <span class="hc-dashboard-action-icon"><i class="bi bi-clock-history"></i></span>
+                    <div>
+                        <strong>Working Hours</strong>
+                        <small>Track verified work time.</small>
+                    </div>
+                    <i class="bi bi-arrow-up-right hc-dashboard-action-arrow"></i>
+                </a>
+                <a href="{% url 'salary-page' %}" class="hc-dashboard-action-card">
+                    <span class="hc-dashboard-action-icon"><i class="bi bi-wallet2"></i></span>
+                    <div>
+                        <strong>Salary Overview</strong>
+                        <small>Monitor payouts and balances.</small>
+                    </div>
+                    <i class="bi bi-arrow-up-right hc-dashboard-action-arrow"></i>
+                </a>
+                <a href="{% url 'work-review-page' %}" class="hc-dashboard-action-card">
+                    <span class="hc-dashboard-action-icon"><i class="bi bi-shield-exclamation"></i></span>
+                    <div>
+                        <strong>Work Review</strong>
+                        <small>Check review flags quickly.</small>
+                    </div>
+                    <i class="bi bi-arrow-up-right hc-dashboard-action-arrow"></i>
+                </a>
             </div>
         </div>
 
-        <div class="mf-db2-signal-grid">
-            <article class="mf-db2-signal-card mf-db2-signal-card-primary">
-                <div class="mf-db2-ring-wrap">
-                    <div class="progress-circle green mf-db2-ring" style="--ratio: {{ dashboard.work_coverage }};"><span>{{ dashboard.work_coverage }}%</span></div>
+        <aside class="hc-dashboard-hero-side">
+            <article class="hc-dashboard-insight-card hc-dashboard-insight-primary">
+                <div class="hc-dashboard-ring">
+                    <div class="progress-circle green hc-dashboard-ring-graphic" style="--ratio: {{ dashboard.work_coverage }};">
+                        <span>{{ dashboard.work_coverage }}%</span>
+                    </div>
                 </div>
-                <div class="mf-db2-signal-copy">
-                    <strong>{{ dashboard.work_coverage }}% work coverage</strong>
-                    <small>Most assigned team members have an active session and recent heartbeat activity.</small>
+                <div>
+                    <strong>Work coverage</strong>
+                    <p>Active staff with verified live sessions right now.</p>
                 </div>
             </article>
-            <article class="mf-db2-signal-card">
-                <div class="mf-db2-signal-head"><span class="mf-db2-kicker">Short Calls Blocked</span><i class="bi bi-shield-check"></i></div>
-                <div class="mf-db2-signal-value">{{ dashboard.short_calls_blocked }}</div>
-                <small>Very short calls were prevented from affecting incentives.</small>
+            <article class="hc-dashboard-insight-card">
+                <div class="hc-dashboard-insight-head">
+                    <span>Active Hours</span>
+                    <i class="bi bi-stopwatch"></i>
+                </div>
+                <strong>{{ dashboard.active_hours }}</strong>
+                <p>Verified work time logged today.</p>
             </article>
-            <article class="mf-db2-signal-card">
-                <div class="mf-db2-signal-head"><span class="mf-db2-kicker">Salary Ready</span><i class="bi bi-wallet2"></i></div>
-                <div class="mf-db2-signal-value">{{ dashboard.salary_ready }}</div>
-                <small>Team members have enough data to generate salary drafts now.</small>
+            <article class="hc-dashboard-insight-card">
+                <div class="hc-dashboard-insight-head">
+                    <span>Short Calls Blocked</span>
+                    <i class="bi bi-shield-check"></i>
+                </div>
+                <strong>{{ dashboard.short_calls_blocked }}</strong>
+                <p>Very short calls ignored for incentives.</p>
             </article>
-        </div>
+            <article class="hc-dashboard-insight-card">
+                <div class="hc-dashboard-insight-head">
+                    <span>Salary Ready</span>
+                    <i class="bi bi-wallet2"></i>
+                </div>
+                <strong>{{ dashboard.salary_ready }}</strong>
+                <p>Staff with enough data for payout.</p>
+            </article>
+            <article class="hc-dashboard-insight-card hc-dashboard-insight-contrast">
+                <div class="hc-dashboard-insight-head">
+                    <span>Salary Estimate</span>
+                    <i class="bi bi-cash-coin"></i>
+                </div>
+                <strong>{{ dashboard.salary_estimate }}</strong>
+                <p>Running estimate for current cycle.</p>
+            </article>
+        </aside>
     </section>
 
-    <section class="mf-db2-stat-band animate-on-scroll">
-        <article class="mf-db2-stat-tile"><div class="mf-db2-stat-icon"><i class="bi bi-telephone-plus-fill"></i></div><div><span class="mf-db2-label">Total Leads</span><strong class="hc-animate-value" data-count="{{ dashboard.total_leads }}">{{ dashboard.total_leads }}</strong></div></article>
-        <article class="mf-db2-stat-tile"><div class="mf-db2-stat-icon"><i class="bi bi-telephone-x-fill"></i></div><div><span class="mf-db2-label">No Response</span><strong class="hc-animate-value" data-count="{{ dashboard.no_answer }}">{{ dashboard.no_answer }}</strong></div></article>
-        <article class="mf-db2-stat-tile"><div class="mf-db2-stat-icon"><i class="bi bi-hand-thumbs-up-fill"></i></div><div><span class="mf-db2-label">Follow Up</span><strong class="hc-animate-value" data-count="{{ dashboard.interested }}">{{ dashboard.interested }}</strong></div></article>
-        <article class="mf-db2-stat-tile"><div class="mf-db2-stat-icon"><i class="bi bi-award-fill"></i></div><div><span class="mf-db2-label">Converted</span><strong class="hc-animate-value" data-count="{{ dashboard.converted }}">{{ dashboard.converted }}</strong></div></article>
+    <section class="hc-dashboard-stat-band animate-on-scroll">
+        <article class="hc-dashboard-stat-card">
+            <span>Total Leads</span>
+            <strong class="hc-animate-value" data-count="{{ dashboard.total_leads }}">{{ dashboard.total_leads }}</strong>
+        </article>
+        <article class="hc-dashboard-stat-card">
+            <span>No Response</span>
+            <strong class="hc-animate-value" data-count="{{ dashboard.no_answer }}">{{ dashboard.no_answer }}</strong>
+        </article>
+        <article class="hc-dashboard-stat-card">
+            <span>Follow Up</span>
+            <strong class="hc-animate-value" data-count="{{ dashboard.interested }}">{{ dashboard.interested }}</strong>
+        </article>
+        <article class="hc-dashboard-stat-card">
+            <span>Converted</span>
+            <strong class="hc-animate-value" data-count="{{ dashboard.converted }}">{{ dashboard.converted }}</strong>
+        </article>
     </section>
 
     <section class="row g-4 animate-on-scroll">
         <div class="col-xl-8">
-            <div class="mf-db2-analytics-grid">
-                <div class="card mf-db2-chart-panel mf-db2-chart-panel-wide"><div class="card-body"><div class="mf-db2-panel-head"><div><span class="mf-db2-kicker">Calling Trend</span><h5>Daily call volume and conversions</h5></div></div><canvas id="callVolumeChart" height="250"></canvas></div></div>
-                <div class="card mf-db2-chart-panel"><div class="card-body"><div class="mf-db2-panel-head"><div><span class="mf-db2-kicker">Lead Pipeline</span><h5>Status distribution</h5></div></div><canvas id="leadPipelineChart" height="250"></canvas></div></div>
-                <div class="card mf-db2-chart-panel"><div class="card-body"><div class="mf-db2-panel-head"><div><span class="mf-db2-kicker">Time Value</span><h5>Active hours vs call minutes</h5></div></div><canvas id="activityBalanceChart" height="250"></canvas></div></div>
+            <div class="hc-dashboard-chart-grid">
+                <div class="card hc-dashboard-chart-card hc-dashboard-chart-card-wide">
+                    <div class="card-body">
+                        <div class="hc-dashboard-section-head">
+                            <div>
+                                <span class="hc-dashboard-section-kicker">Calling Trend</span>
+                                <h5>Daily call volume and conversions</h5>
+                            </div>
+                        </div>
+                        <canvas id="callVolumeChart" height="250"></canvas>
+                    </div>
+                </div>
+                <div class="card hc-dashboard-chart-card">
+                    <div class="card-body">
+                        <div class="hc-dashboard-section-head">
+                            <div>
+                                <span class="hc-dashboard-section-kicker">Lead Pipeline</span>
+                                <h5>Status distribution</h5>
+                            </div>
+                        </div>
+                        <canvas id="leadPipelineChart" height="250"></canvas>
+                    </div>
+                </div>
+                <div class="card hc-dashboard-chart-card">
+                    <div class="card-body">
+                        <div class="hc-dashboard-section-head">
+                            <div>
+                                <span class="hc-dashboard-section-kicker">Time Value</span>
+                                <h5>Active hours vs call minutes</h5>
+                            </div>
+                        </div>
+                        <canvas id="activityBalanceChart" height="250"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
         <div class="col-xl-4">
-            <div class="card mf-db2-feed-panel">
+            <div class="card hc-dashboard-side-card">
                 <div class="card-body">
-                    <div class="mf-db2-panel-head"><div><span class="mf-db2-kicker">Live Team</span><h5>Current activity</h5></div><a href="{% url 'staff-page' %}" class="btn btn-outline-primary btn-sm">Open Staff</a></div>
+                    <div class="hc-dashboard-section-head">
+                        <div>
+                            <span class="hc-dashboard-section-kicker">Live Team</span>
+                            <h5>Current activity</h5>
+                        </div>
+                        <a href="{% url 'staff-page' %}" class="btn btn-outline-primary btn-sm">Open Staff</a>
+                    </div>
                     <div class="hc-staff-stack">
                         {% for staff in live_staff %}
                         <article class="hc-staff-tile">
@@ -106,8 +236,11 @@
                 </div>
             </div>
             <div class="hc-surface-card mt-4">
-                <div class="mf-db2-panel-head mb-3">
-                    <div><span class="mf-db2-kicker">Salary Module</span><h5>Current payout preview</h5></div>
+                <div class="hc-dashboard-section-head mb-3">
+                    <div>
+                        <span class="hc-dashboard-section-kicker">Salary Module</span>
+                        <h5>Current payout preview</h5>
+                    </div>
                     <a href="{% url 'salary-page' %}" class="btn btn-outline-primary btn-sm">Open Salary Page</a>
                 </div>
                 <div class="table-responsive">
@@ -131,8 +264,11 @@
     </section>
 
     <section class="hc-surface-card animate-on-scroll mt-4">
-        <div class="mf-db2-panel-head mb-3">
-            <div><span class="mf-db2-kicker">Lead Snapshot</span><h5>Latest lead movement after calling activity</h5></div>
+        <div class="hc-dashboard-section-head mb-3">
+            <div>
+                <span class="hc-dashboard-section-kicker">Lead Snapshot</span>
+                <h5>Latest lead movement after calling activity</h5>
+            </div>
             <a href="{% url 'leads-page' %}" class="btn btn-primary btn-sm">Manage Leads</a>
         </div>
         <div class="table-responsive">
