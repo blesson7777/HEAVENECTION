@@ -4537,7 +4537,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
         zero_talk_staff_ids,
         range_start=range_start,
         range_end=range_end,
-        block_limit=3,
+        block_limit=1000,
     )
 
     for row in team_rows:
