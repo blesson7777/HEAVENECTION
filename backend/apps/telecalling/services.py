@@ -3135,13 +3135,21 @@ def _zero_talk_block_details_by_staff(
     range_start,
     range_end,
     block_limit=3,
+    include_unverified=True,
+    include_invalid_short=True,
 ):
     staff_ids = [staff_id for staff_id in (staff_ids or []) if staff_id]
     if not staff_ids:
         return {}
 
+    call_queryset = Call.objects.filter(staff_id__in=staff_ids, start_time__range=(range_start, range_end))
+    if not include_unverified:
+        call_queryset = call_queryset.filter(is_verified=True)
+    if not include_invalid_short:
+        call_queryset = call_queryset.exclude(status=Call.Status.INVALID_SHORT)
+
     calls = (
-        Call.objects.filter(staff_id__in=staff_ids, start_time__range=(range_start, range_end))
+        call_queryset
         .select_related("lead")
         .order_by("staff_id", "start_time", "end_time", "id")
     )
@@ -4672,6 +4680,8 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
         range_start=range_start,
         range_end=range_end,
         block_limit=1000,
+        include_unverified=True,
+        include_invalid_short=True,
     )
 
     for row in team_rows:
