@@ -322,6 +322,7 @@ def _fallback_work_hours_payload():
     ]
     return {
         "today_label": _fallback_today_label(),
+        "selected_date": timezone.localdate().isoformat(),
         "summary_rows": summary_rows,
         "session_rows": [],
     }
@@ -1906,6 +1907,7 @@ def working_hours_page(request):
     if not current_user:
         return redirect("web-login")
 
+    date_value = request.GET.get("date", "").strip()
     context = _admin_web_context(
         request,
         current_user,
@@ -1914,7 +1916,7 @@ def working_hours_page(request):
         page_heading="Working Hours",
         page_subtitle="Track work sessions, active time, and the current state of each staff member.",
         extra_context=_safe_admin_payload(
-            build_work_hours_payload,
+            lambda: build_work_hours_payload(date_value=date_value),
             _fallback_work_hours_payload,
             label="working-hours-page",
             request=request,

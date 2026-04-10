@@ -12,10 +12,22 @@
                 <span class="hc-sync-pill"><i class="bi bi-calendar2-week"></i> {{ today_label }}</span>
             </div>
 
-            <div class="hc-search-box">
-                <i class="bi bi-search"></i>
-                <input type="search" id="hoursSearchInput" placeholder="Search by staff name or phone number">
-            </div>
+            <form method="get" class="hc-work-review-toolbar mb-3">
+                <div class="hc-search-box mb-0">
+                    <i class="bi bi-search"></i>
+                    <input type="search" id="hoursSearchInput" placeholder="Search by staff name or phone number">
+                </div>
+                <div class="hc-work-review-toolbar-actions">
+                    <div class="hc-work-review-filter">
+                        <label class="form-label fw-semibold mb-2" for="workHoursDate">Date</label>
+                        <input type="date" class="form-control" id="workHoursDate" name="date" value="{{ selected_date }}">
+                    </div>
+                    <div class="d-flex gap-2 flex-wrap align-items-end">
+                        <button type="submit" class="btn btn-primary">Apply</button>
+                        <a href="{% url 'working-hours-page' %}" class="btn btn-outline-primary">Today</a>
+                    </div>
+                </div>
+            </form>
 
             <div class="table-responsive">
                 <table class="table hc-table align-middle mb-0">

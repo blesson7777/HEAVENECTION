@@ -585,6 +585,22 @@ def _month_option_rows(*, reference_date, selected_value="", months_back=6):
     return options
 
 
+def _parse_date_value(value):
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _day_range_for_date(target_date):
+    start = timezone.make_aware(timezone.datetime.combine(target_date, timezone.datetime.min.time()))
+    end = timezone.make_aware(timezone.datetime.combine(target_date, timezone.datetime.max.time()))
+    return start, end
+
+
 def _decimal_hours(total_seconds):
     return Decimal(str(total_seconds or 0)) / Decimal("3600")
 
@@ -5974,8 +5990,10 @@ def build_call_detail_payload(limit=200):
     return {"call_rows": call_rows}
 
 
-def build_work_hours_payload():
-    today, start, end = _today_range()
+def build_work_hours_payload(*, date_value=""):
+    selected_date = _parse_date_value(date_value) or timezone.localdate()
+    start, end = _day_range_for_date(selected_date)
+    today = selected_date
     active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
     open_sessions = _open_sessions_by_staff()
     live_call_staff_ids = _live_call_staff_ids()
@@ -6044,6 +6062,7 @@ def build_work_hours_payload():
 
     return {
         "today_label": today.strftime("%A, %d %b %Y"),
+        "selected_date": selected_date.isoformat(),
         "summary_rows": summary_rows,
         "session_rows": session_rows,
     }
