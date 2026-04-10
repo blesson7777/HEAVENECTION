@@ -6264,6 +6264,8 @@ def _work_gap_summary_map(*, start_at=None, end_at=None, staff_ids=None):
                 if gap_seconds > CALL_ACTIVITY_IDLE_BREAK_SECONDS:
                     buffer_seconds = min(gap_seconds, CONNECTED_CALL_COOLDOWN_SECONDS)
                     uncounted_seconds = max(0, gap_seconds - CONNECTED_CALL_COOLDOWN_SECONDS)
+                    if uncounted_seconds <= 0:
+                        continue
                     gap_total_seconds += gap_seconds
                     gap_buffer_seconds += buffer_seconds
                     gap_uncounted_seconds += uncounted_seconds
@@ -6295,14 +6297,14 @@ def _work_gap_summary_map(*, start_at=None, end_at=None, staff_ids=None):
                 "label": _gap_call_label(call, duration_seconds),
             }
 
-        visible_rows = gap_rows[:10]
+        visible_rows = gap_rows
         summary_map[staff_id] = {
             "gap_count": len(gap_rows),
             "gap_total_label": _format_duration(gap_total_seconds),
             "gap_uncounted_label": _format_duration(gap_uncounted_seconds),
             "gap_buffer_label": _format_duration(gap_buffer_seconds),
             "gap_rows": visible_rows,
-            "gap_extra_count": max(len(gap_rows) - len(visible_rows), 0),
+            "gap_extra_count": 0,
             "call_time_label": _format_duration(total_call_seconds),
             "first_call": _format_datetime(first_call),
             "last_call": _format_datetime(last_call),
