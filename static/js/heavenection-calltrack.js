@@ -1018,6 +1018,64 @@
         });
     }
 
+    function bindFollowupConversion() {
+        const config = window.heavenectionAdmin;
+        const modalNode = document.getElementById("followupConvertModal");
+        const confirmButton = document.getElementById("followupConvertConfirm");
+        if (!config?.leadsUrl || !modalNode || !confirmButton) {
+            return;
+        }
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalNode);
+        const titleNode = document.getElementById("followupConvertTitle");
+        const messageNode = document.getElementById("followupConvertMessage");
+        const feedback = document.getElementById("followupConvertFeedback");
+        let activeLeadId = "";
+
+        function showFeedback(message, isError) {
+            feedback.textContent = message;
+            feedback.classList.remove("d-none", "is-success", "is-error");
+            feedback.classList.add(isError ? "is-error" : "is-success");
+        }
+
+        function clearFeedback() {
+            feedback.textContent = "";
+            feedback.classList.add("d-none");
+            feedback.classList.remove("is-success", "is-error");
+        }
+
+        document.querySelectorAll(".js-mark-converted").forEach((button) => {
+            button.addEventListener("click", () => {
+                clearFeedback();
+                activeLeadId = button.dataset.leadId || "";
+                const leadName = button.dataset.leadName || "this lead";
+                titleNode.textContent = "Mark as Converted";
+                messageNode.textContent = `Confirm ${leadName} as converted? This removes it from the follow-up queue.`;
+                modal.show();
+            });
+        });
+
+        confirmButton.addEventListener("click", async () => {
+            if (!activeLeadId) {
+                return;
+            }
+            confirmButton.disabled = true;
+            clearFeedback();
+            try {
+                await requestJson(`${config.leadsUrl}${activeLeadId}/`, {
+                    method: "PATCH",
+                    body: JSON.stringify({ status: "converted" }),
+                });
+                showFeedback("Lead marked as converted.", false);
+                window.setTimeout(() => window.location.reload(), 600);
+            } catch (error) {
+                showFeedback(error.message, true);
+            } finally {
+                confirmButton.disabled = false;
+            }
+        });
+    }
+
     function bindSalaryControlCrud() {
         const config = window.heavenectionAdmin;
         const modalNode = document.getElementById("salaryControlModal");
@@ -1336,6 +1394,7 @@
     bindStaffCrud();
     bindLeadCrud();
     bindHandoverUpdates();
+    bindFollowupConversion();
     bindLeadImport();
     bindTrainingCrud();
     bindSalaryControlCrud();

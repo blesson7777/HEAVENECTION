@@ -5431,6 +5431,18 @@ def build_followup_payload():
 
     return {
         "followup_rows": followup_rows,
+        "followup_history_rows": [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "phone": row["phone"],
+                "status_label": row["status_label"],
+                "handover_status_label": row["handover_status_label"],
+                "assigned_to": row["assigned_to"],
+                "updated_at": row["updated_at"],
+            }
+            for row in followup_rows[:10]
+        ],
         "staff_options": [
             {"id": str(staff.id), "name": staff.name}
             for staff in _staff_queryset().filter(is_active=True)
