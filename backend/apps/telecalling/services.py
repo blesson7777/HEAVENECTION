@@ -4898,11 +4898,7 @@ def build_staff_profile_payload(request, staff):
     ]
     recent_call_rows = []
     recent_call_groups = []
-    max_call_rows = 10
-    call_row_count = 0
     for call in recent_calls:
-        if call_row_count >= max_call_rows:
-            break
         local_start = timezone.localtime(call.start_time) if call.start_time else None
         date_key = local_start.date().isoformat() if local_start else "unknown"
         date_label = local_start.strftime("%d %b %Y") if local_start else "Unknown date"
@@ -4960,7 +4956,6 @@ def build_staff_profile_payload(request, staff):
             )
         recent_call_groups[-1]["rows"].append(row)
         recent_call_groups[-1]["call_count"] += 1
-        call_row_count += 1
     recent_session_rows = [
         {
             "id": str(session.id),
