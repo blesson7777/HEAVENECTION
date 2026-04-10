@@ -4649,16 +4649,8 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
     flagged_day_total = 0
 
     review_rows = []
-    zero_talk_staff_ids = []
-    for row in team_rows:
-        if int(row.get("zero_only_block_count") or 0) > 0:
-            try:
-                zero_talk_staff_ids.append(uuid.UUID(str(row["id"])))
-            except (TypeError, ValueError, AttributeError):
-                continue
-
     zero_talk_blocks = _zero_talk_block_details_by_staff(
-        zero_talk_staff_ids,
+        staff_ids,
         range_start=range_start,
         range_end=range_end,
         block_limit=1000,
