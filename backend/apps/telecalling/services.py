@@ -6242,6 +6242,12 @@ def _work_gap_summary_map(*, start_at=None, end_at=None, staff_ids=None):
         first_call = None
         last_call = None
         previous_end = None
+        previous_call_info = None
+
+        def _gap_call_label(call_record, duration_value):
+            if duration_value and duration_value > 0:
+                return "Connected call"
+            return "Zero-second attempt"
 
         for call in calls:
             start_time, end_time, duration_seconds = _call_activity_window(call)
@@ -6261,6 +6267,8 @@ def _work_gap_summary_map(*, start_at=None, end_at=None, staff_ids=None):
                     gap_total_seconds += gap_seconds
                     gap_buffer_seconds += buffer_seconds
                     gap_uncounted_seconds += uncounted_seconds
+                    previous_label = previous_call_info.get("label") if previous_call_info else "Previous call"
+                    current_label = _gap_call_label(call, duration_seconds)
                     gap_rows.append(
                         {
                             "start_time": _format_datetime(previous_end),
@@ -6268,10 +6276,24 @@ def _work_gap_summary_map(*, start_at=None, end_at=None, staff_ids=None):
                             "gap_label": _format_duration(gap_seconds),
                             "uncounted_label": _format_duration(uncounted_seconds),
                             "buffer_label": _format_duration(buffer_seconds),
+                            "previous_call_label": previous_label,
+                            "previous_call_time": _format_datetime(previous_call_info.get("start_time")) if previous_call_info else "--",
+                            "previous_call_duration": _format_duration(previous_call_info.get("duration_seconds")) if previous_call_info else "--",
+                            "previous_call_status": previous_call_info.get("status_label") if previous_call_info else "--",
+                            "current_call_label": current_label,
+                            "current_call_time": _format_datetime(call.start_time),
+                            "current_call_duration": _format_duration(call.duration_seconds),
+                            "current_call_status": call.get_status_display(),
                         }
                     )
 
             previous_end = end_time
+            previous_call_info = {
+                "start_time": call.start_time,
+                "duration_seconds": call.duration_seconds,
+                "status_label": call.get_status_display(),
+                "label": _gap_call_label(call, duration_seconds),
+            }
 
         visible_rows = gap_rows[:10]
         summary_map[staff_id] = {

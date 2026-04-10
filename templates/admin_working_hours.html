@@ -79,6 +79,10 @@
                                         </div>
                                         <small>Gap {{ gap.gap_label }} · Counted {{ gap.buffer_label }} · Uncounted {{ gap.uncounted_label }}</small>
                                         <div class="hc-work-review-day-meta">
+                                            <span>Previous: {{ gap.previous_call_label }} · {{ gap.previous_call_time }} · {{ gap.previous_call_duration }} · {{ gap.previous_call_status }}</span>
+                                            <span>Next: {{ gap.current_call_label }} · {{ gap.current_call_time }} · {{ gap.current_call_duration }} · {{ gap.current_call_status }}</span>
+                                        </div>
+                                        <div class="hc-work-review-day-meta">
                                             <span>Uncounted time starts after 90 seconds of idle gap.</span>
                                         </div>
                                     </div>
