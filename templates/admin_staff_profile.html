@@ -157,8 +157,8 @@
 <section class="row g-4 hc-staff-profile-layout align-items-start">
     <div class="col-xl-4">
         <div class="hc-staff-profile-side-stack">
-        <div class="hc-surface-card hc-staff-profile-primary">
-            <div class="d-flex align-items-start justify-content-between gap-3 mb-4">
+        <div class="hc-surface-card hc-staff-profile-primary hc-staff-profile-snapshot">
+            <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
                 <div>
                     <span class="mf-db2-kicker">Live Snapshot</span>
                     <h4 class="mb-1">{{ staff_member.name }}</h4>
@@ -169,30 +169,30 @@
                 </span>
             </div>
 
-            <div class="row g-3 mb-4">
+            <div class="row g-2 mb-3">
                 <div class="col-6">
-                    <div class="hc-summary-card h-100">
+                    <div class="hc-summary-card h-100 hc-staff-snapshot-card">
                         <span class="mf-db2-kicker">Queue Target</span>
                         <h3 class="mb-1">{{ summary.queue_target }}</h3>
                         <p class="mb-0 text-muted">Leads kept ready for this staff.</p>
                     </div>
                 </div>
                 <div class="col-6">
-                    <div class="hc-summary-card h-100">
+                    <div class="hc-summary-card h-100 hc-staff-snapshot-card">
                         <span class="mf-db2-kicker">Hourly Rate</span>
                         <h3 class="mb-1">{{ summary.hourly_rate }}</h3>
                         <p class="mb-0 text-muted">Base earning for active work time.</p>
                     </div>
                 </div>
                 <div class="col-6">
-                    <div class="hc-summary-card h-100">
+                    <div class="hc-summary-card h-100 hc-staff-snapshot-card">
                         <span class="mf-db2-kicker">Call Rate</span>
                         <h3 class="mb-1">{{ summary.call_rate }}</h3>
                         <p class="mb-0 text-muted">Extra amount added for call-based pay.</p>
                     </div>
                 </div>
                 <div class="col-6">
-                    <div class="hc-summary-card h-100">
+                    <div class="hc-summary-card h-100 hc-staff-snapshot-card">
                         <span class="mf-db2-kicker">No Response Today</span>
                         <h3 class="mb-1">{{ summary.no_answer_today }}</h3>
                         <p class="mb-0 text-muted">Calls that did not connect today.</p>
