@@ -3058,7 +3058,6 @@ def _zero_talk_block_details_by_staff(
     range_start,
     range_end,
     block_limit=3,
-    call_limit=10,
 ):
     staff_ids = [staff_id for staff_id in (staff_ids or []) if staff_id]
     if not staff_ids:
@@ -3092,7 +3091,7 @@ def _zero_talk_block_details_by_staff(
             block_seconds = max(0, int((block_end - block_start).total_seconds())) if block_start and block_end else 0
             zero_seconds_in_block = sum(1 for call in block_calls if (call.duration_seconds or 0) <= 0)
             call_rows = []
-            for call in block_calls[:call_limit]:
+            for call in block_calls:
                 call_rows.append(
                     {
                         "lead_name": call.lead.name,
@@ -3112,7 +3111,7 @@ def _zero_talk_block_details_by_staff(
                     "duration_label": _format_duration(block_seconds),
                     "calls": call_rows,
                     "call_count": len(call_rows),
-                    "extra_calls": max(len(block_calls) - len(call_rows), 0),
+                    "extra_calls": 0,
                 }
             )
 
@@ -4539,7 +4538,6 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
         range_start=range_start,
         range_end=range_end,
         block_limit=3,
-        call_limit=10,
     )
 
     for row in team_rows:
