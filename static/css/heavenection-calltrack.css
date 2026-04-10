@@ -972,8 +972,8 @@
 }
 
 .hc-staff-profile-hero {
-    margin-bottom: 1rem;
-    padding: 1.4rem 1.45rem;
+    margin-bottom: 0.85rem;
+    padding: 1rem 1.05rem;
     background:
         radial-gradient(circle at top right, rgba(123, 141, 202, 0.18), transparent 30%),
         linear-gradient(145deg, #ffffff 0%, #f5f8ff 100%);
@@ -989,55 +989,55 @@
 .hc-staff-profile-persona {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.85rem;
 }
 
 .hc-staff-profile-avatar {
-    width: 72px;
-    height: 72px;
-    border-radius: 24px;
+    width: 60px;
+    height: 60px;
+    border-radius: 20px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg, #4d5c90, #8294d1);
     color: #fff;
-    font-size: 1.45rem;
+    font-size: 1.2rem;
     font-weight: 800;
-    box-shadow: 0 18px 26px rgba(77, 92, 144, 0.22);
+    box-shadow: 0 14px 22px rgba(77, 92, 144, 0.2);
     flex: 0 0 auto;
 }
 
 .hc-staff-profile-persona-copy h3 {
-    margin: 0.3rem 0 0.35rem;
+    margin: 0.15rem 0 0.25rem;
     color: #1f2d4f;
-    font-size: 1.9rem;
+    font-size: 1.6rem;
     font-weight: 800;
 }
 
 .hc-staff-profile-persona-copy p {
     margin: 0;
     color: #647490;
-    font-size: 0.98rem;
+    font-size: 0.92rem;
 }
 
 .hc-staff-profile-badges {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.55rem;
-    margin-top: 0.85rem;
+    gap: 0.45rem;
+    margin-top: 0.55rem;
 }
 
 .hc-staff-profile-note {
-    max-width: 320px;
+    max-width: 280px;
     display: flex;
     align-items: flex-start;
     gap: 0.8rem;
-    padding: 1rem 1.05rem;
+    padding: 0.85rem 0.9rem;
     border-radius: 18px;
     background: rgba(77, 92, 144, 0.08);
     color: #53637f;
-    font-size: 0.92rem;
-    line-height: 1.6;
+    font-size: 0.86rem;
+    line-height: 1.5;
 }
 
 .hc-staff-profile-note i {
@@ -1049,26 +1049,29 @@
 .hc-staff-profile-stat-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1rem;
-    margin-top: 1.25rem;
+    gap: 0.8rem;
+    margin-top: 0.9rem;
 }
 
 .hc-staff-profile-stat-card {
     min-height: 100%;
+    padding: 0.95rem 1rem;
 }
 
 .hc-staff-profile-stat-card h3 {
-    margin-bottom: 0.3rem;
+    margin-bottom: 0.2rem;
+    font-size: 1.55rem;
 }
 
 .hc-staff-profile-layout {
-    margin-top: 0.2rem;
+    margin-top: 0;
+    align-items: flex-start;
 }
 
 .hc-staff-profile-side-stack {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.8rem;
 }
 
 .hc-staff-profile-primary,
@@ -1076,6 +1079,7 @@
 .hc-staff-profile-referrals,
 .hc-staff-profile-sessions {
     overflow: hidden;
+    padding: 1rem 1.05rem;
 }
 
 .hc-staff-profile-review {
@@ -1093,11 +1097,11 @@
 .hc-staff-profile-doc-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1rem;
+    gap: 0.85rem;
 }
 
 .hc-staff-profile-editor {
-    padding-bottom: 1.15rem;
+    padding-bottom: 1rem;
 }
 
 .hc-staff-profile-form-section + .hc-staff-profile-form-section {
@@ -1107,13 +1111,13 @@
 }
 
 .hc-staff-profile-form-head {
-    margin-bottom: 1rem;
+    margin-bottom: 0.8rem;
 }
 
 .hc-staff-profile-form-head h6 {
-    margin: 0.3rem 0 0;
+    margin: 0.22rem 0 0;
     color: #203054;
-    font-size: 1rem;
+    font-size: 0.92rem;
     font-weight: 800;
 }
 
@@ -1127,21 +1131,36 @@
     justify-content: space-between;
     gap: 1rem;
     margin-bottom: 0.9rem;
+    flex-wrap: wrap;
 }
 
 .hc-staff-call-log-note {
     color: #667792;
-    font-size: 0.9rem;
+    font-size: 0.86rem;
     line-height: 1.5;
 }
 
+.hc-staff-call-log-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.65rem;
+    flex-wrap: wrap;
+    margin-left: auto;
+}
+
+.hc-staff-call-log-date-filter {
+    width: 210px;
+    border-radius: 14px;
+}
+
 .hc-staff-call-log-search {
-    max-width: 280px;
+    width: 280px;
     border-radius: 14px;
 }
 
 .hc-staff-call-log-scroller {
-    max-height: 35rem;
+    max-height: 22rem;
     overflow-y: auto;
     border-radius: 18px;
 }
@@ -1151,6 +1170,69 @@
     top: 0;
     z-index: 1;
     background: #f7f9fd;
+}
+
+.hc-staff-call-log-group td {
+    background: #f4f7fd;
+    border-top: 1px solid #e2e9f7;
+    border-bottom: 1px solid #e2e9f7;
+}
+
+.hc-staff-call-log-group-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.12rem 0;
+}
+
+.hc-staff-call-log-group-row strong {
+    color: #203054;
+    font-size: 0.96rem;
+    font-weight: 800;
+}
+
+.hc-staff-call-log-group-row span,
+.hc-staff-call-log-group-row small {
+    color: #6a7b96;
+    font-weight: 700;
+}
+
+.hc-staff-profile-table-scroller {
+    max-height: 21rem;
+    overflow: auto;
+    border-radius: 18px;
+}
+
+.hc-staff-profile-table-scroller thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f7f9fd;
+}
+
+.hc-staff-profile-editor .form-label {
+    margin-bottom: 0.35rem;
+    font-size: 0.87rem;
+}
+
+.hc-staff-profile-editor .form-control,
+.hc-staff-profile-editor .form-select {
+    min-height: 42px;
+    border-radius: 14px;
+}
+
+.hc-profile-meta-grid {
+    gap: 0.75rem;
+}
+
+.hc-profile-meta-card {
+    padding: 0.8rem 0.85rem;
+    border-radius: 16px;
+}
+
+.hc-document-preview-image {
+    max-height: 260px;
 }
 
 .hc-staff-profile-watch-grid {
@@ -1620,7 +1702,14 @@
         align-items: stretch;
     }
 
+    .hc-staff-call-log-controls {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .hc-staff-call-log-date-filter,
     .hc-staff-call-log-search {
+        width: 100%;
         max-width: none;
     }
 

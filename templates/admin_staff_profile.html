@@ -31,6 +31,10 @@
     const callRows = Array.from(
       document.querySelectorAll('#staffCallActivityBody tr[data-search-text]')
     );
+    const callDateFilter = document.getElementById('staffCallActivityDateFilter');
+    const callGroupHeaders = Array.from(
+      document.querySelectorAll('#staffCallActivityBody tr[data-group-header]')
+    );
     const callEmptyState = document.getElementById('staffCallActivityEmpty');
     const reviewSearchInput = document.getElementById('staffReviewLeadSearch');
     const reviewRows = Array.from(
@@ -38,18 +42,29 @@
     );
     const reviewEmptyState = document.getElementById('staffReviewLeadEmpty');
 
-    if (callSearchInput && callRows.length) {
+    if ((callSearchInput || callDateFilter) && (callRows.length || callGroupHeaders.length)) {
       const applyCallSearch = () => {
-        const query = callSearchInput.value.trim().toLowerCase();
+        const query = callSearchInput ? callSearchInput.value.trim().toLowerCase() : '';
+        const selectedDate = callDateFilter ? callDateFilter.value : '';
         let visibleCount = 0;
+        const visibleGroups = new Map();
 
         callRows.forEach((row) => {
           const haystack = row.dataset.searchText || '';
-          const matches = !query || haystack.includes(query);
+          const rowDate = row.dataset.dateGroup || '';
+          const matchesQuery = !query || haystack.includes(query);
+          const matchesDate = !selectedDate || rowDate === selectedDate;
+          const matches = matchesQuery && matchesDate;
           row.classList.toggle('d-none', !matches);
           if (matches) {
             visibleCount += 1;
+            visibleGroups.set(rowDate, (visibleGroups.get(rowDate) || 0) + 1);
           }
+        });
+
+        callGroupHeaders.forEach((header) => {
+          const groupKey = header.dataset.groupHeader || '';
+          header.classList.toggle('d-none', (visibleGroups.get(groupKey) || 0) === 0);
         });
 
         if (callEmptyState) {
@@ -57,7 +72,12 @@
         }
       };
 
-      callSearchInput.addEventListener('input', applyCallSearch);
+      if (callSearchInput) {
+        callSearchInput.addEventListener('input', applyCallSearch);
+      }
+      if (callDateFilter) {
+        callDateFilter.addEventListener('change', applyCallSearch);
+      }
       applyCallSearch();
     }
 
@@ -134,7 +154,7 @@
     </div>
 </section>
 
-<section class="row g-4 hc-staff-profile-layout">
+<section class="row g-4 hc-staff-profile-layout align-items-start">
     <div class="col-xl-4">
         <div class="hc-staff-profile-side-stack">
         <div class="hc-surface-card hc-staff-profile-primary">
@@ -404,89 +424,113 @@
             <form method="post" action="{% url 'staff-profile-page' staff_member.id %}" enctype="multipart/form-data" novalidate>
                 {% csrf_token %}
                 <input type="hidden" name="staff_action" value="save_profile">
-                <div class="row g-3">
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="staffProfileName">Name</label>
-                        <input type="text" class="form-control{% if staff_errors.name %} is-invalid{% endif %}" id="staffProfileName" name="name" value="{{ staff_form_data.name }}" required>
-                        {% if staff_errors.name %}<div class="invalid-feedback">{{ staff_errors.name }}</div>{% endif %}
+                <div class="hc-staff-profile-form-section">
+                    <div class="hc-staff-profile-form-head">
+                        <span class="mf-db2-kicker">Account Details</span>
+                        <h6>Basic identity and login access</h6>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="staffProfilePhone">Phone Number</label>
-                        <input type="text" class="form-control{% if staff_errors.phone %} is-invalid{% endif %}" id="staffProfilePhone" name="phone" value="{{ staff_form_data.phone }}" required>
-                        {% if staff_errors.phone %}<div class="invalid-feedback">{{ staff_errors.phone }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="staffProfileEmail">Email</label>
-                        <input type="email" class="form-control{% if staff_errors.email %} is-invalid{% endif %}" id="staffProfileEmail" name="email" value="{{ staff_form_data.email }}">
-                        {% if staff_errors.email %}<div class="invalid-feedback">{{ staff_errors.email }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold" for="staffProfileHourlyRate">Hourly Rate</label>
-                        <input type="number" step="0.01" class="form-control{% if staff_errors.hourly_rate %} is-invalid{% endif %}" id="staffProfileHourlyRate" name="hourly_rate" value="{{ staff_form_data.hourly_rate }}">
-                        {% if staff_errors.hourly_rate %}<div class="invalid-feedback">{{ staff_errors.hourly_rate }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold" for="staffProfileCallRate">Call Rate</label>
-                        <input type="number" step="0.01" class="form-control{% if staff_errors.call_rate %} is-invalid{% endif %}" id="staffProfileCallRate" name="call_rate" value="{{ staff_form_data.call_rate }}">
-                        {% if staff_errors.call_rate %}<div class="invalid-feedback">{{ staff_errors.call_rate }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-4">
-                        <label class="form-label fw-semibold" for="staffProfileBonus">Bonus</label>
-                        <input type="number" step="0.01" class="form-control{% if staff_errors.bonus_per_conversion %} is-invalid{% endif %}" id="staffProfileBonus" name="bonus_per_conversion" value="{{ staff_form_data.bonus_per_conversion }}">
-                        {% if staff_errors.bonus_per_conversion %}<div class="invalid-feedback">{{ staff_errors.bonus_per_conversion }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-8">
-                        <label class="form-label fw-semibold" for="staffProfilePassword">Password</label>
-                        <input type="password" class="form-control{% if staff_errors.password %} is-invalid{% endif %}" id="staffProfilePassword" name="password" minlength="6" placeholder="Leave blank to keep the current password">
-                        {% if staff_errors.password %}<div class="invalid-feedback">{{ staff_errors.password }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-4 d-flex align-items-end">
-                        <div class="form-check mb-2">
-                            <input class="form-check-input" type="checkbox" id="staffProfileActive" name="is_active" {% if staff_form_data.is_active %}checked{% endif %}>
-                            <label class="form-check-label" for="staffProfileActive">Active account</label>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="staffProfileName">Name</label>
+                            <input type="text" class="form-control{% if staff_errors.name %} is-invalid{% endif %}" id="staffProfileName" name="name" value="{{ staff_form_data.name }}" required>
+                            {% if staff_errors.name %}<div class="invalid-feedback">{{ staff_errors.name }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="staffProfilePhone">Phone Number</label>
+                            <input type="text" class="form-control{% if staff_errors.phone %} is-invalid{% endif %}" id="staffProfilePhone" name="phone" value="{{ staff_form_data.phone }}" required>
+                            {% if staff_errors.phone %}<div class="invalid-feedback">{{ staff_errors.phone }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="staffProfileEmail">Email</label>
+                            <input type="email" class="form-control{% if staff_errors.email %} is-invalid{% endif %}" id="staffProfileEmail" name="email" value="{{ staff_form_data.email }}">
+                            {% if staff_errors.email %}<div class="invalid-feedback">{{ staff_errors.email }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="staffProfilePassword">Password</label>
+                            <input type="password" class="form-control{% if staff_errors.password %} is-invalid{% endif %}" id="staffProfilePassword" name="password" minlength="6" placeholder="Leave blank to keep the current password">
+                            {% if staff_errors.password %}<div class="invalid-feedback">{{ staff_errors.password }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-12">
+                            <div class="form-check mb-0">
+                                <input class="form-check-input" type="checkbox" id="staffProfileActive" name="is_active" {% if staff_form_data.is_active %}checked{% endif %}>
+                                <label class="form-check-label" for="staffProfileActive">Active account</label>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="staffProfileBankAccountName">Account Holder Name</label>
-                        <input type="text" class="form-control{% if staff_errors.bank_account_name %} is-invalid{% endif %}" id="staffProfileBankAccountName" name="bank_account_name" value="{{ staff_form_data.bank_account_name }}">
-                        {% if staff_errors.bank_account_name %}<div class="invalid-feedback">{{ staff_errors.bank_account_name }}</div>{% endif %}
+                </div>
+
+                <div class="hc-staff-profile-form-section">
+                    <div class="hc-staff-profile-form-head">
+                        <span class="mf-db2-kicker">Rates And Bank</span>
+                        <h6>Compensation details and payout account</h6>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="staffProfileBankName">Bank Name</label>
-                        <input type="text" class="form-control{% if staff_errors.bank_name %} is-invalid{% endif %}" id="staffProfileBankName" name="bank_name" value="{{ staff_form_data.bank_name }}">
-                        {% if staff_errors.bank_name %}<div class="invalid-feedback">{{ staff_errors.bank_name }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="staffProfileBankAccountNumber">Account Number</label>
-                        <input type="text" class="form-control{% if staff_errors.bank_account_number %} is-invalid{% endif %}" id="staffProfileBankAccountNumber" name="bank_account_number" value="{{ staff_form_data.bank_account_number }}">
-                        {% if staff_errors.bank_account_number %}<div class="invalid-feedback">{{ staff_errors.bank_account_number }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="staffProfileBankIfsc">IFSC Code</label>
-                        <input type="text" class="form-control{% if staff_errors.bank_ifsc_code %} is-invalid{% endif %}" id="staffProfileBankIfsc" name="bank_ifsc_code" value="{{ staff_form_data.bank_ifsc_code }}">
-                        {% if staff_errors.bank_ifsc_code %}<div class="invalid-feedback">{{ staff_errors.bank_ifsc_code }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="staffProfileAadharNumber">Aadhaar Number</label>
-                        <input type="text" class="form-control{% if staff_errors.aadhar_number %} is-invalid{% endif %}" id="staffProfileAadharNumber" name="aadhar_number" value="{{ staff_form_data.aadhar_number }}">
-                        {% if staff_errors.aadhar_number %}<div class="invalid-feedback">{{ staff_errors.aadhar_number }}</div>{% endif %}
-                    </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="staffProfileAadharPhoto">Aadhaar Photo</label>
-                        <input type="file" class="form-control{% if staff_errors.aadhar_photo %} is-invalid{% endif %}" id="staffProfileAadharPhoto" name="aadhar_photo" accept="image/*">
-                        {% if staff_errors.aadhar_photo %}<div class="invalid-feedback">{{ staff_errors.aadhar_photo }}</div>{% endif %}
-                        <div class="form-check mt-2">
-                            <input class="form-check-input" type="checkbox" id="staffProfileRemoveAadharPhoto" name="remove_aadhar_photo" {% if staff_form_data.remove_aadhar_photo %}checked{% endif %}>
-                            <label class="form-check-label" for="staffProfileRemoveAadharPhoto">Remove current Aadhaar photo</label>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="staffProfileHourlyRate">Hourly Rate</label>
+                            <input type="number" step="0.01" class="form-control{% if staff_errors.hourly_rate %} is-invalid{% endif %}" id="staffProfileHourlyRate" name="hourly_rate" value="{{ staff_form_data.hourly_rate }}">
+                            {% if staff_errors.hourly_rate %}<div class="invalid-feedback">{{ staff_errors.hourly_rate }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="staffProfileCallRate">Call Rate</label>
+                            <input type="number" step="0.01" class="form-control{% if staff_errors.call_rate %} is-invalid{% endif %}" id="staffProfileCallRate" name="call_rate" value="{{ staff_form_data.call_rate }}">
+                            {% if staff_errors.call_rate %}<div class="invalid-feedback">{{ staff_errors.call_rate }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold" for="staffProfileBonus">Bonus</label>
+                            <input type="number" step="0.01" class="form-control{% if staff_errors.bonus_per_conversion %} is-invalid{% endif %}" id="staffProfileBonus" name="bonus_per_conversion" value="{{ staff_form_data.bonus_per_conversion }}">
+                            {% if staff_errors.bonus_per_conversion %}<div class="invalid-feedback">{{ staff_errors.bonus_per_conversion }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="staffProfileBankAccountName">Account Holder Name</label>
+                            <input type="text" class="form-control{% if staff_errors.bank_account_name %} is-invalid{% endif %}" id="staffProfileBankAccountName" name="bank_account_name" value="{{ staff_form_data.bank_account_name }}">
+                            {% if staff_errors.bank_account_name %}<div class="invalid-feedback">{{ staff_errors.bank_account_name }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="staffProfileBankName">Bank Name</label>
+                            <input type="text" class="form-control{% if staff_errors.bank_name %} is-invalid{% endif %}" id="staffProfileBankName" name="bank_name" value="{{ staff_form_data.bank_name }}">
+                            {% if staff_errors.bank_name %}<div class="invalid-feedback">{{ staff_errors.bank_name }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="staffProfileBankAccountNumber">Account Number</label>
+                            <input type="text" class="form-control{% if staff_errors.bank_account_number %} is-invalid{% endif %}" id="staffProfileBankAccountNumber" name="bank_account_number" value="{{ staff_form_data.bank_account_number }}">
+                            {% if staff_errors.bank_account_number %}<div class="invalid-feedback">{{ staff_errors.bank_account_number }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="staffProfileBankIfsc">IFSC Code</label>
+                            <input type="text" class="form-control{% if staff_errors.bank_ifsc_code %} is-invalid{% endif %}" id="staffProfileBankIfsc" name="bank_ifsc_code" value="{{ staff_form_data.bank_ifsc_code }}">
+                            {% if staff_errors.bank_ifsc_code %}<div class="invalid-feedback">{{ staff_errors.bank_ifsc_code }}</div>{% endif %}
                         </div>
                     </div>
-                    <div class="col-md-6">
-                        <label class="form-label fw-semibold" for="staffProfilePassbookPhoto">Passbook Photo</label>
-                        <input type="file" class="form-control{% if staff_errors.passbook_photo %} is-invalid{% endif %}" id="staffProfilePassbookPhoto" name="passbook_photo" accept="image/*">
-                        {% if staff_errors.passbook_photo %}<div class="invalid-feedback">{{ staff_errors.passbook_photo }}</div>{% endif %}
-                        <div class="form-check mt-2">
-                            <input class="form-check-input" type="checkbox" id="staffProfileRemovePassbookPhoto" name="remove_passbook_photo" {% if staff_form_data.remove_passbook_photo %}checked{% endif %}>
-                            <label class="form-check-label" for="staffProfileRemovePassbookPhoto">Remove current passbook photo</label>
+                </div>
+
+                <div class="hc-staff-profile-form-section">
+                    <div class="hc-staff-profile-form-head">
+                        <span class="mf-db2-kicker">Identity Records</span>
+                        <h6>Aadhaar number and payout document uploads</h6>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="staffProfileAadharNumber">Aadhaar Number</label>
+                            <input type="text" class="form-control{% if staff_errors.aadhar_number %} is-invalid{% endif %}" id="staffProfileAadharNumber" name="aadhar_number" value="{{ staff_form_data.aadhar_number }}">
+                            {% if staff_errors.aadhar_number %}<div class="invalid-feedback">{{ staff_errors.aadhar_number }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="staffProfileAadharPhoto">Aadhaar Photo</label>
+                            <input type="file" class="form-control{% if staff_errors.aadhar_photo %} is-invalid{% endif %}" id="staffProfileAadharPhoto" name="aadhar_photo" accept="image/*">
+                            {% if staff_errors.aadhar_photo %}<div class="invalid-feedback">{{ staff_errors.aadhar_photo }}</div>{% endif %}
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="staffProfileRemoveAadharPhoto" name="remove_aadhar_photo" {% if staff_form_data.remove_aadhar_photo %}checked{% endif %}>
+                                <label class="form-check-label" for="staffProfileRemoveAadharPhoto">Remove current Aadhaar photo</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="staffProfilePassbookPhoto">Passbook Photo</label>
+                            <input type="file" class="form-control{% if staff_errors.passbook_photo %} is-invalid{% endif %}" id="staffProfilePassbookPhoto" name="passbook_photo" accept="image/*">
+                            {% if staff_errors.passbook_photo %}<div class="invalid-feedback">{{ staff_errors.passbook_photo }}</div>{% endif %}
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" id="staffProfileRemovePassbookPhoto" name="remove_passbook_photo" {% if staff_form_data.remove_passbook_photo %}checked{% endif %}>
+                                <label class="form-check-label" for="staffProfileRemovePassbookPhoto">Remove current passbook photo</label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -499,9 +543,9 @@
     </div>
 </section>
 
-<section class="row g-4 mt-1">
+<section class="row g-4 mt-1 align-items-start">
     <div class="col-xl-6">
-        <div class="hc-surface-card h-100 animate-on-scroll">
+        <div class="hc-surface-card animate-on-scroll">
             <div class="mf-db2-panel-head mb-3">
                 <div>
                     <span class="mf-db2-kicker">Assigned Leads</span>
@@ -539,7 +583,7 @@
     </div>
 
     <div class="col-xl-6">
-        <div class="hc-surface-card h-100 animate-on-scroll">
+        <div class="hc-surface-card animate-on-scroll">
             <div class="mf-db2-panel-head mb-3">
                 <div>
                     <span class="mf-db2-kicker">Call Activity</span>
@@ -548,15 +592,22 @@
             </div>
             <div class="hc-staff-call-log-toolbar">
                 <div class="hc-staff-call-log-note">
-                    Search by customer, phone number, time, duration, or result.
+                    Review call details day by day, or search by customer, phone number, time, duration, or result.
                 </div>
-                <input
-                    type="search"
-                    id="staffCallActivitySearch"
-                    class="form-control form-control-sm hc-staff-call-log-search"
-                    placeholder="Search call activity"
-                    autocomplete="off"
-                />
+                <div class="hc-staff-call-log-controls">
+                    <input
+                        type="date"
+                        id="staffCallActivityDateFilter"
+                        class="form-control form-control-sm hc-staff-call-log-date-filter"
+                    />
+                    <input
+                        type="search"
+                        id="staffCallActivitySearch"
+                        class="form-control form-control-sm hc-staff-call-log-search"
+                        placeholder="Search call activity"
+                        autocomplete="off"
+                    />
+                </div>
             </div>
             <div class="table-responsive hc-staff-call-log-scroller">
                 <table class="table hc-table align-middle mb-0">
@@ -569,16 +620,37 @@
                         </tr>
                     </thead>
                     <tbody id="staffCallActivityBody">
-                        {% for call in recent_call_rows %}
-                        <tr data-search-text="{{ call.lead_name|lower }} {{ call.lead_phone|lower }} {{ call.start_time|lower }} {{ call.duration_label|lower }} {{ call.status_label|lower }} {{ call.callback_schedule_label|lower }}">
+                        {% for group in recent_call_groups %}
+                        <tr class="hc-staff-call-log-group" data-group-header="{{ group.date_key }}">
+                            <td colspan="4">
+                                <div class="hc-staff-call-log-group-row">
+                                    <div>
+                                        <strong>{{ group.date_label }}</strong>
+                                        {% if group.day_label %}<span>{{ group.day_label }}</span>{% endif %}
+                                    </div>
+                                    <small>{{ group.call_count }} call{{ group.call_count|pluralize }}</small>
+                                </div>
+                            </td>
+                        </tr>
+                        {% for call in group.rows %}
+                        <tr data-search-text="{{ call.search_text }}" data-date-group="{{ group.date_key }}">
                             <td>
                                 <strong>{{ call.lead_name }}</strong>
                                 <div class="text-muted small">{{ call.lead_phone }}</div>
                             </td>
-                            <td>{{ call.start_time }}</td>
+                            <td>
+                                <strong>{{ call.start_clock_label }}</strong>
+                                <div class="text-muted small">{{ call.start_time }}</div>
+                            </td>
                             <td>{{ call.duration_label }}</td>
-                            <td>{{ call.status_label }}</td>
+                            <td>
+                                <div>{{ call.status_label }}</div>
+                                {% if call.callback_schedule_label %}
+                                <div class="text-muted small">{{ call.callback_schedule_label }}</div>
+                                {% endif %}
+                            </td>
                         </tr>
+                        {% endfor %}
                         {% empty %}
                         <tr><td colspan="4" class="text-center py-4">No recent calls recorded.</td></tr>
                         {% endfor %}
@@ -614,7 +686,7 @@
         <p class="mb-0">Referral rewards are currently disabled, but any saved entries will still appear here.</p>
     </div>
     {% endif %}
-    <div class="table-responsive">
+    <div class="table-responsive hc-staff-profile-table-scroller">
         <table class="table hc-table align-middle mb-0">
             <thead>
                 <tr>
@@ -660,7 +732,7 @@
             <h5>Work login history</h5>
         </div>
     </div>
-    <div class="table-responsive">
+    <div class="table-responsive hc-staff-profile-table-scroller">
         <table class="table hc-table align-middle mb-0">
             <thead>
                 <tr>

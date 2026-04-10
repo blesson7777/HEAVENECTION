@@ -4224,12 +4224,20 @@ def build_staff_profile_payload(request, staff):
         }
         for lead in assigned_leads
     ]
-    recent_call_rows = [
-        {
+    recent_call_rows = []
+    recent_call_groups = []
+    for call in recent_calls:
+        local_start = timezone.localtime(call.start_time) if call.start_time else None
+        date_key = local_start.date().isoformat() if local_start else "unknown"
+        date_label = local_start.strftime("%d %b %Y") if local_start else "Unknown date"
+        day_label = local_start.strftime("%A") if local_start else ""
+        start_clock_label = local_start.strftime("%I:%M %p").lstrip("0") if local_start else "--"
+        row = {
             "id": str(call.id),
             "lead_name": call.lead.name,
             "lead_phone": call.lead.phone,
             "start_time": _format_datetime(call.start_time),
+            "start_clock_label": start_clock_label,
             "end_time": _format_datetime(call.end_time),
             "duration_label": _format_duration(call.duration_seconds),
             "status": call.status,
@@ -4240,10 +4248,42 @@ def build_staff_profile_payload(request, staff):
                 call.callback_date,
                 call.callback_window,
             ),
+            "activity_date_key": date_key,
+            "activity_date_label": date_label,
+            "activity_day_label": day_label,
             "is_qualifying": call.is_qualifying,
+            "search_text": " ".join(
+                part.lower()
+                for part in (
+                    call.lead.name,
+                    call.lead.phone,
+                    _format_datetime(call.start_time),
+                    start_clock_label,
+                    _format_duration(call.duration_seconds),
+                    call.get_status_display(),
+                    _format_callback_schedule_label(
+                        call.callback_date,
+                        call.callback_window,
+                    ),
+                    date_label,
+                    day_label,
+                )
+                if part
+            ),
         }
-        for call in recent_calls
-    ]
+        recent_call_rows.append(row)
+        if not recent_call_groups or recent_call_groups[-1]["date_key"] != date_key:
+            recent_call_groups.append(
+                {
+                    "date_key": date_key,
+                    "date_label": date_label,
+                    "day_label": day_label,
+                    "call_count": 0,
+                    "rows": [],
+                }
+            )
+        recent_call_groups[-1]["rows"].append(row)
+        recent_call_groups[-1]["call_count"] += 1
     recent_session_rows = [
         {
             "id": str(session.id),
@@ -4319,6 +4359,7 @@ def build_staff_profile_payload(request, staff):
         "review_lead_rows": review_lead_rows,
         "assigned_lead_rows": assigned_lead_rows,
         "recent_call_rows": recent_call_rows,
+        "recent_call_groups": recent_call_groups,
         "recent_session_rows": recent_session_rows,
     }
 
