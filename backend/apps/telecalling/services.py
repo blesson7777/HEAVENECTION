@@ -316,20 +316,14 @@ def _split_call_activity_blocks(calls):
     return blocks
 
 
-def _call_activity_block_summary(calls, *, range_end=None):
-    total_seconds = 0
-    attempt_count = 0
-    suspicious_block_count = 0
-    zero_only_block_count = 0
-    suspicious_attempt_count = 0
-    zero_second_attempt_count = 0
-    real_call_attempt_count = 0
-
+def _call_activity_blocks_with_stats(calls):
+    blocks = []
     for block_calls, block_start, block_end in _split_call_activity_blocks(calls):
-        attempt_count += len(block_calls)
         real_call_activity_seconds = 0
         real_calls_in_block = 0
         zero_seconds_in_block = 0
+        real_call_segments = []
+
         for call in block_calls:
             activity_start, activity_end, duration_seconds = _call_activity_window(call)
             if not activity_start:
@@ -339,28 +333,81 @@ def _call_activity_block_summary(calls, *, range_end=None):
             if duration_seconds > 0:
                 real_calls_in_block += 1
                 real_call_activity_seconds += max(activity_span_seconds, duration_seconds)
+                real_call_segments.append((activity_start, activity_end))
             else:
                 zero_seconds_in_block += 1
 
-        zero_second_attempt_count += zero_seconds_in_block
-        real_call_attempt_count += real_calls_in_block
+        block_seconds = max(0, int((block_end - block_start).total_seconds())) if block_start and block_end else 0
+        blocks.append(
+            {
+                "calls": block_calls,
+                "block_start": block_start,
+                "block_end": block_end,
+                "block_seconds": block_seconds,
+                "real_call_activity_seconds": real_call_activity_seconds,
+                "real_calls_in_block": real_calls_in_block,
+                "zero_seconds_in_block": zero_seconds_in_block,
+                "real_call_segments": real_call_segments,
+            }
+        )
+    return blocks
 
-        if real_calls_in_block <= 0 and len(block_calls) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
-            zero_only_block_count += 1
+
+def _call_activity_block_summary(calls, *, range_end=None):
+    total_seconds = 0
+    attempt_count = 0
+    suspicious_block_count = 0
+    zero_only_block_count = 0
+    suspicious_attempt_count = 0
+    zero_second_attempt_count = 0
+    real_call_attempt_count = 0
+
+    blocks = _call_activity_blocks_with_stats(calls)
+    for block in blocks:
+        attempt_count += len(block["calls"])
+        zero_second_attempt_count += block["zero_seconds_in_block"]
+        real_call_attempt_count += block["real_calls_in_block"]
+
+    zero_streak = []
+    zero_streak_attempts = 0
+
+    def flush_zero_streak():
+        nonlocal total_seconds, suspicious_block_count, suspicious_attempt_count, zero_only_block_count
+        nonlocal zero_streak, zero_streak_attempts
+        if not zero_streak:
+            return
+        if zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+            zero_only_block_count += len(zero_streak)
+        else:
+            for block in zero_streak:
+                block_seconds = block["block_seconds"]
+                total_seconds += max(block_seconds, block["real_call_activity_seconds"])
+                total_seconds += _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
+        zero_streak = []
+        zero_streak_attempts = 0
+
+    for block in blocks:
+        if block["real_calls_in_block"] <= 0:
+            zero_streak.append(block)
+            zero_streak_attempts += len(block["calls"])
             continue
 
-        block_seconds = max(0, int((block_end - block_start).total_seconds()))
+        flush_zero_streak()
+
+        block_seconds = block["block_seconds"]
         if (
-            len(block_calls) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
-            and (real_calls_in_block * MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) < len(block_calls)
+            len(block["calls"]) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
+            and (block["real_calls_in_block"] * MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) < len(block["calls"])
         ):
             suspicious_block_count += 1
-            suspicious_attempt_count += len(block_calls)
-            total_seconds += real_call_activity_seconds
+            suspicious_attempt_count += len(block["calls"])
+            total_seconds += block["real_call_activity_seconds"]
             continue
 
-        total_seconds += max(block_seconds, real_call_activity_seconds)
-        total_seconds += _call_activity_cooldown_seconds(block_end, range_end=range_end)
+        total_seconds += max(block_seconds, block["real_call_activity_seconds"])
+        total_seconds += _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
+
+    flush_zero_streak()
 
     return {
         "active_seconds": total_seconds,
@@ -771,48 +818,60 @@ def _call_activity_block_analysis(calls, *, range_end=None):
         "segments": [],
     }
 
-    for block_calls, block_start, block_end in _split_call_activity_blocks(calls):
-        analysis["attempt_count"] += len(block_calls)
-        real_call_activity_seconds = 0
-        real_calls_in_block = 0
-        zero_seconds_in_block = 0
-        real_call_segments = []
+    blocks = _call_activity_blocks_with_stats(calls)
+    for block in blocks:
+        analysis["attempt_count"] += len(block["calls"])
+        analysis["zero_second_attempt_count"] += block["zero_seconds_in_block"]
+        analysis["real_call_count"] += block["real_calls_in_block"]
 
-        for call in block_calls:
-            activity_start, activity_end, duration_seconds = _call_activity_window(call)
-            if not activity_start:
-                continue
+    zero_streak = []
+    zero_streak_attempts = 0
 
-            activity_span_seconds = max(0, int((activity_end - activity_start).total_seconds()))
-            if duration_seconds > 0:
-                real_calls_in_block += 1
-                real_call_activity_seconds += max(activity_span_seconds, duration_seconds)
-                real_call_segments.append((activity_start, activity_end))
-            else:
-                zero_seconds_in_block += 1
+    def flush_zero_streak():
+        nonlocal zero_streak, zero_streak_attempts
+        if not zero_streak:
+            return
+        if zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+            analysis["zero_only_block_count"] += len(zero_streak)
+        else:
+            for block in zero_streak:
+                cooldown_seconds = _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
+                block_segment = (
+                    block["block_start"],
+                    block["block_end"] + timedelta(seconds=cooldown_seconds),
+                )
+                analysis["active_seconds"] += _segment_seconds(block_segment)
+                analysis["segments"].append(block_segment)
+        zero_streak = []
+        zero_streak_attempts = 0
 
-        analysis["zero_second_attempt_count"] += zero_seconds_in_block
-        analysis["real_call_count"] += real_calls_in_block
-
-        if real_calls_in_block <= 0 and len(block_calls) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
-            analysis["zero_only_block_count"] += 1
+    for block in blocks:
+        if block["real_calls_in_block"] <= 0:
+            zero_streak.append(block)
+            zero_streak_attempts += len(block["calls"])
             continue
 
-        block_seconds = max(0, int((block_end - block_start).total_seconds()))
+        flush_zero_streak()
+
         if (
-            len(block_calls) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
-            and (real_calls_in_block * MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) < len(block_calls)
+            len(block["calls"]) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
+            and (block["real_calls_in_block"] * MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) < len(block["calls"])
         ):
             analysis["suspicious_block_count"] += 1
-            analysis["suspicious_attempt_count"] += len(block_calls)
-            analysis["active_seconds"] += real_call_activity_seconds
-            analysis["segments"].extend(real_call_segments)
+            analysis["suspicious_attempt_count"] += len(block["calls"])
+            analysis["active_seconds"] += block["real_call_activity_seconds"]
+            analysis["segments"].extend(block["real_call_segments"])
             continue
 
-        cooldown_seconds = _call_activity_cooldown_seconds(block_end, range_end=range_end)
-        block_segment = (block_start, block_end + timedelta(seconds=cooldown_seconds))
+        cooldown_seconds = _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
+        block_segment = (
+            block["block_start"],
+            block["block_end"] + timedelta(seconds=cooldown_seconds),
+        )
         analysis["active_seconds"] += _segment_seconds(block_segment)
         analysis["segments"].append(block_segment)
+
+    flush_zero_streak()
 
     return analysis
 
@@ -3075,45 +3134,65 @@ def _zero_talk_block_details_by_staff(
     block_payload = {}
     for staff_id, staff_calls in calls_by_staff.items():
         zero_blocks = []
-        for block_calls, block_start, block_end in _split_call_activity_blocks(staff_calls):
-            real_calls_in_block = sum(1 for call in block_calls if (call.duration_seconds or 0) > 0)
-            if real_calls_in_block > 0 or len(block_calls) < MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+        blocks = _call_activity_blocks_with_stats(staff_calls)
+        zero_streak = []
+        zero_streak_attempts = 0
+
+        def flush_zero_streak():
+            nonlocal zero_blocks, zero_streak, zero_streak_attempts
+            if not zero_streak:
+                return
+            if zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+                for block in zero_streak:
+                    block_calls = block["calls"]
+                    block_start = block["block_start"]
+                    block_end = block["block_end"]
+                    local_start = timezone.localtime(block_start) if block_start else None
+                    local_end = timezone.localtime(block_end) if block_end else None
+                    date_label = local_start.strftime("%d %b %Y") if local_start else "Unknown date"
+                    time_range = (
+                        f"{local_start.strftime('%I:%M %p').lstrip('0')} - {local_end.strftime('%I:%M %p').lstrip('0')}"
+                        if local_start and local_end
+                        else "--"
+                    )
+                    block_seconds = block["block_seconds"]
+                    zero_seconds_in_block = block["zero_seconds_in_block"]
+                    call_rows = []
+                    for call in block_calls:
+                        call_rows.append(
+                            {
+                                "lead_name": call.lead.name,
+                                "lead_phone": call.lead.phone,
+                                "start_time": _format_datetime(call.start_time),
+                                "duration_label": _format_duration(call.duration_seconds),
+                                "status_label": call.get_status_display(),
+                            }
+                        )
+
+                    zero_blocks.append(
+                        {
+                            "date_label": date_label,
+                            "time_range": time_range,
+                            "attempt_count": len(block_calls),
+                            "zero_second_count": zero_seconds_in_block,
+                            "duration_label": _format_duration(block_seconds),
+                            "calls": call_rows,
+                            "call_count": len(call_rows),
+                            "extra_calls": 0,
+                        }
+                    )
+            zero_streak = []
+            zero_streak_attempts = 0
+
+        for block in blocks:
+            if block["real_calls_in_block"] <= 0:
+                zero_streak.append(block)
+                zero_streak_attempts += len(block["calls"])
                 continue
 
-            local_start = timezone.localtime(block_start) if block_start else None
-            local_end = timezone.localtime(block_end) if block_end else None
-            date_label = local_start.strftime("%d %b %Y") if local_start else "Unknown date"
-            time_range = (
-                f"{local_start.strftime('%I:%M %p').lstrip('0')} - {local_end.strftime('%I:%M %p').lstrip('0')}"
-                if local_start and local_end
-                else "--"
-            )
-            block_seconds = max(0, int((block_end - block_start).total_seconds())) if block_start and block_end else 0
-            zero_seconds_in_block = sum(1 for call in block_calls if (call.duration_seconds or 0) <= 0)
-            call_rows = []
-            for call in block_calls:
-                call_rows.append(
-                    {
-                        "lead_name": call.lead.name,
-                        "lead_phone": call.lead.phone,
-                        "start_time": _format_datetime(call.start_time),
-                        "duration_label": _format_duration(call.duration_seconds),
-                        "status_label": call.get_status_display(),
-                    }
-                )
+            flush_zero_streak()
 
-            zero_blocks.append(
-                {
-                    "date_label": date_label,
-                    "time_range": time_range,
-                    "attempt_count": len(block_calls),
-                    "zero_second_count": zero_seconds_in_block,
-                    "duration_label": _format_duration(block_seconds),
-                    "calls": call_rows,
-                    "call_count": len(call_rows),
-                    "extra_calls": 0,
-                }
-            )
+        flush_zero_streak()
 
         if zero_blocks:
             total_blocks = len(zero_blocks)
