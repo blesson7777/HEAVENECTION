@@ -149,6 +149,13 @@ class Lead(models.Model):
         CALL_BACK = "call_back", "Call Back"
         CONVERTED = "converted", "Converted"
 
+    class HandoverStatus(models.TextChoices):
+        NOT_SENT = "not_sent", "Not Sent"
+        SENT = "sent", "Sent to Client"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+        COMPLETED = "completed", "Completed"
+
     class CallbackWindow(models.TextChoices):
         NOON = "noon", "Noon"
         EVENING = "evening", "Evening"
@@ -166,6 +173,13 @@ class Lead(models.Model):
         related_name="assigned_leads",
     )
     notes = models.TextField(blank=True)
+    handover_status = models.CharField(
+        max_length=20,
+        choices=HandoverStatus.choices,
+        default=HandoverStatus.NOT_SENT,
+        db_index=True,
+    )
+    handover_updated_at = models.DateTimeField(null=True, blank=True)
     callback_window = models.CharField(
         max_length=20,
         choices=CallbackWindow.choices,

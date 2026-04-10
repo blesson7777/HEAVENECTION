@@ -826,6 +826,7 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
 class LeadSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.CharField(source="assigned_to.name", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
+    handover_status_label = serializers.CharField(source="get_handover_status_display", read_only=True)
     callback_window_label = serializers.CharField(
         source="get_callback_window_display",
         read_only=True,
@@ -841,6 +842,8 @@ class LeadSerializer(serializers.ModelSerializer):
             "phone",
             "status",
             "status_label",
+            "handover_status",
+            "handover_status_label",
             "callback_window",
             "callback_window_label",
             "callback_date",
@@ -881,6 +884,7 @@ class CreateLeadSerializer(serializers.ModelSerializer):
             "name",
             "phone",
             "status",
+            "handover_status",
             "callback_window",
             "callback_date",
             "assigned_to",
@@ -915,6 +919,7 @@ class UpdateLeadSerializer(serializers.ModelSerializer):
             "name",
             "phone",
             "status",
+            "handover_status",
             "callback_window",
             "callback_date",
             "assigned_to",
@@ -944,6 +949,12 @@ class UpdateLeadSerializer(serializers.ModelSerializer):
             attrs["callback_window"] = ""
             attrs["callback_date"] = None
         return attrs
+
+    def update(self, instance, validated_data):
+        new_handover_status = validated_data.get("handover_status")
+        if new_handover_status and new_handover_status != instance.handover_status:
+            validated_data["handover_updated_at"] = timezone.now()
+        return super().update(instance, validated_data)
 
 
 class LeadImportUploadSerializer(serializers.Serializer):

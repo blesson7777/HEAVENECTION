@@ -147,6 +147,15 @@ NOTES_COLUMN_ALIASES = {
     "comment",
     "comments",
 }
+HANDOVER_STATUS_COLUMN_ALIASES = {
+    "handover",
+    "handover status",
+    "handoverstate",
+    "handover status",
+    "client status",
+    "client handover",
+    "handoverstate",
+}
 ASSIGNED_STAFF_PHONE_COLUMN_ALIASES = {
     "assigned to phone",
     "assigned staff phone",
@@ -2381,6 +2390,22 @@ def _normalize_status_value(value):
     return status_map.get(normalized, "")
 
 
+def _normalize_handover_status_value(value):
+    normalized = _normalize_column_name(value)
+    handover_map = {
+        "": "",
+        "not sent": Lead.HandoverStatus.NOT_SENT,
+        "not_sent": Lead.HandoverStatus.NOT_SENT,
+        "pending": Lead.HandoverStatus.NOT_SENT,
+        "sent": Lead.HandoverStatus.SENT,
+        "sent to client": Lead.HandoverStatus.SENT,
+        "accepted": Lead.HandoverStatus.ACCEPTED,
+        "rejected": Lead.HandoverStatus.REJECTED,
+        "completed": Lead.HandoverStatus.COMPLETED,
+    }
+    return handover_map.get(normalized, "")
+
+
 def _normalize_callback_window_value(value):
     normalized = _normalize_column_name(value)
     callback_map = {
@@ -3527,6 +3552,7 @@ def _detect_followup_update_column_indexes(rows):
         "status": None,
         "callback_window": None,
         "notes": None,
+        "handover_status": None,
         "assigned_staff_phone": None,
         "assigned_staff_name": None,
     }
@@ -3542,6 +3568,8 @@ def _detect_followup_update_column_indexes(rows):
             indexes["callback_window"] = index
         if indexes["notes"] is None and value in NOTES_COLUMN_ALIASES:
             indexes["notes"] = index
+        if indexes["handover_status"] is None and value in HANDOVER_STATUS_COLUMN_ALIASES:
+            indexes["handover_status"] = index
         if indexes["assigned_staff_phone"] is None and value in ASSIGNED_STAFF_PHONE_COLUMN_ALIASES:
             indexes["assigned_staff_phone"] = index
         if indexes["assigned_staff_name"] is None and value in ASSIGNED_STAFF_NAME_COLUMN_ALIASES:
@@ -3554,12 +3582,13 @@ def _detect_followup_update_column_indexes(rows):
         indexes["status"],
         indexes["callback_window"],
         indexes["notes"],
+        indexes["handover_status"],
         indexes["assigned_staff_phone"],
         indexes["assigned_staff_name"],
     )
     if all(index is None for index in editable_columns):
         raise ValueError(
-            "Include at least one update column: status, callback window, notes, or assigned staff."
+            "Include at least one update column: status, handover status, callback window, notes, or assigned staff."
         )
 
     return indexes, rows[1:]
@@ -3628,6 +3657,17 @@ def update_followups_from_upload(uploaded_file):
 
         if indexes["notes"] is not None:
             payload["notes"] = _cell_value(row_values, indexes["notes"])
+
+        handover_value = _cell_value(row_values, indexes["handover_status"])
+        if indexes["handover_status"] is not None:
+            normalized_handover = _normalize_handover_status_value(handover_value)
+            if handover_value and not normalized_handover:
+                error_messages.append(
+                    f"Row {row_number}: unknown handover status '{handover_value}'."
+                )
+                continue
+            if normalized_handover:
+                payload["handover_status"] = normalized_handover
 
         assigned_staff_phone = _normalize_phone(
             _cell_value(row_values, indexes["assigned_staff_phone"])
@@ -5204,6 +5244,8 @@ def build_followup_payload():
                 "phone": lead.phone,
                 "status": lead.status,
                 "status_label": lead.get_status_display(),
+                "handover_status": lead.handover_status,
+                "handover_status_label": lead.get_handover_status_display(),
                 "callback_window": lead.callback_window,
                 "callback_window_label": lead.get_callback_window_display() if lead.callback_window else "",
                 "callback_date": lead.callback_date.isoformat() if lead.callback_date else "",
@@ -5245,6 +5287,7 @@ def build_followup_csv_response():
             "Name",
             "Phone",
             "Status",
+            "Handover Status",
             "Callback Date",
             "Callback Window",
             "Assigned Staff",
@@ -5262,6 +5305,7 @@ def build_followup_csv_response():
                 row["name"],
                 row["phone"],
                 row["status_label"],
+                row["handover_status_label"],
                 row["callback_date_label"],
                 row["callback_window_label"],
                 row["assigned_to"],
@@ -5288,6 +5332,7 @@ def build_followup_excel_response():
             "Name",
             "Phone",
             "Status",
+            "Handover Status",
             "Callback Date",
             "Callback Window",
             "Assigned Staff",
@@ -5305,6 +5350,7 @@ def build_followup_excel_response():
                 row["name"],
                 row["phone"],
                 row["status_label"],
+                row["handover_status_label"],
                 row["callback_date_label"],
                 row["callback_window_label"],
                 row["assigned_to"],

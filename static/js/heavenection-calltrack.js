@@ -750,6 +750,86 @@
         });
     }
 
+    function bindHandoverUpdates() {
+        const config = window.heavenectionAdmin;
+        const modalNode = document.getElementById("handoverModal");
+        if (!config?.leadsUrl || !modalNode) {
+            return;
+        }
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalNode);
+        const titleNode = document.getElementById("handoverModalTitle");
+        const form = document.getElementById("handoverForm");
+        const leadIdInput = document.getElementById("handoverLeadId");
+        const statusInput = document.getElementById("handoverStatus");
+        const feedback = document.getElementById("handoverFormFeedback");
+        const submitButton = document.getElementById("handoverSubmitButton");
+
+        function showFeedback(message, isError) {
+            if (!feedback) {
+                return;
+            }
+            feedback.textContent = message;
+            feedback.classList.remove("d-none", "is-success", "is-error");
+            feedback.classList.add(isError ? "is-error" : "is-success");
+        }
+
+        function clearFeedback() {
+            if (!feedback) {
+                return;
+            }
+            feedback.textContent = "";
+            feedback.classList.add("d-none");
+            feedback.classList.remove("is-success", "is-error");
+        }
+
+        document.querySelectorAll(".js-edit-handover").forEach((button) => {
+            button.addEventListener("click", () => {
+                clearFeedback();
+                if (leadIdInput) {
+                    leadIdInput.value = button.dataset.leadId || "";
+                }
+                if (statusInput) {
+                    statusInput.value = button.dataset.handoverStatus || "not_sent";
+                }
+                if (titleNode) {
+                    titleNode.textContent = `Update Handover - ${button.dataset.leadName || "Lead"}`;
+                }
+                modal.show();
+            });
+        });
+
+        if (form) {
+            form.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                clearFeedback();
+                if (!leadIdInput?.value) {
+                    showFeedback("Select a lead before saving.", true);
+                    return;
+                }
+                if (submitButton) {
+                    submitButton.disabled = true;
+                }
+                try {
+                    await requestJson(`${config.leadsUrl}${leadIdInput.value}/`, {
+                        method: "PATCH",
+                        body: JSON.stringify({
+                            handover_status: statusInput?.value || "not_sent",
+                        }),
+                    });
+                    showFeedback("Handover status updated.", false);
+                    window.setTimeout(() => window.location.reload(), 400);
+                } catch (error) {
+                    showFeedback(error.message, true);
+                } finally {
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                    }
+                }
+            });
+        }
+    }
+
     function bindLeadImport() {
         const config = window.heavenectionAdmin;
         const modalNode = document.getElementById("leadImportModal");
@@ -1255,6 +1335,7 @@
     renderCharts();
     bindStaffCrud();
     bindLeadCrud();
+    bindHandoverUpdates();
     bindLeadImport();
     bindTrainingCrud();
     bindSalaryControlCrud();

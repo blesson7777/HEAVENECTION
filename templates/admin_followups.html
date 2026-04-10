@@ -55,6 +55,7 @@
                 <tr>
                     <th>Lead</th>
                     <th>Phone</th>
+                    <th>Handover</th>
                     <th>Staff</th>
                     <th>Last Contact</th>
                     <th>Updated</th>
@@ -70,6 +71,9 @@
                     </td>
                     <td>{{ lead.phone }}</td>
                     <td>
+                        <span class="hc-status hc-status-primary mb-1">{{ lead.handover_status_label }}</span>
+                    </td>
+                    <td>
                         <span class="hc-status hc-status-success mb-1">{{ lead.status_label }}</span>
                         <div class="mt-1">{{ lead.assigned_to }}</div>
                         {% if lead.assigned_to_phone %}
@@ -80,6 +84,13 @@
                     <td>{{ lead.updated_at }}</td>
                     <td>
                         <div class="d-flex gap-2 flex-wrap">
+                            <button
+                                type="button"
+                                class="btn btn-outline-secondary btn-sm js-edit-handover"
+                                data-lead-id="{{ lead.id }}"
+                                data-lead-name="{{ lead.name }}"
+                                data-handover-status="{{ lead.handover_status }}"
+                            >Handover</button>
                             <button
                                 type="button"
                                 class="btn btn-outline-primary btn-sm js-edit-lead"
@@ -96,7 +107,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="6" class="text-center py-4">No positive follow-up leads are ready right now.</td></tr>
+                <tr><td colspan="7" class="text-center py-4">No positive follow-up leads are ready right now.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -125,11 +136,45 @@
                         </div>
                     </div>
                     <div class="alert alert-light border mb-0">
-                        Supported update columns: <strong>Status</strong>, <strong>Notes</strong>, <strong>Assigned Staff</strong>, and <strong>Assigned Staff Phone</strong>.
+                        Supported update columns: <strong>Status</strong>, <strong>Handover Status</strong>, <strong>Notes</strong>, <strong>Assigned Staff</strong>, and <strong>Assigned Staff Phone</strong>.
                     </div>
                     <div class="d-flex justify-content-end gap-2 mt-4">
                         <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-primary">Update Follow-Ups</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="handoverModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content hc-modal-card">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <span class="mf-db2-kicker">Client Handover</span>
+                    <h5 class="modal-title mt-1" id="handoverModalTitle">Update Handover</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <form id="handoverForm">
+                    <input type="hidden" id="handoverLeadId">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="handoverStatus">Handover Status</label>
+                        <select class="form-select" id="handoverStatus" required>
+                            <option value="not_sent">Not Sent</option>
+                            <option value="sent">Sent to Client</option>
+                            <option value="accepted">Accepted</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="completed">Completed</option>
+                        </select>
+                    </div>
+                    <div id="handoverFormFeedback" class="hc-form-feedback d-none mt-3"></div>
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="handoverSubmitButton">Save Handover</button>
                     </div>
                 </form>
             </div>
