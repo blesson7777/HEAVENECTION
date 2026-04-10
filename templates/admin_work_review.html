@@ -130,16 +130,17 @@
                                     {% for block in row.blocks %}
                                     <div class="hc-work-review-day hc-work-review-day-danger">
                                         <div class="hc-work-review-day-head">
-                                            <strong>{{ block.date_label }}</strong>
+                                            <strong>Zero-only streak {{ forloop.counter }} of {{ row.blocks|length }}</strong>
+                                            <span>{{ block.date_label }}</span>
                                             <span>{{ block.time_range }}</span>
                                         </div>
-                                        <small>{{ block.attempt_count }} attempts · {{ block.zero_second_count }} zero-second · Not counted in work hours</small>
+                                        <small>{{ block.attempt_count }} attempts - {{ block.zero_second_count }} zero-second - Not counted in work hours</small>
                                         {% if block.streak_note %}
                                         <div class="hc-work-review-caption">{{ block.streak_note }}</div>
                                         {% endif %}
                                         {% if block.next_call_gap_label %}
                                         <div class="hc-work-review-caption">
-                                            Next connected call after {{ block.next_call_gap_label }} · {{ block.next_connected_call_time }}
+                                            Next connected call after {{ block.next_call_gap_label }} - {{ block.next_connected_call_time }}
                                         </div>
                                         {% endif %}
                                         {% if block.streak_gap_label %}
@@ -254,13 +255,13 @@
                                             <strong>{{ block.date_label }}</strong>
                                             <span>{{ block.time_range }}</span>
                                         </div>
-                                        <small>{{ block.attempt_count }} attempts · {{ block.zero_second_count }} zero-second · Not counted in work hours</small>
+                                        <small>{{ block.attempt_count }} attempts - {{ block.zero_second_count }} zero-second - Not counted in work hours</small>
                                         {% if block.streak_note %}
                                         <div class="hc-work-review-caption">{{ block.streak_note }}</div>
                                         {% endif %}
                                         {% if block.next_call_gap_label %}
                                         <div class="hc-work-review-caption">
-                                            Next connected call after {{ block.next_call_gap_label }} · {{ block.next_connected_call_time }}
+                                            Next connected call after {{ block.next_call_gap_label }} - {{ block.next_connected_call_time }}
                                         </div>
                                         {% endif %}
                                         <div class="hc-work-review-day-meta">
