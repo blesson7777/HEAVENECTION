@@ -5959,8 +5959,18 @@ def reactivate_oldest_recovery_leads(count, *, scope="all"):
     }
 
 
-def build_call_detail_payload(limit=200):
-    calls = Call.objects.select_related("staff", "lead").order_by("-start_time")[:limit]
+def build_call_detail_payload(*, limit=200, date_value=""):
+    selected_date = _parse_date_value(date_value)
+    if selected_date:
+        start, end = _day_range_for_date(selected_date)
+        calls = (
+            Call.objects.select_related("staff", "lead")
+            .filter(start_time__range=(start, end))
+            .order_by("-start_time")
+        )
+    else:
+        calls = Call.objects.select_related("staff", "lead").order_by("-start_time")
+    calls = calls[:limit]
     call_rows = []
     for call in calls:
         call_rows.append(
@@ -5987,7 +5997,10 @@ def build_call_detail_payload(limit=200):
             }
         )
 
-    return {"call_rows": call_rows}
+    return {
+        "call_rows": call_rows,
+        "selected_date": selected_date.isoformat() if selected_date else "",
+    }
 
 
 def build_work_hours_payload(*, date_value=""):

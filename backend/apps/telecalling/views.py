@@ -1889,6 +1889,7 @@ def calls_page(request):
     if not current_user:
         return redirect("web-login")
 
+    date_value = request.GET.get("date", "").strip()
     context = _admin_web_context(
         request,
         current_user,
@@ -1896,7 +1897,7 @@ def calls_page(request):
         page_title="Call Details",
         page_heading="Call Details",
         page_subtitle="Review call history, outcomes, and duration after staff calling activity.",
-        extra_context=build_call_detail_payload(),
+        extra_context=build_call_detail_payload(date_value=date_value),
     )
     return render(request, "admin_calls.html", context)
 
