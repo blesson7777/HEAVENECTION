@@ -1278,10 +1278,10 @@ def staff_profile_report_pdf(request, staff_id):
             logo_reader = ImageReader(logo_stream)
             pdf.drawImage(
                 logo_reader,
-                page_width - margin - 60,
-                page_height - 96,
-                width=50,
-                height=50,
+                margin,
+                page_height - 105,
+                width=46,
+                height=46,
                 mask="auto",
             )
     except Exception:
