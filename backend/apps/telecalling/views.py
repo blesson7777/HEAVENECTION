@@ -1158,8 +1158,10 @@ def staff_profile_report_pdf(request, staff_id):
     company_profile = get_company_profile()
     response = HttpResponse(content_type="application/pdf")
     file_month = month_date.strftime("%b-%Y")
+    safe_name = "".join(char for char in staff.name if char.isalnum() or char in (" ", "-", "_")).strip()
+    safe_name = safe_name.replace(" ", "-") or "staff"
     response["Content-Disposition"] = (
-        f'attachment; filename="staff-report-{staff.name}-{file_month}.pdf"'
+        f'attachment; filename="staff-report-{safe_name}-{file_month}.pdf"'
     )
 
     page_width, page_height = A4
@@ -1168,75 +1170,100 @@ def staff_profile_report_pdf(request, staff_id):
     content_width = page_width - (margin * 2)
     y = page_height - margin
 
-    brand_color = colors.HexColor("#203054")
+    brand_color = colors.HexColor("#1d2c4d")
     accent_color = colors.HexColor("#4d5c90")
     muted_color = colors.HexColor("#5d6c85")
     light_fill = colors.HexColor("#f3f6fd")
+    border_color = colors.HexColor("#dbe4f3")
 
-    def draw_section_box(title, rows, *, start_y):
-        box_padding = 12
+    def draw_divider(y_pos):
+        pdf.setStrokeColor(border_color)
+        pdf.setLineWidth(1)
+        pdf.line(margin, y_pos, page_width - margin, y_pos)
+
+    def ensure_space(required_height):
+        nonlocal y
+        if y - required_height < 60:
+            pdf.showPage()
+            y = page_height - margin
+
+    def draw_kv_block(title, rows, *, columns=2, box_height=0):
+        nonlocal y
         line_height = 14
-        box_height = (len(rows) + 1) * line_height + box_padding * 2
+        box_padding = 12
+        row_count = len(rows)
+        rows_per_col = (row_count + columns - 1) // columns
+        box_height = box_height or (rows_per_col + 1) * line_height + box_padding * 2
+        ensure_space(box_height + 12)
+
         pdf.setFillColor(light_fill)
-        pdf.setStrokeColor(colors.HexColor("#dbe4f3"))
-        pdf.roundRect(margin, start_y - box_height, content_width, box_height, 12, fill=1, stroke=1)
-        text_y = start_y - box_padding - 12
+        pdf.setStrokeColor(border_color)
+        pdf.roundRect(margin, y - box_height, content_width, box_height, 12, fill=1, stroke=1)
         pdf.setFillColor(brand_color)
         pdf.setFont("Helvetica-Bold", 11)
-        pdf.drawString(margin + box_padding, text_y, title)
+        pdf.drawString(margin + box_padding, y - box_padding - 8, title)
+
         pdf.setFillColor(colors.black)
         pdf.setFont("Helvetica", 9.5)
-        text_y -= 16
-        for label, value in rows:
-            pdf.drawString(margin + box_padding, text_y, f"{label}: {value}")
-            text_y -= line_height
-        return start_y - box_height - 16
+        column_width = (content_width - box_padding * 2) / columns
+        text_y_start = y - box_padding - 24
+        for col in range(columns):
+            text_y = text_y_start
+            start_index = col * rows_per_col
+            end_index = min(start_index + rows_per_col, row_count)
+            for label, value in rows[start_index:end_index]:
+                pdf.drawString(margin + box_padding + (column_width * col), text_y, f"{label}: {value}")
+                text_y -= line_height
+
+        y = y - box_height - 16
 
     pdf.setFillColor(brand_color)
-    pdf.rect(0, page_height - 90, page_width, 90, fill=1, stroke=0)
+    pdf.rect(0, page_height - 110, page_width, 110, fill=1, stroke=0)
     pdf.setFillColor(colors.white)
-    pdf.setFont("Helvetica-Bold", 16)
-    pdf.drawString(margin, page_height - 40, company_profile.company_name or "Heavenection")
-    pdf.setFont("Helvetica", 10)
-    pdf.drawString(margin, page_height - 58, "Staff Performance Report")
+    pdf.setFont("Helvetica-Bold", 18)
+    pdf.drawString(margin, page_height - 52, company_profile.company_name or "Heavenection")
+    pdf.setFont("Helvetica", 10.5)
+    pdf.drawString(margin, page_height - 72, "Staff Performance Report")
     pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawRightString(page_width - margin, page_height - 48, month_date.strftime("%B %Y"))
+    pdf.drawRightString(page_width - margin, page_height - 60, month_date.strftime("%B %Y"))
 
     if company_profile.logo and company_profile.logo.path:
         try:
             logo_reader = ImageReader(company_profile.logo.path)
-            pdf.drawImage(logo_reader, page_width - margin - 54, page_height - 78, width=44, height=44, mask="auto")
+            pdf.drawImage(logo_reader, page_width - margin - 60, page_height - 96, width=50, height=50, mask="auto")
         except Exception:
             pass
 
-    y = page_height - 110
+    y = page_height - 130
     pdf.setFillColor(muted_color)
     pdf.setFont("Helvetica", 9)
     contact_line = " | ".join(
         part
         for part in (
-            company_profile.company_email,
-            company_profile.company_phone,
-            company_profile.website,
+            company_profile.legal_name or "",
+            company_profile.company_email or "",
+            company_profile.company_phone or "",
+            company_profile.website or "",
         )
         if part
     )
     if contact_line:
         pdf.drawString(margin, y, contact_line)
-        y -= 18
+        y -= 20
+    draw_divider(y)
+    y -= 16
 
-    pdf.setFillColor(colors.black)
     staff_rows = [
         ("Name", staff.name),
         ("Phone", staff.phone),
         ("Email", staff.email or "--"),
         ("Role", staff.get_role_display()),
         ("Compensation", staff.get_compensation_type_display()),
+        ("Report Period", f"{range_start.date().strftime('%d %b %Y')} to {range_end.date().strftime('%d %b %Y')}"),
     ]
-    y = draw_section_box("Staff Details", staff_rows, start_y=y)
+    draw_kv_block("Staff Details", staff_rows, columns=2)
 
     summary_rows = [
-        ("Period", f"{range_start.date().strftime('%d %b %Y')} to {range_end.date().strftime('%d %b %Y')}"),
         ("Work Hours", _format_work_duration_label(breakdown["active_seconds"])),
         ("Call Minutes", f"{float(breakdown['call_minutes']):,.1f} min"),
         ("Total Calls", str(total_calls)),
@@ -1251,26 +1278,34 @@ def staff_profile_report_pdf(request, staff_id):
         ("First Login", _format_datetime(first_login.login_time) if first_login else "--"),
         ("Last Logout", _format_datetime(last_logout.logout_time) if last_logout else "--"),
     ]
-    y = draw_section_box("Performance Summary", summary_rows, start_y=y)
+    draw_kv_block("Performance Summary", summary_rows, columns=2)
 
     earnings_rows = [
         ("Base Pay", _format_currency(breakdown["base_pay"])),
         ("Call Earnings", _format_currency(breakdown["call_earnings"])),
         ("Bonus Earnings", _format_currency(breakdown["bonus_earnings"])),
         ("Total Earnings", _format_currency(breakdown["total_pay"])),
+        ("Qualifying Calls", str(qualifying_calls)),
+        ("Converted Leads", str(converted_calls)),
     ]
-    y = draw_section_box("Earnings Breakdown", earnings_rows, start_y=y)
+    draw_kv_block("Earnings Breakdown", earnings_rows, columns=2)
 
     review_rows = [
         ("Score", f"{quality.get('score', 0)} / 100"),
         ("Status", quality.get("label", "No Recent Activity")),
         ("Note", quality.get("note", "--")),
     ]
-    y = draw_section_box("Review Score", review_rows, start_y=y)
+    draw_kv_block("Review Score", review_rows, columns=1)
 
+    ensure_space(60)
     pdf.setFillColor(muted_color)
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(margin, y, "Authorized Signature")
+    pdf.setStrokeColor(border_color)
+    pdf.line(margin, y - 10, margin + 200, y - 10)
+
     pdf.setFont("Helvetica", 8.5)
-    pdf.drawString(margin, 32, f"Generated on {timezone.localdate().strftime('%d %b %Y')}")
+    pdf.drawRightString(page_width - margin, 32, f"Generated on {timezone.localdate().strftime('%d %b %Y')}")
     pdf.showPage()
     pdf.save()
     return response
