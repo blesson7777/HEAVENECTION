@@ -71,6 +71,8 @@ SECRET_KEY = os.getenv(
     "heavenection-dev-secret-key-please-change-this-for-production-2026",
 )
 DEBUG = env_true("DJANGO_DEBUG", True)
+if not DEBUG and SECRET_KEY == "heavenection-dev-secret-key-please-change-this-for-production-2026":
+    raise RuntimeError("DJANGO_SECRET_KEY must be set in production.")
 
 ALLOWED_HOSTS = split_env_list(os.getenv("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost" if DEBUG else ""))
 railway_public_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
@@ -175,11 +177,16 @@ REST_FRAMEWORK = {
 }
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=int(os.getenv("JWT_ACCESS_HOURS", "720"))),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", "3650"))),
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=int(os.getenv("JWT_ACCESS_HOURS", "6"))),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=int(os.getenv("JWT_REFRESH_DAYS", "30"))),
 }
 
-AUTH_PASSWORD_VALIDATORS = []
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 8}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Kolkata"
@@ -222,7 +229,7 @@ PAYROLL_NOTIFY_EMAILS = env_true("PAYROLL_NOTIFY_EMAILS", True)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SESSION_COOKIE_SECURE = env_true("DJANGO_SESSION_COOKIE_SECURE", not DEBUG)
 CSRF_COOKIE_SECURE = env_true("DJANGO_CSRF_COOKIE_SECURE", not DEBUG)
-SECURE_SSL_REDIRECT = env_true("DJANGO_SECURE_SSL_REDIRECT", False)
+SECURE_SSL_REDIRECT = env_true("DJANGO_SECURE_SSL_REDIRECT", not DEBUG)
 SECURE_HSTS_SECONDS = int(os.getenv("DJANGO_SECURE_HSTS_SECONDS", "0" if DEBUG else "31536000"))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env_true("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", not DEBUG)
 SECURE_HSTS_PRELOAD = env_true("DJANGO_SECURE_HSTS_PRELOAD", False)

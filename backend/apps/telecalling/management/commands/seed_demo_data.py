@@ -1,4 +1,5 @@
 from datetime import timedelta
+import os
 from random import choice, randint
 
 from django.core.management.base import BaseCommand
@@ -11,6 +12,9 @@ class Command(BaseCommand):
     help = "Seed demo telecalling data for the Heavenection dashboard."
 
     def handle(self, *args, **options):
+        if os.getenv("ALLOW_DEMO_SEED", "").strip().lower() not in {"1", "true", "yes"}:
+            self.stdout.write(self.style.WARNING("Demo seed disabled. Set ALLOW_DEMO_SEED=true to enable."))
+            return
         CompanyProfile.objects.update_or_create(
             id=1,
             defaults={
