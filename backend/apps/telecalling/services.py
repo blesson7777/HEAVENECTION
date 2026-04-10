@@ -3155,9 +3155,11 @@ def _zero_talk_block_details_by_staff(
         blocks = _call_activity_blocks_with_stats(staff_calls)
         zero_streak = []
         zero_streak_attempts = 0
+        pending_gap_label = "0s"
+        pending_next_call_time = "--"
 
         def flush_zero_streak():
-            nonlocal zero_blocks, zero_streak, zero_streak_attempts
+            nonlocal zero_blocks, zero_streak, zero_streak_attempts, pending_gap_label, pending_next_call_time
             if not zero_streak:
                 return
             if zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
@@ -3198,16 +3200,33 @@ def _zero_talk_block_details_by_staff(
                             "call_count": len(call_rows),
                             "extra_calls": 0,
                             "streak_note": "Part of a zero-only streak (10+ attempts reached)",
+                            "next_call_gap_label": pending_gap_label,
+                            "next_connected_call_time": pending_next_call_time,
                         }
                     )
             zero_streak = []
             zero_streak_attempts = 0
+            pending_gap_label = "0s"
+            pending_next_call_time = "--"
 
         for block in blocks:
             if block["real_calls_in_block"] <= 0:
                 zero_streak.append(block)
                 zero_streak_attempts += len(block["calls"])
                 continue
+
+            if zero_streak:
+                gap_seconds = 0
+                if zero_streak[-1]["block_end"] and block["block_start"]:
+                    gap_seconds = max(
+                        0,
+                        int((block["block_start"] - zero_streak[-1]["block_end"]).total_seconds()),
+                    )
+                pending_gap_label = _format_duration(gap_seconds)
+                if block.get("first_real_call_start"):
+                    pending_next_call_time = _format_datetime(block["first_real_call_start"])
+                else:
+                    pending_next_call_time = _format_datetime(block.get("block_start"))
 
             flush_zero_streak()
 

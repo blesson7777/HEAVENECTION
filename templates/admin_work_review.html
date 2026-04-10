@@ -161,6 +161,11 @@
                                         {% if block.streak_note %}
                                         <div class="hc-work-review-caption">{{ block.streak_note }}</div>
                                         {% endif %}
+                                        {% if block.next_call_gap_label %}
+                                        <div class="hc-work-review-caption">
+                                            Next connected call after {{ block.next_call_gap_label }} · {{ block.next_connected_call_time }}
+                                        </div>
+                                        {% endif %}
                                         <div class="hc-work-review-day-meta">
                                             <span>{{ block.duration_label }} block length</span>
                                             <span>{{ block.call_count }} call{% if block.call_count != 1 %}s{% endif %} shown</span>
