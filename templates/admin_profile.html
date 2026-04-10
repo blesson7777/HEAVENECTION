@@ -22,7 +22,7 @@
             <div class="hc-profile-branding">
                 <div class="hc-profile-logo-wrap">
                     {% if company_profile.logo %}
-                    <img src="{{ company_profile.logo.url }}" alt="{{ company_profile.company_name }}" class="hc-profile-logo">
+                    <img src="{% url 'company-logo' %}" alt="{{ company_profile.company_name }}" class="hc-profile-logo">
                     {% else %}
                     <img src="{% static 'images/heavenection-logo.png' %}" alt="{{ company_profile.company_name|default:'Heavenection' }}" class="hc-profile-logo">
                     {% endif %}

@@ -47,7 +47,7 @@
             <a href="{% url 'dashboard' %}" class="mf-brand d-flex align-items-center gap-3 text-decoration-none">
                 <span class="hc-brand-mark">
                     {% if company_profile.logo %}
-                    <img src="{{ company_profile.logo.url }}" alt="{{ company_profile.company_name }}" class="hc-brand-logo">
+                    <img src="{% url 'company-logo' %}" alt="{{ company_profile.company_name }}" class="hc-brand-logo">
                     {% else %}
                     <img src="{% static 'images/heavenection-logo.png' %}" alt="{{ company_profile.company_name|default:'Heavenection' }}" class="hc-brand-logo">
                     {% endif %}

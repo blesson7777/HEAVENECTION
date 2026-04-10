@@ -56,7 +56,7 @@
     <main class="dev-login-card">
         <div class="dev-login-brand">
             {% if company_profile.logo %}
-            <img src="{{ company_profile.logo.url }}" alt="{{ company_profile.company_name }}">
+            <img src="{% url 'company-logo' %}" alt="{{ company_profile.company_name }}">
             {% else %}
             <img src="{% static 'images/heavenection-logo.png' %}" alt="HEAVENECTION">
             {% endif %}

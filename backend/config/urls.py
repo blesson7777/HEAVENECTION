@@ -16,6 +16,7 @@ urlpatterns = [
     path("downloads/app-release/<uuid:release_id>/", views.app_release_download, name="app-release-download"),
     path("", views.dashboard_page, name="dashboard"),
     path("settings/", views.settings_page, name="settings-page"),
+    path("company/logo/", views.company_logo_view, name="company-logo"),
     path("staff/", views.staff_page, name="staff-page"),
     path("staff/<uuid:staff_id>/", views.staff_profile_page, name="staff-profile-page"),
     path("staff/<uuid:staff_id>/report/", views.staff_profile_report_pdf, name="staff-profile-report"),

@@ -1227,10 +1227,19 @@ def staff_profile_report_pdf(request, staff_id):
     pdf.setFont("Helvetica-Bold", 12)
     pdf.drawRightString(page_width - margin, page_height - 60, month_date.strftime("%B %Y"))
 
-    if company_profile.logo and company_profile.logo.path:
+    if company_profile.logo:
         try:
-            logo_reader = ImageReader(company_profile.logo.path)
-            pdf.drawImage(logo_reader, page_width - margin - 60, page_height - 96, width=50, height=50, mask="auto")
+            logo_stream = company_profile.logo.open("rb")
+            logo_reader = ImageReader(logo_stream)
+            pdf.drawImage(
+                logo_reader,
+                page_width - margin - 60,
+                page_height - 96,
+                width=50,
+                height=50,
+                mask="auto",
+            )
+            logo_stream.close()
         except Exception:
             pass
 
@@ -1309,6 +1318,17 @@ def staff_profile_report_pdf(request, staff_id):
     pdf.showPage()
     pdf.save()
     return response
+
+
+@require_GET
+def company_logo_view(request):
+    company_profile = get_company_profile()
+    if not company_profile.logo:
+        raise Http404("Logo not found.")
+    try:
+        return FileResponse(company_profile.logo.open("rb"))
+    except Exception as exc:
+        raise Http404("Logo not found.") from exc
 
 
 @require_GET
