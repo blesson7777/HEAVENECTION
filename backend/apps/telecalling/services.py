@@ -1205,6 +1205,16 @@ def _build_referral_tracking_payload(staff, *, company_profile=None):
     return {"summary": summary, "rows": rows}
 
 
+def _is_grandfathered_referral(staff):
+    if not staff or not staff.referred_by_id:
+        return False
+    return ReferralSubmission.objects.filter(
+        joined_staff=staff,
+        referrer=staff.referred_by,
+        program_enabled_at_submit=True,
+    ).exists()
+
+
 def _sync_referral_reward_for_staff(staff, *, company_profile=None):
     company_profile = company_profile or get_company_profile()
     existing_reward = (
@@ -1216,7 +1226,7 @@ def _sync_referral_reward_for_staff(staff, *, company_profile=None):
         return existing_reward
 
     if (
-        not company_profile.referral_program_enabled
+        (not company_profile.referral_program_enabled and not _is_grandfathered_referral(staff))
         or not staff.referred_by_id
         or Decimal(company_profile.referral_required_hours or 0) <= Decimal("0")
         or Decimal(company_profile.referral_reward_amount or 0) <= Decimal("0")
@@ -1249,10 +1259,10 @@ def _sync_referral_reward_for_staff(staff, *, company_profile=None):
 
 def sync_referral_rewards(company_profile=None):
     company_profile = company_profile or get_company_profile()
-    if not company_profile.referral_program_enabled:
-        return []
     rewards = []
     for staff in Staff.objects.filter(role=Staff.Role.STAFF, referred_by__isnull=False).select_related("referred_by"):
+        if not company_profile.referral_program_enabled and not _is_grandfathered_referral(staff):
+            continue
         reward = _sync_referral_reward_for_staff(staff, company_profile=company_profile)
         if reward:
             rewards.append(reward)

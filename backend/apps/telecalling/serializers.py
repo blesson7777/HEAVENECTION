@@ -364,6 +364,7 @@ class CreateStaffReferralSubmissionSerializer(serializers.Serializer):
             referrer=request.user,
             referred_name=validated_data["referred_name"],
             referred_phone=validated_data["referred_phone"],
+            program_enabled_at_submit=CompanyProfile.objects.filter(pk=1, referral_program_enabled=True).exists(),
         )
 
 

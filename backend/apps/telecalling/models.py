@@ -466,6 +466,7 @@ class ReferralSubmission(models.Model):
         blank=True,
         related_name="referral_submission_matches",
     )
+    program_enabled_at_submit = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 
