@@ -2454,8 +2454,6 @@ def _quality_label(score, *, has_activity):
 
 def _build_quality_note(
     *,
-    followup_started_count,
-    followup_closed_count,
     missed_callback_count,
     suspicious_block_count,
     suspicious_attempt_count,
@@ -2488,10 +2486,6 @@ def _build_quality_note(
             f"{zero_only_block_count} calling block(s) had only unanswered attempts, "
             "so no work hours were added for those periods."
         )
-    if followup_started_count and followup_closed_count:
-        return f"{followup_closed_count} of {followup_started_count} follow-up leads completed."
-    if followup_started_count:
-        return f"{followup_started_count} follow-up leads still in progress."
     if missed_callback_count:
         return f"{missed_callback_count} callback lead(s) need review."
     return "Build more recent call activity for a fuller review."
@@ -2638,10 +2632,6 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
         invalid_short_calls = staff_metrics["invalid_short_calls"]
         resolved_calls = max(total_completed_calls - invalid_short_calls, 0)
         verified_resolved_calls = min(staff_metrics["verified_resolved_calls"], resolved_calls)
-        followup_started_count = len(staff_metrics["followup_started_leads"])
-        followup_closed_count = len(
-            staff_metrics["followup_started_leads"] & staff_metrics["followup_closed_leads"]
-        )
         callback_total = staff_metrics["callback_total"]
         missed_callback_count = staff_metrics["missed_callbacks"]
         verified_attempt_count = staff_metrics["verified_attempt_count"]
@@ -2669,14 +2659,8 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
                 else Decimal("0")
             )
             outcome_score = ((resolved_ratio * Decimal("0.6")) + (verified_ratio * Decimal("0.4"))) * Decimal("100")
-            weighted_total += outcome_score * Decimal("0.45")
-            total_weight += Decimal("0.45")
-
-        followup_score = None
-        if followup_started_count > 0:
-            followup_score = (Decimal(followup_closed_count) / Decimal(followup_started_count)) * Decimal("100")
-            weighted_total += followup_score * Decimal("0.35")
-            total_weight += Decimal("0.35")
+            weighted_total += outcome_score * Decimal("0.70")
+            total_weight += Decimal("0.70")
 
         callback_score = None
         if callback_total > 0:
@@ -2684,8 +2668,8 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
                 Decimal("0"),
                 (Decimal(callback_total - missed_callback_count) / Decimal(callback_total)) * Decimal("100"),
             )
-            weighted_total += callback_score * Decimal("0.20")
-            total_weight += Decimal("0.20")
+            weighted_total += callback_score * Decimal("0.30")
+            total_weight += Decimal("0.30")
 
         if total_weight > 0:
             overall_score = int((weighted_total / total_weight).quantize(Decimal("1")))
@@ -2706,15 +2690,9 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
             ):
                 overall_score = min(overall_score, 54)
 
-        has_activity = (
-            total_completed_calls > 0
-            or verified_attempt_count > 0
-            or followup_started_count > 0
-            or callback_total > 0
-        )
+        has_activity = total_completed_calls > 0 or verified_attempt_count > 0 or callback_total > 0
 
         outcome_value = int(outcome_score.quantize(Decimal("1"))) if outcome_score is not None else None
-        followup_value = int(followup_score.quantize(Decimal("1"))) if followup_score is not None else None
         callback_value = int(callback_score.quantize(Decimal("1"))) if callback_score is not None else None
         if verified_attempt_count > 0:
             attempt_review_label = f"{real_call_count} real from {verified_attempt_count} attempts"
@@ -2730,8 +2708,6 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
             "label": _quality_label(overall_score, has_activity=has_activity),
             "tone": _quality_tone(overall_score) if has_activity else "muted",
             "note": _build_quality_note(
-                followup_started_count=followup_started_count,
-                followup_closed_count=followup_closed_count,
                 missed_callback_count=missed_callback_count,
                 suspicious_block_count=suspicious_block_count,
                 suspicious_attempt_count=suspicious_attempt_count,
@@ -2744,12 +2720,8 @@ def _build_staff_quality_metrics(staff_ids, *, now=None):
             "invalid_short_count": invalid_short_calls,
             "outcome_consistency": outcome_value,
             "outcome_consistency_label": f"{outcome_value}%" if outcome_value is not None else "--",
-            "followup_completion": followup_value,
-            "followup_completion_label": f"{followup_value}%" if followup_value is not None else "--",
             "callback_discipline": callback_value,
             "callback_discipline_label": f"{callback_value}%" if callback_value is not None else "--",
-            "followup_started_count": followup_started_count,
-            "followup_closed_count": followup_closed_count,
             "callback_total": callback_total,
             "missed_callbacks": missed_callback_count,
             "verified_attempt_count": verified_attempt_count,
@@ -4249,7 +4221,6 @@ def build_team_management_payload():
                 "quality_note": quality.get("note", "Build more recent call activity for a fuller review."),
                 "invalid_short_count": quality.get("invalid_short_count", 0),
                 "outcome_consistency_label": quality.get("outcome_consistency_label", "--"),
-                "followup_completion_label": quality.get("followup_completion_label", "--"),
                 "missed_callbacks": quality.get("missed_callbacks", 0),
                 "verified_attempt_count": quality.get("verified_attempt_count", 0),
                 "attempt_review_label": quality.get("attempt_review_label", "--"),
@@ -4481,7 +4452,11 @@ def build_staff_profile_payload(request, staff):
     ]
     recent_call_rows = []
     recent_call_groups = []
+    max_call_rows = 10
+    call_row_count = 0
     for call in recent_calls:
+        if call_row_count >= max_call_rows:
+            break
         local_start = timezone.localtime(call.start_time) if call.start_time else None
         date_key = local_start.date().isoformat() if local_start else "unknown"
         date_label = local_start.strftime("%d %b %Y") if local_start else "Unknown date"
@@ -4539,6 +4514,7 @@ def build_staff_profile_payload(request, staff):
             )
         recent_call_groups[-1]["rows"].append(row)
         recent_call_groups[-1]["call_count"] += 1
+        call_row_count += 1
     recent_session_rows = [
         {
             "id": str(session.id),
@@ -4578,10 +4554,7 @@ def build_staff_profile_payload(request, staff):
             "quality_note": quality.get("note", "Build more recent call activity for a fuller review."),
             "quality_lookback_days": quality.get("lookback_days", QUALITY_SCORE_LOOKBACK_DAYS),
             "outcome_consistency_label": quality.get("outcome_consistency_label", "--"),
-            "followup_completion_label": quality.get("followup_completion_label", "--"),
             "callback_discipline_label": quality.get("callback_discipline_label", "--"),
-            "followup_started_count": quality.get("followup_started_count", 0),
-            "followup_closed_count": quality.get("followup_closed_count", 0),
             "callback_total": quality.get("callback_total", 0),
             "missed_callbacks": quality.get("missed_callbacks", 0),
             "attempt_review_label": quality.get("attempt_review_label", "--"),

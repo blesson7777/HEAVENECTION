@@ -1160,7 +1160,7 @@
 }
 
 .hc-staff-call-log-scroller {
-    max-height: 22rem;
+    max-height: 32rem;
     overflow-y: auto;
     border-radius: 18px;
 }

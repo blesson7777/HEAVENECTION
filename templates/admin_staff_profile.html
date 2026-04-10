@@ -214,12 +214,7 @@
                             <span class="hc-profile-meta-label">Call Outcome Consistency</span>
                             <strong>{{ summary.outcome_consistency_label }}</strong>
                             <small>Recorded over the last {{ summary.quality_lookback_days }} days.</small>
-                    </div>
-                    <div class="hc-profile-meta-card">
-                        <span class="hc-profile-meta-label">Follow-Up Completion</span>
-                        <strong>{{ summary.followup_completion_label }}</strong>
-                        <small>{{ summary.followup_closed_count }} completed from {{ summary.followup_started_count }} started.</small>
-                    </div>
+                        </div>
                         <div class="hc-profile-meta-card">
                             <span class="hc-profile-meta-label">Callback Discipline</span>
                             <strong>{{ summary.callback_discipline_label }}</strong>
@@ -609,7 +604,7 @@
                     />
                 </div>
             </div>
-            <div class="table-responsive hc-staff-call-log-scroller">
+            <div class="table-responsive hc-staff-call-log-scroller hc-card-scroll-table-10">
                 <table class="table hc-table align-middle mb-0">
                     <thead>
                         <tr>
