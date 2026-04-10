@@ -1188,6 +1188,11 @@ def staff_profile_report_pdf(request, staff_id):
             pdf.showPage()
             y = page_height - margin
 
+    def draw_page_border():
+        pdf.setStrokeColor(colors.HexColor("#ccd6ea"))
+        pdf.setLineWidth(1)
+        pdf.rect(margin - 12, margin - 16, content_width + 24, page_height - (margin * 2) + 32, stroke=1, fill=0)
+
     def draw_kv_block(title, rows, *, columns=2, box_height=0):
         nonlocal y
         line_height = 14
@@ -1242,26 +1247,27 @@ def staff_profile_report_pdf(request, staff_id):
                 pdf.drawString(x + 10, start_y - 54, helper)
         y = start_y - card_height - 18
 
+    draw_page_border()
     pdf.setFillColor(brand_color)
-    pdf.rect(0, page_height - 120, page_width, 120, fill=1, stroke=0)
+    pdf.rect(0, page_height - 140, page_width, 140, fill=1, stroke=0)
     pdf.setFillColor(accent_color)
     pdf.polygon(
         [
-            (0, page_height - 120),
-            (page_width * 0.55, page_height - 120),
-            (page_width, page_height - 200),
-            (page_width, page_height - 120),
+            (0, page_height - 140),
+            (page_width * 0.55, page_height - 140),
+            (page_width, page_height - 230),
+            (page_width, page_height - 140),
         ],
         fill=1,
         stroke=0,
     )
     pdf.setFillColor(colors.white)
-    pdf.setFont("Helvetica-Bold", 19)
-    pdf.drawString(margin, page_height - 48, company_profile.company_name or "Heavenection")
-    pdf.setFont("Helvetica", 10.5)
-    pdf.drawString(margin, page_height - 68, "Staff Performance Report")
-    pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawRightString(page_width - margin, page_height - 58, month_date.strftime("%B %Y"))
+    pdf.setFont("Helvetica-Bold", 20)
+    pdf.drawString(margin, page_height - 50, company_profile.company_name or "Heavenection")
+    pdf.setFont("Helvetica", 11)
+    pdf.drawString(margin, page_height - 72, "Staff Performance Report")
+    pdf.setFont("Helvetica-Bold", 13)
+    pdf.drawRightString(page_width - margin, page_height - 62, month_date.strftime("%B %Y"))
 
     logo_stream = None
     try:
@@ -1290,7 +1296,7 @@ def staff_profile_report_pdf(request, staff_id):
             except Exception:
                 pass
 
-    y = page_height - 140
+    y = page_height - 160
     pdf.setFillColor(muted_color)
     pdf.setFont("Helvetica", 9)
     contact_line = " | ".join(
@@ -1306,6 +1312,21 @@ def staff_profile_report_pdf(request, staff_id):
     if contact_line:
         pdf.drawString(margin, y, contact_line)
         y -= 20
+    address_line = ", ".join(
+        part
+        for part in (
+            company_profile.address_line_1,
+            company_profile.address_line_2,
+            company_profile.city,
+            company_profile.state,
+            company_profile.postal_code,
+            company_profile.country,
+        )
+        if part
+    )
+    if address_line:
+        pdf.drawString(margin, y, address_line)
+        y -= 20
     draw_divider(y)
     y -= 14
 
@@ -1317,13 +1338,54 @@ def staff_profile_report_pdf(request, staff_id):
     ]
     draw_stat_row(stat_rows, start_y=y)
 
+    pdf.setFillColor(colors.black)
+    pdf.setFont("Helvetica-Bold", 22)
+    pdf.drawString(margin, y - 8, staff.name)
+    pdf.setFont("Helvetica", 10.5)
+    pdf.setFillColor(muted_color)
+    pdf.drawString(margin, y - 28, f"{staff.phone} | {staff.get_compensation_type_display()} staff")
+    pdf.drawRightString(
+        page_width - margin,
+        y - 28,
+        f"Report Period: {range_start.date().strftime('%d %b %Y')} to {range_end.date().strftime('%d %b %Y')}",
+    )
+    y -= 52
+    pdf.setFont("Helvetica", 9.5)
+    pdf.setFillColor(muted_color)
+    pdf.drawString(margin, y + 18, f"Prepared for: {staff.name}")
+    pdf.drawRightString(page_width - margin, y + 18, f"Issued by: {company_profile.company_name or 'Heavenection'}")
+
+    cover_summary_rows = [
+        ("Total Calls", str(total_calls)),
+        ("Connected Calls", str(connected_calls)),
+        ("Converted Leads", str(converted_calls)),
+        ("Work Hours", _format_work_duration_label(breakdown["active_seconds"])),
+        ("Total Earnings", _format_currency(breakdown["total_pay"])),
+    ]
+    draw_kv_block("Executive Summary", cover_summary_rows, columns=2, box_height=120)
+
+    pdf.setFillColor(muted_color)
+    pdf.setFont("Helvetica", 8.5)
+    pdf.drawString(margin, 36, "This report is confidential and intended for internal use only.")
+    pdf.showPage()
+
+    y = page_height - margin
+    draw_page_border()
+    pdf.setFillColor(brand_color)
+    pdf.rect(0, page_height - 60, page_width, 60, fill=1, stroke=0)
+    pdf.setFillColor(colors.white)
+    pdf.setFont("Helvetica-Bold", 14)
+    pdf.drawString(margin, page_height - 38, "Detailed Performance Overview")
+    pdf.setFont("Helvetica", 9.5)
+    pdf.drawRightString(page_width - margin, page_height - 38, month_date.strftime("%B %Y"))
+    y = page_height - 80
+
     staff_rows = [
         ("Name", staff.name),
         ("Phone", staff.phone),
         ("Email", staff.email or "--"),
         ("Role", staff.get_role_display()),
         ("Compensation", staff.get_compensation_type_display()),
-        ("Report Period", f"{range_start.date().strftime('%d %b %Y')} to {range_end.date().strftime('%d %b %Y')}"),
     ]
     draw_kv_block("Staff Details", staff_rows, columns=2)
 
@@ -1365,7 +1427,9 @@ def staff_profile_report_pdf(request, staff_id):
     pdf.setStrokeColor(border_color)
     pdf.line(margin, y - 10, margin + 200, y - 10)
 
+    pdf.setFillColor(muted_color)
     pdf.setFont("Helvetica", 8.5)
+    pdf.drawString(margin, 32, "For staff reference only.")
     pdf.drawRightString(page_width - margin, 32, f"Generated on {timezone.localdate().strftime('%d %b %Y')}")
     pdf.showPage()
     pdf.save()
