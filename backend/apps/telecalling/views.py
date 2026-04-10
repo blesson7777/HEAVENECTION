@@ -352,6 +352,8 @@ def _fallback_work_review_payload():
                 "review_day_rows": [],
                 "review_day_count": 0,
                 "extra_review_day_count": 0,
+                "zero_only_block_details": [],
+                "zero_only_block_extra": 0,
                 "real_call_ratio_label": "--",
                 "invalid_short_count": row.get("invalid_short_count", 0),
                 "verified_attempt_count": row.get("verified_attempt_count", 0),

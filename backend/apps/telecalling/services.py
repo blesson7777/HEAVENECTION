@@ -3052,6 +3052,81 @@ def _build_work_review_day_previews(staff_ids, *, now=None, preview_days=7, prev
     return preview_payload
 
 
+def _zero_talk_block_details_by_staff(
+    staff_ids,
+    *,
+    range_start,
+    range_end,
+    block_limit=3,
+    call_limit=10,
+):
+    staff_ids = [staff_id for staff_id in (staff_ids or []) if staff_id]
+    if not staff_ids:
+        return {}
+
+    calls = (
+        Call.objects.filter(staff_id__in=staff_ids, start_time__range=(range_start, range_end))
+        .select_related("lead")
+        .order_by("staff_id", "start_time", "end_time", "id")
+    )
+    calls_by_staff = defaultdict(list)
+    for call in calls:
+        calls_by_staff[call.staff_id].append(call)
+
+    block_payload = {}
+    for staff_id, staff_calls in calls_by_staff.items():
+        zero_blocks = []
+        for block_calls, block_start, block_end in _split_call_activity_blocks(staff_calls):
+            real_calls_in_block = sum(1 for call in block_calls if (call.duration_seconds or 0) > 0)
+            if real_calls_in_block > 0:
+                continue
+
+            local_start = timezone.localtime(block_start) if block_start else None
+            local_end = timezone.localtime(block_end) if block_end else None
+            date_label = local_start.strftime("%d %b %Y") if local_start else "Unknown date"
+            time_range = (
+                f"{local_start.strftime('%I:%M %p').lstrip('0')} - {local_end.strftime('%I:%M %p').lstrip('0')}"
+                if local_start and local_end
+                else "--"
+            )
+            block_seconds = max(0, int((block_end - block_start).total_seconds())) if block_start and block_end else 0
+            zero_seconds_in_block = sum(1 for call in block_calls if (call.duration_seconds or 0) <= 0)
+            call_rows = []
+            for call in block_calls[:call_limit]:
+                call_rows.append(
+                    {
+                        "lead_name": call.lead.name,
+                        "lead_phone": call.lead.phone,
+                        "start_time": _format_datetime(call.start_time),
+                        "duration_label": _format_duration(call.duration_seconds),
+                        "status_label": call.get_status_display(),
+                    }
+                )
+
+            zero_blocks.append(
+                {
+                    "date_label": date_label,
+                    "time_range": time_range,
+                    "attempt_count": len(block_calls),
+                    "zero_second_count": zero_seconds_in_block,
+                    "duration_label": _format_duration(block_seconds),
+                    "calls": call_rows,
+                    "call_count": len(call_rows),
+                    "extra_calls": max(len(block_calls) - len(call_rows), 0),
+                }
+            )
+
+        if zero_blocks:
+            total_blocks = len(zero_blocks)
+            kept_blocks = zero_blocks[-block_limit:]
+            block_payload[staff_id] = {
+                "blocks": kept_blocks,
+                "extra_count": max(total_blocks - len(kept_blocks), 0),
+            }
+
+    return block_payload
+
+
 def reassign_staff_review_leads(staff):
     review_lead_ids = _review_lead_ids_for_staff(staff)
     if not review_lead_ids:
@@ -4451,7 +4526,28 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
     flagged_day_total = 0
 
     review_rows = []
+    zero_talk_staff_ids = []
     for row in team_rows:
+        if int(row.get("zero_only_block_count") or 0) > 0:
+            try:
+                zero_talk_staff_ids.append(uuid.UUID(str(row["id"])))
+            except (TypeError, ValueError, AttributeError):
+                continue
+
+    zero_talk_blocks = _zero_talk_block_details_by_staff(
+        zero_talk_staff_ids,
+        range_start=range_start,
+        range_end=range_end,
+        block_limit=3,
+        call_limit=10,
+    )
+
+    for row in team_rows:
+        staff_uuid = None
+        try:
+            staff_uuid = uuid.UUID(str(row["id"]))
+        except (TypeError, ValueError, AttributeError):
+            staff_uuid = None
         quality_label = str(row.get("quality_label") or "")
         verified_attempt_count = int(row.get("verified_attempt_count") or 0)
         real_call_count = int(row.get("real_call_count") or 0)
@@ -4524,6 +4620,8 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
             "review_day_rows": review_day_rows,
             "review_day_count": int(preview_payload.get("count") or 0),
             "extra_review_day_count": extra_review_day_count,
+            "zero_only_block_details": (zero_talk_blocks.get(staff_uuid) or {}).get("blocks", []),
+            "zero_only_block_extra": (zero_talk_blocks.get(staff_uuid) or {}).get("extra_count", 0),
             "search_text": " ".join(
                 part.lower()
                 for part in (

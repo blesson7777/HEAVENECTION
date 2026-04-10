@@ -140,6 +140,61 @@
                             <div class="hc-work-review-caption">
                                 {{ row.suspicious_block_count }} review block(s) and {{ row.zero_only_block_count }} zero-talk block(s)
                             </div>
+                            {% if row.zero_only_block_details %}
+                            <button
+                                type="button"
+                                class="btn btn-outline-danger btn-sm mt-2 js-zero-talk-blocks"
+                                data-staff-name="{{ row.name }}"
+                                data-target="#workReviewZeroBlocks-{{ row.id }}"
+                            >
+                                View Zero-Talk Blocks
+                            </button>
+                            <div id="workReviewZeroBlocks-{{ row.id }}" class="d-none">
+                                <div class="hc-work-review-day-list">
+                                    {% for block in row.zero_only_block_details %}
+                                    <div class="hc-work-review-day hc-work-review-day-danger">
+                                        <div class="hc-work-review-day-head">
+                                            <strong>{{ block.date_label }}</strong>
+                                            <span>{{ block.time_range }}</span>
+                                        </div>
+                                        <small>{{ block.attempt_count }} attempts · {{ block.zero_second_count }} zero-second</small>
+                                        <div class="hc-work-review-day-meta">
+                                            <span>{{ block.duration_label }} block length</span>
+                                            <span>{{ block.call_count }} call{% if block.call_count != 1 %}s{% endif %} shown{% if block.extra_calls %} (+{{ block.extra_calls }} more){% endif %}</span>
+                                        </div>
+                                        <div class="table-responsive mt-2">
+                                            <table class="table table-sm hc-table mb-0">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Lead</th>
+                                                        <th>Time</th>
+                                                        <th>Duration</th>
+                                                        <th>Result</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for call in block.calls %}
+                                                    <tr>
+                                                        <td>
+                                                            <strong>{{ call.lead_name }}</strong>
+                                                            <div class="text-muted small">{{ call.lead_phone }}</div>
+                                                        </td>
+                                                        <td>{{ call.start_time }}</td>
+                                                        <td>{{ call.duration_label }}</td>
+                                                        <td>{{ call.status_label }}</td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% if row.zero_only_block_extra %}
+                                <div class="hc-work-review-caption">+{{ row.zero_only_block_extra }} more zero-talk block{% if row.zero_only_block_extra != 1 %}s{% endif %} not shown.</div>
+                                {% endif %}
+                            </div>
+                            {% endif %}
                         </div>
                     </td>
                     <td>
@@ -227,31 +282,72 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="workReviewZeroTalkModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content hc-modal-card">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <span class="mf-db2-kicker">Zero-Talk Blocks</span>
+                    <h5 class="modal-title mt-1" id="workReviewZeroTalkModalTitle">Zero-Talk Blocks</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <div class="hc-work-review-modal-body" id="workReviewZeroTalkModalBody">
+                    <div class="hc-work-review-empty-note">No zero-talk blocks available.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
 <script>
     (function () {
-        const modalElement = document.getElementById('workReviewDaysModal');
-        if (!modalElement) {
+        const dayModalElement = document.getElementById('workReviewDaysModal');
+        const zeroTalkModalElement = document.getElementById('workReviewZeroTalkModal');
+        if (!dayModalElement) {
             return;
         }
-        const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
-        const modalTitle = document.getElementById('workReviewDaysModalTitle');
-        const modalBody = document.getElementById('workReviewDaysModalBody');
+        const dayModal = bootstrap.Modal.getOrCreateInstance(dayModalElement);
+        const dayModalTitle = document.getElementById('workReviewDaysModalTitle');
+        const dayModalBody = document.getElementById('workReviewDaysModalBody');
+        const zeroTalkModal = zeroTalkModalElement ? bootstrap.Modal.getOrCreateInstance(zeroTalkModalElement) : null;
+        const zeroTalkModalTitle = document.getElementById('workReviewZeroTalkModalTitle');
+        const zeroTalkModalBody = document.getElementById('workReviewZeroTalkModalBody');
 
         document.querySelectorAll('.js-review-days').forEach((button) => {
             button.addEventListener('click', () => {
                 const targetSelector = button.getAttribute('data-target');
                 const staffName = button.getAttribute('data-staff-name') || 'Staff';
                 const contentNode = targetSelector ? document.querySelector(targetSelector) : null;
-                if (modalTitle) {
-                    modalTitle.textContent = `Review Days - ${staffName}`;
+                if (dayModalTitle) {
+                    dayModalTitle.textContent = `Review Days - ${staffName}`;
                 }
-                if (modalBody) {
-                    modalBody.innerHTML = contentNode ? contentNode.innerHTML : '<div class="hc-work-review-empty-note">No flagged days available.</div>';
+                if (dayModalBody) {
+                    dayModalBody.innerHTML = contentNode ? contentNode.innerHTML : '<div class="hc-work-review-empty-note">No flagged days available.</div>';
                 }
-                modal.show();
+                dayModal.show();
+            });
+        });
+
+        document.querySelectorAll('.js-zero-talk-blocks').forEach((button) => {
+            button.addEventListener('click', () => {
+                if (!zeroTalkModal) {
+                    return;
+                }
+                const targetSelector = button.getAttribute('data-target');
+                const staffName = button.getAttribute('data-staff-name') || 'Staff';
+                const contentNode = targetSelector ? document.querySelector(targetSelector) : null;
+                if (zeroTalkModalTitle) {
+                    zeroTalkModalTitle.textContent = `Zero-Talk Blocks - ${staffName}`;
+                }
+                if (zeroTalkModalBody) {
+                    zeroTalkModalBody.innerHTML = contentNode ? contentNode.innerHTML : '<div class="hc-work-review-empty-note">No zero-talk blocks available.</div>';
+                }
+                zeroTalkModal.show();
             });
         });
     })();
