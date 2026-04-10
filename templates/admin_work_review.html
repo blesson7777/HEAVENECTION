@@ -136,23 +136,37 @@
                     </td>
                     <td>
                         {% if row.review_day_rows %}
-                        <div class="hc-work-review-day-list">
-                            {% for day in row.review_day_rows %}
-                            <div class="hc-work-review-day hc-work-review-day-{{ day.review_tone }}">
-                                <div class="hc-work-review-day-head">
-                                    <strong>{{ day.date_label }}</strong>
-                                    <span>{{ day.day_label }}</span>
+                        <div class="hc-work-review-day-summary">
+                            <div><strong>{{ row.review_day_count }}</strong> flagged day{% if row.review_day_count != 1 %}s{% endif %}</div>
+                            <div class="text-muted small">Most recent: {{ row.review_day_rows.0.date_label }}</div>
+                        </div>
+                        <button
+                            type="button"
+                            class="btn btn-outline-primary btn-sm mt-2 js-review-days"
+                            data-staff-name="{{ row.name }}"
+                            data-target="#workReviewDays-{{ row.id }}"
+                        >
+                            View Dates
+                        </button>
+                        <div id="workReviewDays-{{ row.id }}" class="d-none">
+                            <div class="hc-work-review-day-list">
+                                {% for day in row.review_day_rows %}
+                                <div class="hc-work-review-day hc-work-review-day-{{ day.review_tone }}">
+                                    <div class="hc-work-review-day-head">
+                                        <strong>{{ day.date_label }}</strong>
+                                        <span>{{ day.day_label }}</span>
+                                    </div>
+                                    <small>{{ day.review_label }}</small>
+                                    <div class="hc-work-review-day-meta">
+                                        <span>{{ day.real_call_count }} real / {{ day.attempt_count }} attempts</span>
+                                        <span>{{ day.zero_second_attempt_count }} zero-second</span>
+                                    </div>
                                 </div>
-                                <small>{{ day.review_label }}</small>
-                                <div class="hc-work-review-day-meta">
-                                    <span>{{ day.real_call_count }} real / {{ day.attempt_count }} attempts</span>
-                                    <span>{{ day.zero_second_attempt_count }} zero-second</span>
-                                </div>
+                                {% endfor %}
+                                {% if row.extra_review_day_count > 0 %}
+                                <div class="hc-work-review-caption">+{{ row.extra_review_day_count }} more flagged day{% if row.extra_review_day_count != 1 %}s{% endif %}</div>
+                                {% endif %}
                             </div>
-                            {% endfor %}
-                            {% if row.extra_review_day_count > 0 %}
-                            <div class="hc-work-review-caption">+{{ row.extra_review_day_count }} more flagged day{% if row.extra_review_day_count != 1 %}s{% endif %}</div>
-                            {% endif %}
                         </div>
                         {% else %}
                         <div class="hc-work-review-empty-note">No flagged recent days.</div>
@@ -186,4 +200,52 @@
         </table>
     </div>
 </section>
+
+<div class="modal fade" id="workReviewDaysModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content hc-modal-card">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <span class="mf-db2-kicker">Review Days</span>
+                    <h5 class="modal-title mt-1" id="workReviewDaysModalTitle">Review Days</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <div class="hc-work-review-modal-body" id="workReviewDaysModalBody">
+                    <div class="hc-work-review-empty-note">No flagged days available.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    (function () {
+        const modalElement = document.getElementById('workReviewDaysModal');
+        if (!modalElement) {
+            return;
+        }
+        const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+        const modalTitle = document.getElementById('workReviewDaysModalTitle');
+        const modalBody = document.getElementById('workReviewDaysModalBody');
+
+        document.querySelectorAll('.js-review-days').forEach((button) => {
+            button.addEventListener('click', () => {
+                const targetSelector = button.getAttribute('data-target');
+                const staffName = button.getAttribute('data-staff-name') || 'Staff';
+                const contentNode = targetSelector ? document.querySelector(targetSelector) : null;
+                if (modalTitle) {
+                    modalTitle.textContent = `Review Days - ${staffName}`;
+                }
+                if (modalBody) {
+                    modalBody.innerHTML = contentNode ? contentNode.innerHTML : '<div class="hc-work-review-empty-note">No flagged days available.</div>';
+                }
+                modal.show();
+            });
+        });
+    })();
+</script>
 {% endblock %}

@@ -1288,6 +1288,12 @@
     min-width: 220px;
 }
 
+.hc-work-review-day-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
 .hc-work-review-day {
     padding: 0.75rem 0.85rem;
     border-radius: 16px;
@@ -1327,6 +1333,11 @@
 .hc-work-review-empty-note {
     color: #6a7b96;
     font-size: 0.92rem;
+}
+
+.hc-work-review-modal-body {
+    max-height: 60vh;
+    overflow-y: auto;
 }
 
 .hc-staff-profile-editor .form-label {
