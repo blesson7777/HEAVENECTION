@@ -1174,7 +1174,7 @@ def staff_profile_report_pdf(request, staff_id):
     content_width = page_width - (margin * 2)
     y = page_height - margin
 
-    brand_color = colors.HexColor("#1d2c4d")
+    brand_color = colors.HexColor("#4d5c90")
     accent_color = colors.HexColor("#4d5c90")
     muted_color = colors.HexColor("#5d6c85")
     light_fill = colors.HexColor("#f3f6fd")
@@ -1282,7 +1282,7 @@ def staff_profile_report_pdf(request, staff_id):
             pdf.drawImage(
                 logo_reader,
                 margin,
-                page_height - 105,
+                page_height - 112,
                 width=46,
                 height=46,
                 mask="auto",
