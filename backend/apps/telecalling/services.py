@@ -3167,6 +3167,8 @@ def _zero_talk_block_details_by_staff(
                 total_zero_seconds = 0
                 streak_start = None
                 streak_end = None
+                streak_gap_seconds = 0
+                previous_block_end = None
                 for block in zero_streak:
                     merged_calls.extend(block["calls"])
                     total_zero_seconds += block["zero_seconds_in_block"]
@@ -3174,6 +3176,10 @@ def _zero_talk_block_details_by_staff(
                         streak_start = block["block_start"] if not streak_start else min(streak_start, block["block_start"])
                     if block["block_end"]:
                         streak_end = block["block_end"] if not streak_end else max(streak_end, block["block_end"])
+                    if previous_block_end and block["block_start"]:
+                        gap_seconds = max(0, int((block["block_start"] - previous_block_end).total_seconds()))
+                        streak_gap_seconds += gap_seconds
+                    previous_block_end = block["block_end"]
 
                 local_start = timezone.localtime(streak_start) if streak_start else None
                 local_end = timezone.localtime(streak_end) if streak_end else None
@@ -3208,7 +3214,8 @@ def _zero_talk_block_details_by_staff(
                         "extra_calls": 0,
                         "streak_note": "Zero-only streak (10+ attempts reached)",
                         "next_call_gap_label": pending_gap_label,
-                        "next_connected_call_time": pending_next_call_time,
+                        "next_connected_call_time": pending_next_call_time or "No connected call yet",
+                        "streak_gap_label": _format_duration(streak_gap_seconds),
                     }
                 )
             zero_streak = []
