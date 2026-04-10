@@ -1217,15 +1217,50 @@ def staff_profile_report_pdf(request, staff_id):
 
         y = y - box_height - 16
 
+    def draw_stat_row(stats, *, start_y):
+        nonlocal y
+        card_gap = 10
+        card_count = len(stats)
+        card_width = (content_width - (card_gap * (card_count - 1))) / card_count
+        card_height = 70
+        ensure_space(card_height + 12)
+        for index, (label, value, helper) in enumerate(stats):
+            x = margin + index * (card_width + card_gap)
+            pdf.setFillColor(light_fill)
+            pdf.setStrokeColor(border_color)
+            pdf.roundRect(x, start_y - card_height, card_width, card_height, 10, fill=1, stroke=1)
+            pdf.setFillColor(muted_color)
+            pdf.setFont("Helvetica-Bold", 8.5)
+            pdf.drawString(x + 10, start_y - 18, label.upper())
+            pdf.setFillColor(brand_color)
+            pdf.setFont("Helvetica-Bold", 14)
+            pdf.drawString(x + 10, start_y - 38, value)
+            if helper:
+                pdf.setFillColor(muted_color)
+                pdf.setFont("Helvetica", 8)
+                pdf.drawString(x + 10, start_y - 54, helper)
+        y = start_y - card_height - 18
+
     pdf.setFillColor(brand_color)
-    pdf.rect(0, page_height - 110, page_width, 110, fill=1, stroke=0)
+    pdf.rect(0, page_height - 120, page_width, 120, fill=1, stroke=0)
+    pdf.setFillColor(accent_color)
+    pdf.polygon(
+        [
+            (0, page_height - 120),
+            (page_width * 0.55, page_height - 120),
+            (page_width, page_height - 200),
+            (page_width, page_height - 120),
+        ],
+        fill=1,
+        stroke=0,
+    )
     pdf.setFillColor(colors.white)
-    pdf.setFont("Helvetica-Bold", 18)
-    pdf.drawString(margin, page_height - 52, company_profile.company_name or "Heavenection")
+    pdf.setFont("Helvetica-Bold", 19)
+    pdf.drawString(margin, page_height - 48, company_profile.company_name or "Heavenection")
     pdf.setFont("Helvetica", 10.5)
-    pdf.drawString(margin, page_height - 72, "Staff Performance Report")
+    pdf.drawString(margin, page_height - 68, "Staff Performance Report")
     pdf.setFont("Helvetica-Bold", 12)
-    pdf.drawRightString(page_width - margin, page_height - 60, month_date.strftime("%B %Y"))
+    pdf.drawRightString(page_width - margin, page_height - 58, month_date.strftime("%B %Y"))
 
     if company_profile.logo:
         try:
@@ -1243,7 +1278,7 @@ def staff_profile_report_pdf(request, staff_id):
         except Exception:
             pass
 
-    y = page_height - 130
+    y = page_height - 140
     pdf.setFillColor(muted_color)
     pdf.setFont("Helvetica", 9)
     contact_line = " | ".join(
@@ -1260,7 +1295,15 @@ def staff_profile_report_pdf(request, staff_id):
         pdf.drawString(margin, y, contact_line)
         y -= 20
     draw_divider(y)
-    y -= 16
+    y -= 14
+
+    stat_rows = [
+        ("Work Hours", _format_work_duration_label(breakdown["active_seconds"]), "Monthly total"),
+        ("Total Calls", f"{total_calls}", "All attempts"),
+        ("Conversions", f"{converted_calls}", "Successful leads"),
+        ("Total Earnings", _format_currency(breakdown["total_pay"]), "Monthly total"),
+    ]
+    draw_stat_row(stat_rows, start_y=y)
 
     staff_rows = [
         ("Name", staff.name),
@@ -1273,11 +1316,8 @@ def staff_profile_report_pdf(request, staff_id):
     draw_kv_block("Staff Details", staff_rows, columns=2)
 
     summary_rows = [
-        ("Work Hours", _format_work_duration_label(breakdown["active_seconds"])),
         ("Call Minutes", f"{float(breakdown['call_minutes']):,.1f} min"),
-        ("Total Calls", str(total_calls)),
         ("Connected Calls", str(connected_calls)),
-        ("Converted Calls", str(converted_calls)),
         ("Follow Up", str(followup_calls)),
         ("Call Back", str(callback_calls)),
         ("Rejected", str(rejected_calls)),
@@ -1287,7 +1327,7 @@ def staff_profile_report_pdf(request, staff_id):
         ("First Login", _format_datetime(first_login.login_time) if first_login else "--"),
         ("Last Logout", _format_datetime(last_logout.logout_time) if last_logout else "--"),
     ]
-    draw_kv_block("Performance Summary", summary_rows, columns=2)
+    draw_kv_block("Call & Session Summary", summary_rows, columns=2)
 
     earnings_rows = [
         ("Base Pay", _format_currency(breakdown["base_pay"])),
