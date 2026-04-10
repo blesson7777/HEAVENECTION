@@ -4748,6 +4748,8 @@ def build_staff_profile_payload(request, staff):
         company_profile=company_profile,
     )
     today, start, end = _today_range()
+    previous_month = _shift_month(today.replace(day=1), -1)
+    report_month_default = previous_month.strftime("%Y-%m")
     current_month_start, current_month_end = _month_range_for_reference(
         timezone.localdate(),
         end_at=timezone.localtime(timezone.now()),
@@ -4935,6 +4937,12 @@ def build_staff_profile_payload(request, staff):
         },
         "review_lead_rows": review_lead_rows,
         "quality_history_rows": build_staff_quality_history(staff, months=6),
+        "report_month_default": report_month_default,
+        "report_month_options": _month_option_rows(
+            reference_date=today,
+            selected_value=report_month_default,
+            months_back=6,
+        ),
         "assigned_lead_rows": assigned_lead_rows,
         "recent_call_rows": recent_call_rows,
         "recent_call_groups": recent_call_groups,

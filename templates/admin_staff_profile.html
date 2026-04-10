@@ -281,6 +281,31 @@
             <div class="hc-summary-card hc-staff-profile-review mb-4">
                 <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
                     <div>
+                        <span class="mf-db2-kicker">Performance Report</span>
+                        <h5 class="mb-1">Download monthly PDF</h5>
+                        <p class="text-muted mb-0">Includes earnings, calls, and full staff summary.</p>
+                    </div>
+                </div>
+                <form method="get" action="{% url 'staff-profile-report' staff_member.id %}">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="staffReportMonth">Month</label>
+                            <select class="form-select" id="staffReportMonth" name="month">
+                                {% for option in report_month_options %}
+                                <option value="{{ option.value }}" {% if option.is_selected %}selected{% endif %}>{{ option.label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6 d-flex gap-2 justify-content-end">
+                            <button type="submit" class="btn btn-primary">Download PDF</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <div class="hc-summary-card hc-staff-profile-review mb-4">
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                    <div>
                         <span class="mf-db2-kicker">Call Review Leads</span>
                         <h5 class="mb-1">{{ review_lead_summary.count }} lead(s) need a queue decision</h5>
                         <p class="text-muted mb-0">Use this when very short or zero-talk call records should be reopened for the same staff or reset as new leads.</p>

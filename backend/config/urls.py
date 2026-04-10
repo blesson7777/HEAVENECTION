@@ -18,6 +18,7 @@ urlpatterns = [
     path("settings/", views.settings_page, name="settings-page"),
     path("staff/", views.staff_page, name="staff-page"),
     path("staff/<uuid:staff_id>/", views.staff_profile_page, name="staff-profile-page"),
+    path("staff/<uuid:staff_id>/report/", views.staff_profile_report_pdf, name="staff-profile-report"),
     path(
         "staff/<uuid:staff_id>/documents/<str:document_type>/",
         views.staff_document_page,

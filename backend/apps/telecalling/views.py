@@ -27,6 +27,7 @@ from backend.apps.telecalling.models import (
     ReferralReward,
     Salary,
     SalaryPaymentTransaction,
+    Session,
     Staff,
     StaffAction,
     TrainingLesson,
@@ -86,6 +87,13 @@ from backend.apps.telecalling.services import (
     build_staff_salary_details_payload,
     build_salary_detail_payload,
     build_salary_page_payload,
+    _format_currency,
+    _format_datetime,
+    _format_work_duration_label,
+    _month_range_for_reference,
+    _parse_month_value,
+    _shift_month,
+    _build_staff_quality_metrics,
     build_referral_monitoring_payload,
     build_settings_payload,
     build_work_review_payload,
@@ -125,6 +133,7 @@ from backend.apps.telecalling.services import (
     update_staff_call_status,
     update_followups_from_upload,
     recover_staff_customer_lead,
+    calculate_staff_payout_for_dates,
 )
 
 
@@ -1090,6 +1099,159 @@ def staff_profile_page(request, staff_id):
         },
     )
     return render(request, "admin_staff_profile.html", context)
+
+
+def staff_profile_report_pdf(request, staff_id):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    try:
+        staff = Staff.objects.get(id=staff_id, role=Staff.Role.STAFF)
+    except Staff.DoesNotExist:
+        return redirect("staff-page")
+
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.utils import ImageReader
+        from reportlab.pdfgen import canvas
+    except ImportError:
+        messages.error(request, "PDF reports are not available on this server yet.")
+        return redirect("staff-profile-page", staff_id=staff.id)
+
+    month_value = request.GET.get("month", "").strip()
+    month_date = _parse_month_value(month_value)
+    if not month_date:
+        month_date = _shift_month(timezone.localdate().replace(day=1), -1)
+    range_start, range_end = _month_range_for_reference(
+        month_date,
+        end_at=timezone.localtime(timezone.now()),
+    )
+    breakdown = calculate_staff_payout_for_dates(
+        staff,
+        range_start.date(),
+        range_end.date(),
+    )
+    quality = _build_staff_quality_metrics(
+        [staff.id],
+        range_start=range_start,
+        range_end=range_end,
+    ).get(staff.id, {})
+
+    calls = Call.objects.filter(staff=staff, start_time__range=(range_start, range_end))
+    total_calls = calls.exclude(status=Call.Status.STARTED).count()
+    qualifying_calls = calls.filter(is_qualifying=True).count()
+    connected_calls = calls.filter(is_verified=True, duration_seconds__gt=0).count()
+    converted_calls = calls.filter(status=Call.Status.CONVERTED).count()
+    followup_calls = calls.filter(status=Call.Status.INTERESTED).count()
+    callback_calls = calls.filter(status=Call.Status.CALL_BACK).count()
+    rejected_calls = calls.filter(status=Call.Status.NOT_INTERESTED).count()
+    no_answer_calls = calls.filter(status=Call.Status.NO_ANSWER).count()
+    invalid_short_calls = calls.filter(status=Call.Status.INVALID_SHORT).count()
+
+    sessions = Session.objects.filter(staff=staff, login_time__range=(range_start, range_end))
+    session_count = sessions.count()
+    first_login = sessions.order_by("login_time").first()
+    last_logout = sessions.exclude(logout_time=None).order_by("-logout_time").first()
+
+    company_profile = get_company_profile()
+    response = HttpResponse(content_type="application/pdf")
+    file_month = month_date.strftime("%b-%Y")
+    response["Content-Disposition"] = (
+        f'attachment; filename="staff-report-{staff.name}-{file_month}.pdf"'
+    )
+
+    page_width, page_height = A4
+    pdf = canvas.Canvas(response, pagesize=A4)
+    margin = 48
+    y = page_height - margin
+
+    if company_profile.logo and company_profile.logo.path:
+        try:
+            logo_reader = ImageReader(company_profile.logo.path)
+            pdf.drawImage(logo_reader, margin, y - 48, width=48, height=48, mask="auto")
+        except Exception:
+            pass
+
+    pdf.setFont("Helvetica-Bold", 16)
+    pdf.drawString(margin + 60, y - 10, company_profile.company_name or "Heavenection")
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(margin + 60, y - 26, "Staff Performance Report")
+    pdf.drawRightString(page_width - margin, y - 18, month_date.strftime("%B %Y"))
+    y -= 70
+
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(margin, y, "Staff Details")
+    y -= 16
+    pdf.setFont("Helvetica", 10)
+    details = [
+        ("Name", staff.name),
+        ("Phone", staff.phone),
+        ("Email", staff.email or "--"),
+        ("Role", staff.get_role_display()),
+        ("Compensation", staff.get_compensation_type_display()),
+    ]
+    for label, value in details:
+        pdf.drawString(margin, y, f"{label}: {value}")
+        y -= 14
+
+    y -= 6
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(margin, y, "Performance Summary")
+    y -= 16
+    pdf.setFont("Helvetica", 10)
+    summary_rows = [
+        ("Period", f"{range_start.date().strftime('%d %b %Y')} to {range_end.date().strftime('%d %b %Y')}"),
+        ("Work Hours", _format_work_duration_label(breakdown["active_seconds"])),
+        ("Call Minutes", f"{float(breakdown['call_minutes']):,.1f} min"),
+        ("Total Calls", str(total_calls)),
+        ("Connected Calls", str(connected_calls)),
+        ("Converted Calls", str(converted_calls)),
+        ("Follow Up", str(followup_calls)),
+        ("Call Back", str(callback_calls)),
+        ("Rejected", str(rejected_calls)),
+        ("No Response", str(no_answer_calls)),
+        ("Invalid Short", str(invalid_short_calls)),
+        ("Sessions", str(session_count)),
+        ("First Login", _format_datetime(first_login.login_time) if first_login else "--"),
+        ("Last Logout", _format_datetime(last_logout.logout_time) if last_logout else "--"),
+    ]
+    for label, value in summary_rows:
+        pdf.drawString(margin, y, f"{label}: {value}")
+        y -= 14
+
+    y -= 6
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(margin, y, "Earnings Breakdown")
+    y -= 16
+    pdf.setFont("Helvetica", 10)
+    earnings_rows = [
+        ("Base Pay", _format_currency(breakdown["base_pay"])),
+        ("Call Earnings", _format_currency(breakdown["call_earnings"])),
+        ("Bonus Earnings", _format_currency(breakdown["bonus_earnings"])),
+        ("Total Earnings", _format_currency(breakdown["total_pay"])),
+    ]
+    for label, value in earnings_rows:
+        pdf.drawString(margin, y, f"{label}: {value}")
+        y -= 14
+
+    y -= 6
+    pdf.setFont("Helvetica-Bold", 12)
+    pdf.drawString(margin, y, "Review Score")
+    y -= 16
+    pdf.setFont("Helvetica", 10)
+    pdf.drawString(margin, y, f"Score: {quality.get('score', 0)} / 100")
+    y -= 14
+    pdf.drawString(margin, y, f"Status: {quality.get('label', 'No Recent Activity')}")
+    y -= 14
+    pdf.drawString(margin, y, f"Note: {quality.get('note', '--')}")
+    y -= 18
+
+    pdf.setFont("Helvetica", 9)
+    pdf.drawString(margin, 36, f"Generated on {timezone.localdate().strftime('%d %b %Y')}")
+    pdf.showPage()
+    pdf.save()
+    return response
 
 
 @require_GET
