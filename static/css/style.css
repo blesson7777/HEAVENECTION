@@ -1,4 +1,6 @@
 :root {
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+Malayalam:wght@400;600;700;800&display=swap");
+
     --mf-primary: #3366ff;
     --mf-primary-100: #4c6fff;
     --mf-secondary: #425466;

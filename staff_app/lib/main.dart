@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:call_log/call_log.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_phone_direct_caller/flutter_phone_direct_caller.dart';
 import 'package:image_picker/image_picker.dart';
@@ -80,6 +81,11 @@ class HeavenectionApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final baseTextTheme = ThemeData.light().textTheme;
+    final malayalamTextTheme = GoogleFonts.notoSansMalayalamTextTheme(
+      baseTextTheme,
+    );
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: kBrandName,
@@ -90,6 +96,7 @@ class HeavenectionApp extends StatelessWidget {
           seedColor: kPrimary,
           primary: kPrimary,
         ),
+        textTheme: malayalamTextTheme,
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,
           foregroundColor: kPrimaryDark,
