@@ -52,6 +52,11 @@
     <div class="alert alert-primary border-0 mb-4" role="alert">
         Upload CSV, Excel, or VCF files. The system reads contact names and phone numbers automatically, avoids duplicate assignment, and keeps every active staff member topped up to the target lead count.
     </div>
+    {% if readd_summary.has_readded %}
+    <div class="alert alert-warning border-0 mb-4" role="alert">
+        Warning: {{ readd_summary.readded_count }} lead(s) in this list were re-added from the recovery queue. Please double-check before assigning or deleting.
+    </div>
+    {% endif %}
 
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
         <button type="button" class="btn btn-outline-success js-open-lead-allocation-mode">Allocate Leads</button>
@@ -131,6 +136,9 @@
                         <span class="hc-status hc-status-{% if lead.status == 'new' %}new{% elif lead.status == 'call_back' %}warning{% elif lead.status == 'interested' %}success{% elif lead.status == 'converted' %}primary{% else %}muted{% endif %}">{{ lead.status_label }}</span>
                         {% if lead.callback_schedule_label %}
                         <div class="small text-muted mt-1">{{ lead.callback_schedule_label }}</div>
+                        {% endif %}
+                        {% if lead.readd_count %}
+                        <div class="small text-warning mt-1">Re-added {{ lead.readd_count }} time{% if lead.readd_count|default:0|add:0 != 1 %}s{% endif %}</div>
                         {% endif %}
                     </td>
                     <td>{{ lead.assigned_to }}</td>

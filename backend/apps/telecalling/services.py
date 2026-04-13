@@ -5773,7 +5773,10 @@ def build_lead_management_payload():
     ]
 
     lead_rows = []
+    readded_lead_count = 0
     for lead in leads:
+        if lead.readd_count:
+            readded_lead_count += 1
         lead_rows.append(
             {
                 "id": str(lead.id),
@@ -5794,6 +5797,7 @@ def build_lead_management_payload():
                 "notes": lead.notes,
                 "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
                 "updated_at": _format_datetime(lead.updated_at),
+                "readd_count": lead.readd_count,
             }
         )
 
@@ -5805,6 +5809,10 @@ def build_lead_management_payload():
             "unassigned_total": active_queue.filter(assigned_to=None).count(),
             "staff_active_count": _staff_queryset().filter(is_active=True).count(),
             "queue_limit": queue_limit,
+        },
+        "readd_summary": {
+            "has_readded": readded_lead_count > 0,
+            "readded_count": readded_lead_count,
         },
     }
 
