@@ -6248,8 +6248,10 @@ def delete_recovery_leads_by_ids(selected_ids):
             continue
     if not valid_ids:
         return {"deleted_count": 0}
-    deleted_count, _ = Lead.objects.filter(id__in=valid_ids, status__in=RECOVERY_LEAD_STATUSES).delete()
-    return {"deleted_count": deleted_count}
+    queryset = Lead.objects.filter(id__in=valid_ids, status__in=RECOVERY_LEAD_STATUSES)
+    lead_count = queryset.count()
+    queryset.delete()
+    return {"deleted_count": lead_count}
 
 
 def delete_recovery_leads_filtered(count, *, scope="all", max_readd_count=None):
@@ -6265,8 +6267,10 @@ def delete_recovery_leads_filtered(count, *, scope="all", max_readd_count=None):
     )
     if not selected_ids:
         return {"deleted_count": 0}
-    deleted_count, _ = Lead.objects.filter(id__in=selected_ids, status__in=RECOVERY_LEAD_STATUSES).delete()
-    return {"deleted_count": deleted_count}
+    queryset = Lead.objects.filter(id__in=selected_ids, status__in=RECOVERY_LEAD_STATUSES)
+    lead_count = queryset.count()
+    queryset.delete()
+    return {"deleted_count": lead_count}
 
 
 def build_call_detail_payload(*, limit=200, date_value=""):
