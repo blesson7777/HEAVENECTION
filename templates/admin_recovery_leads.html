@@ -13,10 +13,8 @@
         const deleteButton = document.getElementById("recoveryDeleteSelected");
         const deleteButtonTop = document.getElementById("recoveryDeleteSelectedTop");
         const bulkDeleteForm = document.getElementById("recoveryBulkDeleteForm");
-        const readdForm = document.getElementById("recoveryReaddForm");
-        const deleteFilteredForm = document.getElementById("recoveryDeleteFilteredForm");
 
-        if (!selectAll || !checkboxes.length || !deleteButton || !deleteButtonTop) {
+        if (!selectAll || !checkboxes.length || !deleteButton || !deleteButtonTop || !bulkDeleteForm) {
             return;
         }
 
@@ -30,6 +28,9 @@
             deleteButtonTop.textContent = selectedCount
                 ? `Delete Marked (${selectedCount})`
                 : "Delete Marked";
+            bulkDeleteForm.dataset.confirmMessage = selectedCount
+                ? `Delete ${selectedCount} selected recovery lead(s)? This cannot be undone.`
+                : "Delete the selected recovery leads? This cannot be undone.";
             selectAll.checked = selectedCount > 0 && selectedCount === checkboxes.length;
             selectAll.indeterminate = selectedCount > 0 && selectedCount < checkboxes.length;
         }
@@ -45,37 +46,12 @@
             checkbox.addEventListener("change", updateDeleteState);
         });
 
-        if (bulkDeleteForm) {
-            bulkDeleteForm.addEventListener("submit", (event) => {
-                const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
-                if (selectedCount === 0) {
-                    event.preventDefault();
-                    return;
-                }
-                const confirmed = window.confirm(`Delete ${selectedCount} selected recovery lead(s)? This cannot be undone.`);
-                if (!confirmed) {
-                    event.preventDefault();
-                }
-            });
-        }
-
-        if (readdForm) {
-            readdForm.addEventListener("submit", (event) => {
-                const confirmed = window.confirm("Re-add the oldest matching recovery leads back to the active queue?");
-                if (!confirmed) {
-                    event.preventDefault();
-                }
-            });
-        }
-
-        if (deleteFilteredForm) {
-            deleteFilteredForm.addEventListener("submit", (event) => {
-                const confirmed = window.confirm("Delete the oldest matching recovery leads? This cannot be undone.");
-                if (!confirmed) {
-                    event.preventDefault();
-                }
-            });
-        }
+        bulkDeleteForm.addEventListener("submit", (event) => {
+            const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+            if (selectedCount === 0) {
+                event.preventDefault();
+            }
+        });
 
         updateDeleteState();
     })();
@@ -139,7 +115,7 @@
                         <p class="text-muted mb-0">Use the same filters for re-adding or deleting the oldest recovery leads.</p>
                     </div>
                 </div>
-                <form method="post" action="{% url 'recovery-leads-page' %}" id="recoveryReaddForm" class="row g-3 align-items-end">
+                <form method="post" action="{% url 'recovery-leads-page' %}" id="recoveryReaddForm" class="row g-3 align-items-end" data-confirm-title="Re-add Recovery Leads" data-confirm-message="Re-add the oldest matching recovery leads back to the active queue?" data-confirm-ok="Re-add" data-confirm-class="btn-primary">
                     {% csrf_token %}
                     <input type="hidden" name="recovery_action" value="reactivate_oldest">
                     <div class="col-lg-3 col-md-6">
@@ -183,7 +159,7 @@
                     </div>
                 </form>
                 <hr class="my-4">
-                <form method="post" action="{% url 'recovery-leads-page' %}" id="recoveryDeleteFilteredForm" class="row g-3 align-items-end">
+                <form method="post" action="{% url 'recovery-leads-page' %}" id="recoveryDeleteFilteredForm" class="row g-3 align-items-end" data-confirm-title="Delete Recovery Leads" data-confirm-message="Delete the oldest matching recovery leads? This cannot be undone." data-confirm-ok="Delete" data-confirm-class="btn-danger">
                     {% csrf_token %}
                     <input type="hidden" name="recovery_action" value="delete_filtered">
                     <div class="col-lg-3 col-md-6">
@@ -245,7 +221,7 @@
         <div class="d-flex justify-content-end mb-3">
             <button type="submit" form="recoveryBulkDeleteForm" class="btn btn-outline-danger" id="recoveryDeleteSelectedTop" disabled>Delete Marked</button>
         </div>
-        <form method="post" action="{% url 'recovery-leads-page' %}" id="recoveryBulkDeleteForm">
+        <form method="post" action="{% url 'recovery-leads-page' %}" id="recoveryBulkDeleteForm" data-confirm-title="Delete Selected Leads" data-confirm-message="Delete the selected recovery leads? This cannot be undone." data-confirm-ok="Delete" data-confirm-class="btn-danger">
             {% csrf_token %}
             <input type="hidden" name="recovery_action" value="delete_selected">
             <table class="table hc-table align-middle mb-0">
