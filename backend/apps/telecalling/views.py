@@ -1776,7 +1776,12 @@ def recovery_leads_page(request):
             return redirect("recovery-leads-page")
         if recovery_action == "delete_selected":
             selected_ids = request.POST.getlist("selected_recovery_ids")
-            summary = delete_recovery_leads_by_ids(selected_ids)
+            try:
+                summary = delete_recovery_leads_by_ids(selected_ids)
+            except Exception as error:
+                logger.exception("Recovery lead delete selected failed.")
+                messages.error(request, f"Delete failed. {error.__class__.__name__}: {error}")
+                return redirect("recovery-leads-page")
             if summary["deleted_count"] <= 0:
                 messages.warning(request, "No leads were deleted. Select rejected or no response leads first.")
             else:
@@ -1798,11 +1803,16 @@ def recovery_leads_page(request):
                 except (TypeError, ValueError):
                     messages.error(request, "Enter a valid re-add count filter.")
                     return redirect("recovery-leads-page")
-            summary = delete_recovery_leads_filtered(
-                delete_count,
-                scope=scope,
-                max_readd_count=max_readd_count,
-            )
+            try:
+                summary = delete_recovery_leads_filtered(
+                    delete_count,
+                    scope=scope,
+                    max_readd_count=max_readd_count,
+                )
+            except Exception as error:
+                logger.exception("Recovery lead delete filtered failed.")
+                messages.error(request, f"Delete failed. {error.__class__.__name__}: {error}")
+                return redirect("recovery-leads-page")
             if summary["deleted_count"] <= 0:
                 messages.warning(request, "No leads matched the delete filters.")
             else:
