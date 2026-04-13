@@ -6235,10 +6235,17 @@ def reactivate_oldest_recovery_leads(count, *, scope="all", max_readd_count=None
 
 
 def delete_recovery_leads_by_ids(selected_ids):
-    selected_ids = [lead_id for lead_id in (selected_ids or []) if lead_id]
-    if not selected_ids:
+    valid_ids = []
+    for lead_id in (selected_ids or []):
+        if not lead_id:
+            continue
+        try:
+            valid_ids.append(str(uuid.UUID(str(lead_id))))
+        except (TypeError, ValueError, AttributeError):
+            continue
+    if not valid_ids:
         return {"deleted_count": 0}
-    deleted_count, _ = Lead.objects.filter(id__in=selected_ids, status__in=RECOVERY_LEAD_STATUSES).delete()
+    deleted_count, _ = Lead.objects.filter(id__in=valid_ids, status__in=RECOVERY_LEAD_STATUSES).delete()
     return {"deleted_count": deleted_count}
 
 
