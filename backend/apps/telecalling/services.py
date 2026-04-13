@@ -5762,7 +5762,6 @@ def build_lead_management_payload():
         Lead.objects.select_related("assigned_to")
         .exclude(
             status__in=RECOVERY_LEAD_STATUSES,
-            assigned_to=None,
         )
         .order_by("-updated_at")
     )
