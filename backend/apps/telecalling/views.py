@@ -1774,6 +1774,40 @@ def recovery_leads_page(request):
                     f"assigned {summary['assigned_count']}, waiting {summary['remaining_unassigned_count']}.",
                 )
             return redirect("recovery-leads-page")
+        if recovery_action == "delete_selected":
+            selected_ids = request.POST.getlist("selected_recovery_ids")
+            summary = delete_recovery_leads_by_ids(selected_ids)
+            if summary["deleted_count"] <= 0:
+                messages.warning(request, "No leads were deleted. Select rejected or no response leads first.")
+            else:
+                messages.success(request, f"Deleted {summary['deleted_count']} recovery lead(s).")
+            return redirect("recovery-leads-page")
+        if recovery_action == "delete_filtered":
+            raw_count = request.POST.get("delete_count", "").strip()
+            scope = request.POST.get("delete_scope", "all").strip() or "all"
+            raw_max_readd = request.POST.get("delete_max_readd_count", "").strip()
+            try:
+                delete_count = int(raw_count)
+            except (TypeError, ValueError):
+                messages.error(request, "Enter a valid number of leads to delete.")
+                return redirect("recovery-leads-page")
+            max_readd_count = None
+            if raw_max_readd != "":
+                try:
+                    max_readd_count = int(raw_max_readd)
+                except (TypeError, ValueError):
+                    messages.error(request, "Enter a valid re-add count filter.")
+                    return redirect("recovery-leads-page")
+            summary = delete_recovery_leads_filtered(
+                delete_count,
+                scope=scope,
+                max_readd_count=max_readd_count,
+            )
+            if summary["deleted_count"] <= 0:
+                messages.warning(request, "No leads matched the delete filters.")
+            else:
+                messages.success(request, f"Deleted {summary['deleted_count']} recovery lead(s).")
+            return redirect("recovery-leads-page")
 
         messages.error(request, "Recovery lead request could not be processed.")
         return redirect("recovery-leads-page")
@@ -2993,3 +3027,5 @@ def update_call_status_api(request, call_id):
 
 
 
+    delete_recovery_leads_by_ids,
+    delete_recovery_leads_filtered,

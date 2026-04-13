@@ -4,6 +4,44 @@
 <a href="{% url 'leads-page' %}" class="btn btn-outline-primary btn-sm">Lead Desk</a>
 {% endblock %}
 
+{% block extra_scripts %}
+{{ block.super }}
+<script>
+    (function () {
+        const selectAll = document.getElementById("recoverySelectAll");
+        const checkboxes = Array.from(document.querySelectorAll(".js-recovery-select"));
+        const deleteButton = document.getElementById("recoveryDeleteSelected");
+
+        if (!selectAll || !checkboxes.length || !deleteButton) {
+            return;
+        }
+
+        function updateDeleteState() {
+            const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+            deleteButton.disabled = selectedCount === 0;
+            deleteButton.textContent = selectedCount
+                ? `Delete Marked (${selectedCount})`
+                : "Delete Marked";
+            selectAll.checked = selectedCount > 0 && selectedCount === checkboxes.length;
+            selectAll.indeterminate = selectedCount > 0 && selectedCount < checkboxes.length;
+        }
+
+        selectAll.addEventListener("change", () => {
+            checkboxes.forEach((checkbox) => {
+                checkbox.checked = selectAll.checked;
+            });
+            updateDeleteState();
+        });
+
+        checkboxes.forEach((checkbox) => {
+            checkbox.addEventListener("change", updateDeleteState);
+        });
+
+        updateDeleteState();
+    })();
+</script>
+{% endblock %}
+
 {% block admin_content %}
 <section class="hc-surface-card animate-on-scroll">
     <div class="mf-db2-panel-head mb-3">
@@ -96,6 +134,50 @@
         </div>
     </form>
 
+    <form method="post" action="{% url 'recovery-leads-page' %}" class="row g-3 align-items-end mb-4">
+        {% csrf_token %}
+        <input type="hidden" name="recovery_action" value="delete_filtered">
+        <div class="col-lg-3 col-md-4">
+            <label class="form-label fw-semibold" for="deleteCount">Delete oldest count</label>
+            <input
+                type="number"
+                min="1"
+                class="form-control"
+                id="deleteCount"
+                name="delete_count"
+                value="1"
+                required
+            >
+        </div>
+        <div class="col-lg-3 col-md-4">
+            <label class="form-label fw-semibold" for="deleteMaxReaddCount">Max re-add count</label>
+            <input
+                type="number"
+                min="0"
+                class="form-control"
+                id="deleteMaxReaddCount"
+                name="delete_max_readd_count"
+                placeholder="0 = never re-added"
+            >
+        </div>
+        <div class="col-lg-3 col-md-4">
+            <label class="form-label fw-semibold" for="deleteScope">Lead type</label>
+            <select class="form-select" id="deleteScope" name="delete_scope">
+                <option value="all">Rejected and No Response</option>
+                <option value="rejected">Rejected only</option>
+                <option value="no_response">No Response only</option>
+            </select>
+        </div>
+        <div class="col-lg-3 col-md-12">
+            <div class="alert alert-light border mb-0">
+                Deletes the oldest leads that match the selected re-add count and status.
+            </div>
+        </div>
+        <div class="col-12">
+            <button type="submit" class="btn btn-outline-danger">Delete Oldest Leads</button>
+        </div>
+    </form>
+
     <div class="hc-filter-row">
         <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
         <button type="button" class="hc-filter-chip" data-filter-status="not_interested">Rejected</button>
@@ -108,9 +190,15 @@
     </div>
 
     <div class="table-responsive">
-        <table class="table hc-table align-middle mb-0">
+        <form method="post" action="{% url 'recovery-leads-page' %}" id="recoveryBulkDeleteForm">
+            {% csrf_token %}
+            <input type="hidden" name="recovery_action" value="delete_selected">
+            <table class="table hc-table align-middle mb-0">
             <thead>
                 <tr>
+                    <th class="text-center">
+                        <input type="checkbox" id="recoverySelectAll">
+                    </th>
                     <th>Lead</th>
                     <th>Phone</th>
                     <th>Status</th>
@@ -125,6 +213,9 @@
             <tbody id="recoveryTableBody">
                 {% for lead in recovery_rows %}
                 <tr data-status="{{ lead.status }}">
+                    <td class="text-center">
+                        <input type="checkbox" class="js-recovery-select" name="selected_recovery_ids" value="{{ lead.id }}">
+                    </td>
                     <td>
                         <strong>{{ lead.name }}</strong>
                         <div class="text-muted small">{{ lead.notes|default:"No notes" }}</div>
@@ -156,10 +247,14 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="9" class="text-center py-4">No rejected or no response leads are waiting in the recovery queue.</td></tr>
+                <tr><td colspan="10" class="text-center py-4">No rejected or no response leads are waiting in the recovery queue.</td></tr>
                 {% endfor %}
             </tbody>
-        </table>
+            </table>
+            <div class="d-flex justify-content-end mt-3">
+                <button type="submit" class="btn btn-outline-danger" id="recoveryDeleteSelected" disabled>Delete Marked</button>
+            </div>
+        </form>
     </div>
 </section>
 
