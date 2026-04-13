@@ -66,7 +66,19 @@
                 required
             >
         </div>
-        <div class="col-lg-4 col-md-4">
+        <div class="col-lg-3 col-md-4">
+            <label class="form-label fw-semibold" for="maxReaddCount">Max re-add count</label>
+            <input
+                type="number"
+                min="0"
+                class="form-control"
+                id="maxReaddCount"
+                name="max_readd_count"
+                placeholder="0 = never re-added"
+            >
+            <div class="form-text">Set 0 to pick only leads never re-added.</div>
+        </div>
+        <div class="col-lg-3 col-md-4">
             <label class="form-label fw-semibold" for="readdScope">Lead type</label>
             <select class="form-select" id="readdScope" name="readd_scope">
                 <option value="all">Rejected and No Response</option>
@@ -74,7 +86,7 @@
                 <option value="no_response">No Response only</option>
             </select>
         </div>
-        <div class="col-lg-5 col-md-4">
+        <div class="col-lg-3 col-md-12">
             <div class="alert alert-light border mb-0">
                 The system re-adds the oldest listed leads first, resets them to the active queue, and tries to allocate that batch before other waiting leads.
             </div>

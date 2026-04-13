@@ -6196,12 +6196,16 @@ def build_recovery_lead_payload():
     }
 
 
-def reactivate_oldest_recovery_leads(count, *, scope="all"):
+def reactivate_oldest_recovery_leads(count, *, scope="all", max_readd_count=None):
     count = max(1, int(count))
     recovery_statuses = _recovery_status_scope(scope)
+    recovery_queryset = Lead.objects.filter(status__in=recovery_statuses)
+    if max_readd_count is not None:
+        recovery_queryset = recovery_queryset.filter(readd_count__lte=max_readd_count)
     selected_leads = list(
-        Lead.objects.filter(status__in=recovery_statuses)
-        .order_by("readd_count", "updated_at", "last_contacted_at", "created_at", "id")[:count]
+        recovery_queryset.order_by("readd_count", "updated_at", "last_contacted_at", "created_at", "id")[
+            :count
+        ]
     )
 
     if not selected_leads:

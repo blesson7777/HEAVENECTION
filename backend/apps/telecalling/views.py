@@ -1741,17 +1741,29 @@ def recovery_leads_page(request):
         if recovery_action == "reactivate_oldest":
             raw_count = request.POST.get("readd_count", "").strip()
             scope = request.POST.get("readd_scope", "all").strip() or "all"
+            raw_max_readd = request.POST.get("max_readd_count", "").strip()
             try:
                 readd_count = int(raw_count)
             except (TypeError, ValueError):
                 messages.error(request, "Enter a valid number of leads to re-add.")
                 return redirect("recovery-leads-page")
+            max_readd_count = None
+            if raw_max_readd != "":
+                try:
+                    max_readd_count = int(raw_max_readd)
+                except (TypeError, ValueError):
+                    messages.error(request, "Enter a valid re-add count filter.")
+                    return redirect("recovery-leads-page")
 
             if readd_count < 1:
                 messages.error(request, "Re-add count must be at least 1.")
                 return redirect("recovery-leads-page")
 
-            summary = reactivate_oldest_recovery_leads(readd_count, scope=scope)
+            summary = reactivate_oldest_recovery_leads(
+                readd_count,
+                scope=scope,
+                max_readd_count=max_readd_count,
+            )
             if summary["reactivated_count"] == 0:
                 messages.warning(request, "No rejected or no response leads were available for re-allocation.")
             else:
