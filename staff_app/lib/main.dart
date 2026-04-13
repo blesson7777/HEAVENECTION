@@ -2700,6 +2700,38 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     return null;
   }
 
+  LeadItem? _pendingStatusLeadPlaceholder() {
+    final leadId = _pendingStatusLeadId;
+    if (leadId == null || leadId.isEmpty) {
+      return null;
+    }
+    final existingLead = _leadById(leadId);
+    if (existingLead != null) {
+      return existingLead;
+    }
+    final fallbackName = _pendingStatusLeadName.isNotEmpty
+        ? _pendingStatusLeadName
+        : (_pendingStatusLeadPhone.isNotEmpty
+              ? _pendingStatusLeadPhone
+              : 'Recent customer');
+    final fallbackPhone = _pendingStatusLeadPhone.isNotEmpty
+        ? _pendingStatusLeadPhone
+        : '';
+    return LeadItem(
+      id: leadId,
+      name: fallbackName,
+      phone: fallbackPhone,
+      status: 'new',
+      statusLabel: 'New',
+      callbackWindow: '',
+      callbackWindowLabel: '',
+      callbackDate: null,
+      callbackDateLabel: '',
+      callbackScheduleLabel: '',
+      notes: '',
+    );
+  }
+
   Future<void> _placeCallForLead(LeadItem lead) async {
     final canReadCallLog = await _ensureCallLogAccess();
     if (!canReadCallLog) {
@@ -4003,10 +4035,28 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       saveButtonLabel: 'Save Remark',
       initialStatus: _callStatus,
       trackPendingPrompt: true,
+      allowRetryAction: true,
+      retryButtonLabel: 'Call Again',
     );
     _callStatusDialogContext = null;
     _isCallStatusPromptVisible = false;
     if (selection == null || selection.retryCall) {
+      if (selection?.retryCall == true) {
+        final lead = _pendingStatusLeadPlaceholder();
+        if (lead == null) {
+          _showMessage(
+            'Unable to reopen the recent customer. Refresh and try again.',
+            isError: true,
+          );
+          return;
+        }
+        final didSave = await _submitPendingCallStatus('No Response');
+        if (!didSave) {
+          return;
+        }
+        _showMessage('Calling the customer again.');
+        await _placeCallForLead(lead);
+      }
       return;
     }
     final didSave = await _submitPendingCallStatus(
