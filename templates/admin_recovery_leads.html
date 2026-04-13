@@ -89,94 +89,106 @@
         </div>
     </div>
 
-    <form method="post" action="{% url 'recovery-leads-page' %}" class="row g-3 align-items-end mb-4">
-        {% csrf_token %}
-        <input type="hidden" name="recovery_action" value="reactivate_oldest">
-        <div class="col-lg-3 col-md-4">
-            <label class="form-label fw-semibold" for="readdCount">Re-add oldest count</label>
-            <input
-                type="number"
-                min="1"
-                class="form-control"
-                id="readdCount"
-                name="readd_count"
-                value="{{ recovery_summary.queue_limit }}"
-                required
-            >
-        </div>
-        <div class="col-lg-3 col-md-4">
-            <label class="form-label fw-semibold" for="maxReaddCount">Max re-add count</label>
-            <input
-                type="number"
-                min="0"
-                class="form-control"
-                id="maxReaddCount"
-                name="max_readd_count"
-                placeholder="0 = never re-added"
-            >
-            <div class="form-text">Set 0 to pick only leads never re-added.</div>
-        </div>
-        <div class="col-lg-3 col-md-4">
-            <label class="form-label fw-semibold" for="readdScope">Lead type</label>
-            <select class="form-select" id="readdScope" name="readd_scope">
-                <option value="all">Rejected and No Response</option>
-                <option value="rejected">Rejected only</option>
-                <option value="no_response">No Response only</option>
-            </select>
-        </div>
-        <div class="col-lg-3 col-md-12">
-            <div class="alert alert-light border mb-0">
-                The system re-adds the oldest listed leads first, resets them to the active queue, and tries to allocate that batch before other waiting leads.
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="hc-summary-card">
+                <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-3">
+                    <div>
+                        <span class="mf-db2-kicker">Recovery Actions</span>
+                        <h5 class="mb-1">Re-add or delete recovery leads</h5>
+                        <p class="text-muted mb-0">Use the same filters for re-adding or deleting the oldest recovery leads.</p>
+                    </div>
+                </div>
+                <form method="post" action="{% url 'recovery-leads-page' %}" class="row g-3 align-items-end">
+                    {% csrf_token %}
+                    <input type="hidden" name="recovery_action" value="reactivate_oldest">
+                    <div class="col-lg-3 col-md-6">
+                        <label class="form-label fw-semibold" for="readdCount">Re-add oldest count</label>
+                        <input
+                            type="number"
+                            min="1"
+                            class="form-control"
+                            id="readdCount"
+                            name="readd_count"
+                            value="{{ recovery_summary.queue_limit }}"
+                            required
+                        >
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <label class="form-label fw-semibold" for="maxReaddCount">Max re-add count</label>
+                        <input
+                            type="number"
+                            min="0"
+                            class="form-control"
+                            id="maxReaddCount"
+                            name="max_readd_count"
+                            placeholder="0 = never re-added"
+                        >
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <label class="form-label fw-semibold" for="readdScope">Lead type</label>
+                        <select class="form-select" id="readdScope" name="readd_scope">
+                            <option value="all">Rejected and No Response</option>
+                            <option value="rejected">Rejected only</option>
+                            <option value="no_response">No Response only</option>
+                        </select>
+                    </div>
+                    <div class="col-lg-3 col-md-6 d-flex">
+                        <button type="submit" class="btn btn-primary w-100">Re-Add Oldest Leads</button>
+                    </div>
+                    <div class="col-12">
+                        <div class="alert alert-light border mb-0">
+                            Re-adds the oldest matching leads and returns them to the active queue. Set max re-add count to 0 to pick only leads never re-added.
+                        </div>
+                    </div>
+                </form>
+                <hr class="my-4">
+                <form method="post" action="{% url 'recovery-leads-page' %}" class="row g-3 align-items-end">
+                    {% csrf_token %}
+                    <input type="hidden" name="recovery_action" value="delete_filtered">
+                    <div class="col-lg-3 col-md-6">
+                        <label class="form-label fw-semibold" for="deleteCount">Delete oldest count</label>
+                        <input
+                            type="number"
+                            min="1"
+                            class="form-control"
+                            id="deleteCount"
+                            name="delete_count"
+                            value="1"
+                            required
+                        >
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <label class="form-label fw-semibold" for="deleteMaxReaddCount">Max re-add count</label>
+                        <input
+                            type="number"
+                            min="0"
+                            class="form-control"
+                            id="deleteMaxReaddCount"
+                            name="delete_max_readd_count"
+                            placeholder="0 = never re-added"
+                        >
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <label class="form-label fw-semibold" for="deleteScope">Lead type</label>
+                        <select class="form-select" id="deleteScope" name="delete_scope">
+                            <option value="all">Rejected and No Response</option>
+                            <option value="rejected">Rejected only</option>
+                            <option value="no_response">No Response only</option>
+                        </select>
+                    </div>
+                    <div class="col-lg-3 col-md-6 d-flex">
+                        <button type="submit" class="btn btn-outline-danger w-100">Delete Oldest Leads</button>
+                    </div>
+                    <div class="col-12">
+                        <div class="alert alert-light border mb-0">
+                            Deletes the oldest leads that match the selected re-add count and status.
+                        </div>
+                    </div>
+                </form>
             </div>
         </div>
-        <div class="col-12">
-            <button type="submit" class="btn btn-primary">Re-Add Oldest Leads</button>
-        </div>
-    </form>
-
-    <form method="post" action="{% url 'recovery-leads-page' %}" class="row g-3 align-items-end mb-4">
-        {% csrf_token %}
-        <input type="hidden" name="recovery_action" value="delete_filtered">
-        <div class="col-lg-3 col-md-4">
-            <label class="form-label fw-semibold" for="deleteCount">Delete oldest count</label>
-            <input
-                type="number"
-                min="1"
-                class="form-control"
-                id="deleteCount"
-                name="delete_count"
-                value="1"
-                required
-            >
-        </div>
-        <div class="col-lg-3 col-md-4">
-            <label class="form-label fw-semibold" for="deleteMaxReaddCount">Max re-add count</label>
-            <input
-                type="number"
-                min="0"
-                class="form-control"
-                id="deleteMaxReaddCount"
-                name="delete_max_readd_count"
-                placeholder="0 = never re-added"
-            >
-        </div>
-        <div class="col-lg-3 col-md-4">
-            <label class="form-label fw-semibold" for="deleteScope">Lead type</label>
-            <select class="form-select" id="deleteScope" name="delete_scope">
-                <option value="all">Rejected and No Response</option>
-                <option value="rejected">Rejected only</option>
-                <option value="no_response">No Response only</option>
-            </select>
-        </div>
-        <div class="col-lg-3 col-md-12">
-            <div class="alert alert-light border mb-0">
-                Deletes the oldest leads that match the selected re-add count and status.
-            </div>
-        </div>
-        <div class="col-12">
-            <button type="submit" class="btn btn-outline-danger">Delete Oldest Leads</button>
-        </div>
-    </form>
+    </div>
 
     <div class="hc-filter-row">
         <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
