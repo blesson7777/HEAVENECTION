@@ -13,7 +13,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, close_old_connections, transaction
-from django.db.models import Case, Count, IntegerField, Max, Q, Sum, Value, When
+from django.db.models import Case, Count, F, IntegerField, Max, Q, Sum, Value, When
 from django.template.loader import render_to_string
 from django.db.models.functions import Coalesce, TruncDate
 from django.urls import reverse
@@ -6147,7 +6147,7 @@ def build_recovery_lead_payload():
     recovery_leads = (
         _recovery_lead_queryset()
         .select_related("assigned_to")
-        .order_by("updated_at", "last_contacted_at", "created_at", "id")
+        .order_by("readd_count", "updated_at", "last_contacted_at", "created_at", "id")
     )
     staff_options = [
         {"id": str(staff.id), "name": staff.name}
@@ -6171,12 +6171,15 @@ def build_recovery_lead_payload():
                 "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
                 "updated_at": _format_datetime(lead.updated_at),
                 "created_at": _format_datetime(lead.created_at),
+                "readd_count": int(lead.readd_count or 0),
             }
         )
 
     rejected_count = sum(1 for row in recovery_rows if row["status"] == Lead.Status.NOT_INTERESTED)
     no_response_count = sum(1 for row in recovery_rows if row["status"] == Lead.Status.NO_ANSWER)
     oldest_row = recovery_rows[0] if recovery_rows else None
+    total_readds = sum(row.get("readd_count", 0) for row in recovery_rows)
+    max_readd = max((row.get("readd_count", 0) for row in recovery_rows), default=0)
     return {
         "recovery_rows": recovery_rows,
         "staff_options": staff_options,
@@ -6184,6 +6187,8 @@ def build_recovery_lead_payload():
             "total_count": len(recovery_rows),
             "rejected_count": rejected_count,
             "no_response_count": no_response_count,
+            "total_readd_count": total_readds,
+            "max_readd_count": max_readd,
             "queue_limit": get_lead_queue_limit(),
             "oldest_lead_name": oldest_row["name"] if oldest_row else "No leads in this list",
             "oldest_lead_updated_at": oldest_row["updated_at"] if oldest_row else "No waiting recovery leads",
@@ -6196,7 +6201,7 @@ def reactivate_oldest_recovery_leads(count, *, scope="all"):
     recovery_statuses = _recovery_status_scope(scope)
     selected_leads = list(
         Lead.objects.filter(status__in=recovery_statuses)
-        .order_by("updated_at", "last_contacted_at", "created_at", "id")[:count]
+        .order_by("readd_count", "updated_at", "last_contacted_at", "created_at", "id")[:count]
     )
 
     if not selected_leads:
@@ -6213,6 +6218,7 @@ def reactivate_oldest_recovery_leads(count, *, scope="all"):
         status=Lead.Status.NEW,
         callback_window="",
         assigned_to=None,
+        readd_count=F("readd_count") + 1,
         updated_at=now,
     )
     allocation = auto_allocate_leads(prioritized_lead_ids=selected_ids)

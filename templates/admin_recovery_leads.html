@@ -37,6 +37,13 @@
         </div>
         <div class="col-xl-3 col-md-6">
             <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Re-Add Count</span>
+                <h3 class="mb-1">{{ recovery_summary.total_readd_count }}</h3>
+                <p class="mb-0 text-muted">Total times leads have been re-added. Max per lead: {{ recovery_summary.max_readd_count }}.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
                 <span class="mf-db2-kicker">Oldest</span>
                 <h3 class="mb-1">{{ recovery_summary.oldest_lead_name }}</h3>
                 <p class="mb-0 text-muted">{{ recovery_summary.oldest_lead_updated_at }}</p>
@@ -97,6 +104,7 @@
                     <th>Status</th>
                     <th>Assigned To</th>
                     <th>Last Contact</th>
+                    <th>Re-Added</th>
                     <th>Marked On</th>
                     <th>Created</th>
                     <th>Actions</th>
@@ -117,6 +125,7 @@
                     </td>
                     <td>{{ lead.assigned_to }}</td>
                     <td>{{ lead.last_contacted }}</td>
+                    <td>{{ lead.readd_count }}</td>
                     <td>{{ lead.updated_at }}</td>
                     <td>{{ lead.created_at }}</td>
                     <td>
@@ -135,7 +144,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8" class="text-center py-4">No rejected or no response leads are waiting in the recovery queue.</td></tr>
+                <tr><td colspan="9" class="text-center py-4">No rejected or no response leads are waiting in the recovery queue.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
