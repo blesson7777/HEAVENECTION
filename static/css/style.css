@@ -22,7 +22,7 @@
 
 body {
     margin: 0;
-    font-family: "Public Sans", sans-serif;
+    font-family: "Public Sans", "Noto Sans Malayalam", "Noto Sans", "Nirmala UI", sans-serif;
     color: var(--mf-text);
     background-color: var(--mf-bg);
 }

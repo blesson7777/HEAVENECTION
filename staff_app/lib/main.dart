@@ -15,6 +15,16 @@ import 'api_client.dart';
 import 'app_models.dart';
 
 const String kBrandName = 'HEAVENECTION';
+const List<String> kMalayalamFontFallback = [
+  'Noto Sans Malayalam',
+  'Noto Sans Malayalam UI',
+  'Noto Sans',
+  'Nirmala UI',
+  'Roboto',
+];
+const TextStyle kMalayalamFallbackStyle = TextStyle(
+  fontFamilyFallback: kMalayalamFontFallback,
+);
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
   defaultValue: 'https://heavenection-production.up.railway.app',
@@ -5160,136 +5170,139 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   Widget _learningCenter() {
     final lessons = _filteredLessons;
 
-    return RefreshIndicator(
-      onRefresh: () {
-        _registerInteraction(syncServer: false);
-        return _loadDashboardData();
-      },
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-        children: [
-          const Text(
-            'Learning Center',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _learningSummary.totalLessons == 0
-                ? 'Training lessons published from the admin panel will appear here.'
-                : '${_learningSummary.completedCount} of ${_learningSummary.totalLessons} lessons completed.',
-            style: const TextStyle(fontSize: 16.5, color: Colors.black54),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
+    return DefaultTextStyle.merge(
+      style: kMalayalamFallbackStyle,
+      child: RefreshIndicator(
+        onRefresh: () {
+          _registerInteraction(syncServer: false);
+          return _loadDashboardData();
+        },
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          children: [
+            const Text(
+              'Learning Center',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
             ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: InfoCard(
-                        title: 'Pending',
-                        value: _learningSummary.pendingMandatoryCount
-                            .toString(),
-                        color: kOrange,
-                        icon: Icons.pending_actions,
+            const SizedBox(height: 8),
+            Text(
+              _learningSummary.totalLessons == 0
+                  ? 'Training lessons published from the admin panel will appear here.'
+                  : '${_learningSummary.completedCount} of ${_learningSummary.totalLessons} lessons completed.',
+              style: const TextStyle(fontSize: 16.5, color: Colors.black54),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InfoCard(
+                          title: 'Pending',
+                          value: _learningSummary.pendingMandatoryCount
+                              .toString(),
+                          color: kOrange,
+                          icon: Icons.pending_actions,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: InfoCard(
-                        title: 'Completed',
-                        value: _learningSummary.completedCount.toString(),
-                        color: kGreen,
-                        icon: Icons.task_alt,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: InfoCard(
+                          title: 'Completed',
+                          value: _learningSummary.completedCount.toString(),
+                          color: kGreen,
+                          icon: Icons.task_alt,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_hasPendingMandatoryTraining &&
+                      _learningSummary.nextRequiredTitle.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: kSoft,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Text(
+                        'Next required lesson: ${_learningSummary.nextRequiredTitle}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: kPrimaryDark,
+                        ),
                       ),
                     ),
                   ],
-                ),
-                if (_hasPendingMandatoryTraining &&
-                    _learningSummary.nextRequiredTitle.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: kSoft,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: Text(
-                      'Next required lesson: ${_learningSummary.nextRequiredTitle}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: kPrimaryDark,
-                      ),
-                    ),
-                  ),
                 ],
-              ],
+              ),
             ),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            onChanged: (value) {
-              setState(() => _learningQuery = value);
-            },
-            decoration: const InputDecoration(
-              hintText: 'Search lessons, topics, or tags',
-              prefixIcon: Icon(Icons.search),
+            const SizedBox(height: 16),
+            TextField(
+              onChanged: (value) {
+                setState(() => _learningQuery = value);
+              },
+              decoration: const InputDecoration(
+                hintText: 'Search lessons, topics, or tags',
+                prefixIcon: Icon(Icons.search),
+              ),
             ),
-          ),
-          const SizedBox(height: 18),
-          if (_lessons.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(26),
-              ),
-              child: const Text(
-                'No training lessons are available right now.',
-                style: TextStyle(fontSize: 16),
-              ),
-            )
-          else if (lessons.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(26),
-              ),
-              child: const Text(
-                'No lessons matched your search.',
-                style: TextStyle(fontSize: 16),
-              ),
-            )
-          else
-            for (final lesson in lessons)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 14),
-                child: _TrainingLessonCard(
-                  lesson: lesson,
-                  onOpen: () async {
-                    _registerInteraction(syncServer: false);
-                    await Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => TrainingLessonPage(
-                          lesson: lesson,
-                          onComplete: () => _completeTrainingLesson(lesson),
-                        ),
-                      ),
-                    );
-                    if (mounted) {
-                      setState(() {});
-                    }
-                  },
+            const SizedBox(height: 18),
+            if (_lessons.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(26),
                 ),
-              ),
-        ],
+                child: const Text(
+                  'No training lessons are available right now.',
+                  style: TextStyle(fontSize: 16),
+                ),
+              )
+            else if (lessons.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(26),
+                ),
+                child: const Text(
+                  'No lessons matched your search.',
+                  style: TextStyle(fontSize: 16),
+                ),
+              )
+            else
+              for (final lesson in lessons)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 14),
+                  child: _TrainingLessonCard(
+                    lesson: lesson,
+                    onOpen: () async {
+                      _registerInteraction(syncServer: false);
+                      await Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => TrainingLessonPage(
+                            lesson: lesson,
+                            onComplete: () => _completeTrainingLesson(lesson),
+                          ),
+                        ),
+                      );
+                      if (mounted) {
+                        setState(() {});
+                      }
+                    },
+                  ),
+                ),
+          ],
+        ),
       ),
     );
   }
@@ -6414,15 +6427,23 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
           );
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.lesson.title)),
+      appBar: AppBar(
+        title: Text(
+          widget.lesson.title,
+          style: kMalayalamFallbackStyle,
+        ),
+      ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          children: [
-            Text(
-              widget.lesson.title,
-              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
-            ),
+        child: DefaultTextStyle.merge(
+          style: kMalayalamFallbackStyle,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            children: [
+              Text(
+                widget.lesson.title,
+                style:
+                    const TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+              ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 10,
@@ -6556,7 +6577,8 @@ class _TrainingLessonPageState extends State<TrainingLessonPage> {
                     : 'Complete Training',
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );
