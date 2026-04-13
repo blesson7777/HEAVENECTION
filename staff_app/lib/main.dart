@@ -47,6 +47,7 @@ const Duration kShortCallReviewThreshold = Duration(seconds: 15);
 const Duration kMinimumQualifyingCallDuration = Duration(seconds: 5);
 const int kCallLogSyncAttempts = 6;
 const Duration kCallLogSyncRetryDelay = Duration(seconds: 1);
+const Duration kNetworkErrorDelay = Duration(seconds: 3);
 
 String _formatCallbackDateLabel(DateTime value) {
   const months = [
@@ -217,6 +218,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _isUpdateDialogVisible = false;
   bool _isDownloadingUpdate = false;
   bool _hasCheckedAppUpdate = false;
+  bool _hasConnection = true;
+  Timer? _networkErrorTimer;
+  String? _pendingNetworkErrorMessage;
   AppUpdateInfo? _pendingAppUpdate;
   File? _selectedAadharPhoto;
   File? _selectedPassbookPhoto;
@@ -255,6 +259,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _callTimer?.cancel();
     _heartbeatTimer?.cancel();
     _idleMonitorTimer?.cancel();
+    _networkErrorTimer?.cancel();
     _connectivitySubscription?.cancel();
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     super.dispose();
@@ -269,6 +274,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     if (state == AppLifecycleState.resumed) {
+      if (_pendingNetworkErrorMessage != null && !_hasConnection) {
+        _scheduleNetworkError(_pendingNetworkErrorMessage!);
+      }
       unawaited(_handleResumeState());
     } else if (_isBackgroundState(state)) {
       if (!_summary.workingNow) {
@@ -1213,20 +1221,41 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       final hasConnection = results.any(
         (result) => result != ConnectivityResult.none,
       );
+      _hasConnection = hasConnection;
       if (!hasConnection) {
-        _showNetworkError(
+        _scheduleNetworkError(
           'You are offline. Check mobile data or Wi-Fi and try again.',
         );
         return;
       }
+      _pendingNetworkErrorMessage = null;
+      _networkErrorTimer?.cancel();
       if (_isNetworkErrorVisible) {
         unawaited(_recoverFromNetworkError());
       }
     });
   }
 
+  void _scheduleNetworkError(String message) {
+    _pendingNetworkErrorMessage = message;
+    _networkErrorTimer?.cancel();
+    if (_lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    _networkErrorTimer = Timer(kNetworkErrorDelay, () {
+      if (!mounted || _hasConnection || _isNetworkErrorVisible) {
+        return;
+      }
+      _showNetworkError(message);
+    });
+  }
+
   void _showNetworkError(String message) {
     if (!mounted) {
+      return;
+    }
+    if (_lifecycleState != AppLifecycleState.resumed) {
+      _pendingNetworkErrorMessage = message;
       return;
     }
     try {
