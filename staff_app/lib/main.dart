@@ -510,6 +510,47 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final activeLeadId = _activeCallLeadId ?? _pendingDialerCall?.leadId;
     final activeLead = _leadById(activeLeadId);
     if (activeLead == null) {
+      if (_hasPendingCallStatus) {
+        _openPendingCustomerPage();
+        await _recoverPendingCallStatusPrompt();
+        return;
+      }
+
+      if (_hasRecoverableCustomerCall ||
+          (_pendingDialerCall != null &&
+              (_pendingDialerCall?.leadId ?? '').isNotEmpty)) {
+        final fallbackLeadId = activeLeadId ?? _summary.recoverableCallLeadId;
+        final fallbackLeadName = _summary.recoverableCallLeadName.isNotEmpty
+            ? _summary.recoverableCallLeadName
+            : (_summary.recoverableCallLeadPhone.isNotEmpty
+                  ? _summary.recoverableCallLeadPhone
+                  : 'Recent customer');
+        final fallbackLeadPhone = _summary.recoverableCallLeadPhone.isNotEmpty
+            ? _summary.recoverableCallLeadPhone
+            : (_pendingDialerCall?.phone ?? _pendingStatusLeadPhone);
+
+        if (fallbackLeadId != null && fallbackLeadId.isNotEmpty) {
+          final placeholderLead = LeadItem(
+            id: fallbackLeadId,
+            name: fallbackLeadName,
+            phone: fallbackLeadPhone,
+            status: 'new',
+            statusLabel: 'New',
+            callbackWindow: '',
+            callbackWindowLabel: '',
+            callbackDate: null,
+            callbackDateLabel: '',
+            callbackScheduleLabel: '',
+            notes: '',
+          );
+          if (notice != null && notice.isNotEmpty) {
+            _showMessage(notice, isError: true);
+          }
+          await _showCallScreenForLead(placeholderLead);
+          return;
+        }
+      }
+
       if (notice != null && notice.isNotEmpty) {
         _showMessage(notice, isError: true);
       } else {
