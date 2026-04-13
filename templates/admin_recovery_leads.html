@@ -11,8 +11,9 @@
         const selectAll = document.getElementById("recoverySelectAll");
         const checkboxes = Array.from(document.querySelectorAll(".js-recovery-select"));
         const deleteButton = document.getElementById("recoveryDeleteSelected");
+        const deleteButtonTop = document.getElementById("recoveryDeleteSelectedTop");
 
-        if (!selectAll || !checkboxes.length || !deleteButton) {
+        if (!selectAll || !checkboxes.length || !deleteButton || !deleteButtonTop) {
             return;
         }
 
@@ -20,6 +21,10 @@
             const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
             deleteButton.disabled = selectedCount === 0;
             deleteButton.textContent = selectedCount
+                ? `Delete Marked (${selectedCount})`
+                : "Delete Marked";
+            deleteButtonTop.disabled = selectedCount === 0;
+            deleteButtonTop.textContent = selectedCount
                 ? `Delete Marked (${selectedCount})`
                 : "Delete Marked";
             selectAll.checked = selectedCount > 0 && selectedCount === checkboxes.length;
@@ -202,6 +207,9 @@
     </div>
 
     <div class="table-responsive">
+        <div class="d-flex justify-content-end mb-3">
+            <button type="submit" form="recoveryBulkDeleteForm" class="btn btn-outline-danger" id="recoveryDeleteSelectedTop" disabled>Delete Marked</button>
+        </div>
         <form method="post" action="{% url 'recovery-leads-page' %}" id="recoveryBulkDeleteForm">
             {% csrf_token %}
             <input type="hidden" name="recovery_action" value="delete_selected">
