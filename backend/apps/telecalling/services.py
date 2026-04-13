@@ -2491,7 +2491,10 @@ def _staff_queryset():
 
 
 def _normalize_phone(phone_value):
-    return re.sub(r"\D+", "", str(phone_value or "")).strip()
+    digits = re.sub(r"\D+", "", str(phone_value or "")).strip()
+    if len(digits) > 10:
+        digits = digits[-10:]
+    return digits
 
 
 def _normalize_column_name(value):
