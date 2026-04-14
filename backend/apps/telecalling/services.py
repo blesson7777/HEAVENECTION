@@ -6817,13 +6817,25 @@ def build_staff_followups_payload(staff):
     now = timezone.now()
     followups = (
         Lead.objects.select_related("assigned_to")
-        .filter(assigned_to=staff, status=Lead.Status.CALL_BACK)
+        .filter(
+            assigned_to=staff,
+            status__in=(Lead.Status.CALL_BACK, Lead.Status.INTERESTED),
+        )
         .order_by("callback_date", "callback_window", "-updated_at", "-last_contacted_at")
     )
     rows = []
     for lead in followups:
         no_answer_attempt_count = _followup_no_answer_attempt_count(lead, staff=staff)
-        is_due_now = _is_followup_highlighted(lead, now=now)
+        is_scheduled_followup = bool(
+            lead.status == Lead.Status.CALL_BACK
+            and lead.callback_date
+            and lead.callback_window
+        )
+        is_due_now = (
+            _is_followup_highlighted(lead, now=now)
+            if lead.status == Lead.Status.CALL_BACK
+            else False
+        )
         rows.append(
             {
                 "id": str(lead.id),
@@ -6850,7 +6862,7 @@ def build_staff_followups_payload(staff):
                 ),
                 "can_mark_followup_no_response": no_answer_attempt_count
                 >= (FOLLOWUP_NO_RESPONSE_LIMIT - 1),
-                "is_scheduled_followup": bool(lead.callback_date and lead.callback_window),
+                "is_scheduled_followup": is_scheduled_followup,
             }
         )
     rows.sort(
