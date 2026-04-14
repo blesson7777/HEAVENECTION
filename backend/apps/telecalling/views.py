@@ -294,7 +294,7 @@ def _fallback_dashboard_payload():
         },
         "chart_payload": {
             "callVolume": {"labels": [], "calls": [], "conversions": []},
-            "leadPipeline": {"labels": ["New", "Follow Up", "Call Back", "No Response", "Converted"], "values": [0, 0, 0, 0, 0]},
+            "leadPipeline": {"labels": ["New", "Follow Up", "Scheduled Follow Up", "No Response", "Converted"], "values": [0, 0, 0, 0, 0]},
             "activityBalance": {"labels": [], "activeHours": [], "callMinutes": []},
         },
         "live_staff": live_staff,
@@ -1411,7 +1411,7 @@ def staff_profile_report_pdf(request, staff_id):
         ("Call Minutes", f"{float(breakdown['call_minutes']):,.1f} min"),
         ("Connected Calls", str(connected_calls)),
         ("Follow Up", str(followup_calls)),
-        ("Call Back", str(callback_calls)),
+        ("Scheduled Follow Up", str(callback_calls)),
         ("Rejected", str(rejected_calls)),
         ("No Response", str(no_answer_calls)),
         ("Invalid Short", str(invalid_short_calls)),
@@ -1604,7 +1604,7 @@ def leads_page(request):
             if summary["eligible_count"] == 0:
                 messages.error(
                     request,
-                    "Only New, Call Back, or Follow Up leads can be moved into a staff queue.",
+                    "Only New or Follow Up leads can be moved into a staff queue.",
                 )
                 return redirect("leads-page")
 
@@ -1726,34 +1726,7 @@ def interested_leads_page(request):
 
 @require_GET
 def callbacks_page(request):
-    current_user = _get_admin_user_or_redirect(request)
-    if not current_user:
-        return redirect("web-login")
-
-    if request.GET.get("download") == "csv":
-        csv_content = build_callback_csv_response()
-        response = HttpResponse(csv_content, content_type="text/csv")
-        response["Content-Disposition"] = 'attachment; filename="heavenection-callbacks.csv"'
-        return response
-    if request.GET.get("download") == "xlsx":
-        excel_content = build_callback_excel_response()
-        response = HttpResponse(
-            excel_content,
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        response["Content-Disposition"] = 'attachment; filename="heavenection-callbacks.xlsx"'
-        return response
-
-    context = _admin_web_context(
-        request,
-        current_user,
-        active_page="callbacks",
-        page_title="Call Back Tracker",
-        page_heading="Call Back Tracker",
-        page_subtitle="Track scheduled call back leads separately by date, slot, and assigned staff.",
-        extra_context=build_callback_payload(),
-    )
-    return render(request, "admin_callbacks.html", context)
+    return redirect("followups-page")
 
 
 @require_http_methods(["GET", "POST"])
@@ -2961,8 +2934,8 @@ def start_call_api(request):
     ):
         return Response(
             {
-                "detail": "This callback lead is only available on its requested date and time.",
-                "code": "callback_not_due",
+                "detail": "This scheduled follow up is only available on its requested date and time.",
+                "code": "followup_not_due",
             },
             status=409,
         )

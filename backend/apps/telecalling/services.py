@@ -72,12 +72,10 @@ CALLBACK_NIGHT_HOURS = range(20, 24)
 FOLLOWUP_NO_RESPONSE_LIMIT = 3
 ACTIVE_QUEUE_STATUSES = (
     Lead.Status.NEW,
-    Lead.Status.CALL_BACK,
     Lead.Status.INTERESTED,
 )
 STAFF_CALL_QUEUE_STATUSES = (
     Lead.Status.NEW,
-    Lead.Status.CALL_BACK,
 )
 FOLLOW_UP_STATUSES = (Lead.Status.INTERESTED,)
 RECOVERY_LEAD_STATUSES = (
@@ -2517,7 +2515,10 @@ def _follow_up_queryset():
 
 
 def _callback_tracking_queryset():
-    return Lead.objects.filter(status=Lead.Status.CALL_BACK)
+    return Lead.objects.filter(
+        status=Lead.Status.INTERESTED,
+        callback_date__isnull=False,
+    ).exclude(callback_window="")
 
 
 def _staff_call_queue_queryset(queryset=None):
@@ -2547,8 +2548,8 @@ def _normalize_status_value(value):
         "not interested": Lead.Status.NOT_INTERESTED,
         "no response": Lead.Status.NO_ANSWER,
         "no answer": Lead.Status.NO_ANSWER,
-        "callback": Lead.Status.CALL_BACK,
-        "call back": Lead.Status.CALL_BACK,
+        "callback": Lead.Status.INTERESTED,
+        "call back": Lead.Status.INTERESTED,
         "converted": Lead.Status.CONVERTED,
     }
     return status_map.get(normalized, "")
@@ -2651,6 +2652,27 @@ def _is_followup_highlighted(lead, *, now=None):
     return timezone.localtime(lead.last_contacted_at) < due_at
 
 
+def _normalize_followup_status(status):
+    if status == Lead.Status.CALL_BACK:
+        return Lead.Status.INTERESTED
+    if status == Call.Status.CALL_BACK:
+        return Call.Status.INTERESTED
+    return status
+
+
+def _is_followup_status(status):
+    return status in {
+        Lead.Status.INTERESTED,
+        Lead.Status.CALL_BACK,
+        Call.Status.INTERESTED,
+        Call.Status.CALL_BACK,
+    }
+
+
+def _is_scheduled_followup(lead):
+    return bool(_is_followup_status(getattr(lead, "status", "")) and lead.callback_date and lead.callback_window)
+
+
 def _followup_no_answer_attempt_count(lead, *, staff=None, exclude_call_id=None):
     queryset = lead.calls.all()
     if staff is not None:
@@ -2726,7 +2748,7 @@ def _build_quality_note(
             "so no work hours were added for those periods."
         )
     if missed_callback_count:
-        return f"{missed_callback_count} callback lead(s) need review."
+        return f"{missed_callback_count} scheduled follow-up lead(s) need review."
     return "Build more recent call activity for a fuller review."
 
 
@@ -2764,8 +2786,9 @@ def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range
 
     callback_rows = Lead.objects.filter(
         assigned_to_id__in=staff_ids,
-        status=Lead.Status.CALL_BACK,
-    ).values("assigned_to_id", "last_contacted_at")
+        status=Lead.Status.INTERESTED,
+        callback_date__isnull=False,
+    ).exclude(callback_window="").values("assigned_to_id", "last_contacted_at")
 
     metrics = {
         staff_id: {
@@ -3429,23 +3452,14 @@ def _ordered_lead_queryset(queryset, *, now=None, include_assignee=False, priori
 
 
 def _visible_staff_lead_queryset(queryset, *, now=None):
-    reference = now or timezone.now()
-    current_slot = _current_callback_window(reference)
-    if current_slot:
-        return queryset.filter(
-            Q(status=Lead.Status.NEW)
-            | Q(
-                status=Lead.Status.CALL_BACK,
-                callback_date=timezone.localdate(reference),
-                callback_window=current_slot,
-            )
-        )
     return queryset.filter(status=Lead.Status.NEW)
 
 
 def is_staff_lead_visible_now(lead, *, now=None):
-    if lead.status != Lead.Status.CALL_BACK:
+    if lead.status != Lead.Status.INTERESTED:
         return True
+    if not _is_scheduled_followup(lead):
+        return False
     return _is_callback_due(lead.callback_date, lead.callback_window, now=now)
 
 
@@ -4400,7 +4414,7 @@ def build_dashboard_payload():
         trend_conversions.append(trend_map.get(day, {}).get("conversion_count", 0))
 
     lead_pipeline = {
-        "labels": ["New", "Follow Up", "Call Back", "No Response", "Converted"],
+        "labels": ["New", "Follow Up", "Scheduled Follow Up", "No Response", "Converted"],
         "values": [
             leads.filter(status=Lead.Status.NEW).count(),
             follow_up_count,
@@ -6745,10 +6759,9 @@ def build_staff_today_payload(staff):
         assigned_to=staff,
         status=Lead.Status.INTERESTED,
     )
-    callback_leads = Lead.objects.filter(
-        assigned_to=staff,
-        status=Lead.Status.CALL_BACK,
-    )
+    scheduled_followup_leads = positive_leads.filter(
+        callback_date__isnull=False,
+    ).exclude(callback_window="")
     converted_leads = Lead.objects.filter(
         assigned_to=staff,
         status=Lead.Status.CONVERTED,
@@ -6766,7 +6779,7 @@ def build_staff_today_payload(staff):
     )
     calls_count = qualifying_calls.count()
     follow_up_count = positive_leads.count()
-    callback_count = callback_leads.count()
+    scheduled_followup_count = scheduled_followup_leads.count()
     converted_count = converted_leads.count()
 
     return {
@@ -6777,7 +6790,7 @@ def build_staff_today_payload(staff):
             "calls_count": calls_count,
             "interested_count": follow_up_count,
             "converted_count": converted_count,
-            "result_label": f"{follow_up_count} positive / {callback_count} call back",
+            "result_label": f"{follow_up_count} follow up / {scheduled_followup_count} scheduled",
             "working_now": bool(open_session),
             "current_state": open_session.last_known_state if open_session else "stopped",
             "status_label": _session_status_label(open_session, latest_session=latest_session),
@@ -6819,29 +6832,21 @@ def build_staff_followups_payload(staff):
         Lead.objects.select_related("assigned_to")
         .filter(
             assigned_to=staff,
-            status__in=(Lead.Status.CALL_BACK, Lead.Status.INTERESTED),
+            status__in=(Lead.Status.INTERESTED, Lead.Status.CALL_BACK),
         )
         .order_by("callback_date", "callback_window", "-updated_at", "-last_contacted_at")
     )
     rows = []
     for lead in followups:
         no_answer_attempt_count = _followup_no_answer_attempt_count(lead, staff=staff)
-        is_scheduled_followup = bool(
-            lead.status == Lead.Status.CALL_BACK
-            and lead.callback_date
-            and lead.callback_window
-        )
-        is_due_now = (
-            _is_followup_highlighted(lead, now=now)
-            if lead.status == Lead.Status.CALL_BACK
-            else False
-        )
+        is_scheduled_followup = _is_scheduled_followup(lead)
+        is_due_now = _is_followup_highlighted(lead, now=now) if is_scheduled_followup else False
         rows.append(
             {
                 "id": str(lead.id),
                 "name": lead.name,
                 "phone": lead.phone,
-                "status": lead.status,
+                "status": Lead.Status.INTERESTED,
                 "status_label": "Follow Up",
                 "callback_window": lead.callback_window,
                 "callback_window_label": lead.get_callback_window_display() if lead.callback_window else "",
@@ -7006,13 +7011,14 @@ def recover_staff_customer_lead(staff, lead, *, status, callback_window="", call
     if lead.assigned_to_id and lead.assigned_to_id != staff.id and _is_active_queue_status(lead.status):
         raise ValueError("This customer is already active in another staff queue.")
 
+    status = _normalize_followup_status(status)
     now = timezone.now()
     session = get_open_session(staff, reconcile=True)
     if session:
         _touch_session_interaction(session, now, metadata={"source": "customer_recovery"})
 
-    resolved_callback_window = callback_window if status == Lead.Status.CALL_BACK else ""
-    resolved_callback_date = callback_date if status == Lead.Status.CALL_BACK else None
+    resolved_callback_window = callback_window if status == Lead.Status.INTERESTED else ""
+    resolved_callback_date = callback_date if status == Lead.Status.INTERESTED else None
     previous_owner = lead.assigned_to.name if lead.assigned_to and lead.assigned_to_id != staff.id else ""
 
     lead.assigned_to = staff
@@ -7259,6 +7265,7 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
     if call.status == Call.Status.INVALID_SHORT:
         return call
 
+    status = _normalize_followup_status(status)
     if not call.is_verified or int(call.duration_seconds or 0) <= 0:
         if status == Call.Status.NOT_INTERESTED:
             status = Call.Status.NO_ANSWER
@@ -7272,12 +7279,15 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
     if session:
         _touch_session_interaction(session, now, metadata={"source": "call_status"})
 
-    resolved_callback_window = callback_window if status == Call.Status.CALL_BACK else ""
-    resolved_callback_date = callback_date if status == Call.Status.CALL_BACK else None
+    resolved_callback_window = callback_window if status == Call.Status.INTERESTED else ""
+    resolved_callback_date = callback_date if status == Call.Status.INTERESTED else None
     lead_status = status
     lead_callback_window = resolved_callback_window
     lead_callback_date = resolved_callback_date
-    if call.lead.status == Lead.Status.CALL_BACK and status == Call.Status.NO_ANSWER:
+    if _is_followup_status(call.lead.status) and status in {
+        Call.Status.NO_ANSWER,
+        Call.Status.NOT_INTERESTED,
+    } and (not call.is_verified or int(call.duration_seconds or 0) <= 0):
         previous_no_answer_attempts = _followup_no_answer_attempt_count(
             call.lead,
             staff=call.staff,
@@ -7285,7 +7295,7 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
         )
         total_no_answer_attempts = previous_no_answer_attempts + 1
         if total_no_answer_attempts < FOLLOWUP_NO_RESPONSE_LIMIT:
-            lead_status = Lead.Status.CALL_BACK
+            lead_status = Lead.Status.INTERESTED
             lead_callback_window = call.lead.callback_window
             lead_callback_date = call.lead.callback_date
     update_fields = ["status", "callback_window", "callback_date", "updated_at"]
@@ -7335,7 +7345,7 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
             "lead_status": lead_status,
         },
     )
-    if lead_status == Lead.Status.CALL_BACK:
+    if lead_status == Lead.Status.INTERESTED:
         auto_allocate_leads(target_staff=call.staff)
     elif lead_status in TERMINAL_QUEUE_STATUSES:
         auto_allocate_leads(target_staff=call.staff)
