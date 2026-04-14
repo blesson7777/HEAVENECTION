@@ -11,42 +11,49 @@
 <section class="hc-surface-card animate-on-scroll">
     <div class="mf-db2-panel-head mb-3">
         <div>
-            <span class="mf-db2-kicker">Positive Lead Desk</span>
-            <h5>Positive leads found by staff</h5>
+            <span class="mf-db2-kicker">Follow-Up Queue</span>
+            <h5>Staff follow-up leads and scheduled contact queue</h5>
         </div>
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-xl-4 col-md-6">
+        <div class="col-xl-3 col-md-6">
             <div class="hc-summary-card h-100">
                 <span class="mf-db2-kicker">Total</span>
                 <h3 class="mb-1">{{ followup_summary.total_followups }}</h3>
-                <p class="mb-0 text-muted">Positive leads ready to share with lending partners.</p>
+                <p class="mb-0 text-muted">Every lead currently sitting in the follow-up workflow.</p>
             </div>
         </div>
-        <div class="col-xl-4 col-md-6">
+        <div class="col-xl-3 col-md-6">
             <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Assigned Staff</span>
-                <h3 class="mb-1">{{ followup_summary.assigned_count }}</h3>
-                <p class="mb-0 text-muted">Positive leads already tied to the staff member who found them.</p>
+                <span class="mf-db2-kicker">Due Now</span>
+                <h3 class="mb-1">{{ followup_summary.due_now_count }}</h3>
+                <p class="mb-0 text-muted">{{ followup_summary.overdue_count }} overdue follow-ups need action.</p>
             </div>
         </div>
-        <div class="col-xl-4 col-md-6">
+        <div class="col-xl-3 col-md-6">
             <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">With Notes</span>
-                <h3 class="mb-1">{{ followup_summary.with_notes_count }}</h3>
-                <p class="mb-0 text-muted">{{ followup_summary.unassigned_count }} still need staff ownership before export.</p>
+                <span class="mf-db2-kicker">Scheduled</span>
+                <h3 class="mb-1">{{ followup_summary.scheduled_count }}</h3>
+                <p class="mb-0 text-muted">{{ followup_summary.unscheduled_count }} are waiting without a time slot.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Ready To Close</span>
+                <h3 class="mb-1">{{ followup_summary.close_ready_count }}</h3>
+                <p class="mb-0 text-muted">These have already reached 3 unanswered follow-up tries.</p>
             </div>
         </div>
     </div>
 
     <div class="alert alert-primary border-0 mb-4" role="alert">
-        This page only shows the positive leads marked as <strong>Follow Up</strong> by staff. Download them as CSV or Excel and share the file with the loan provider. You can still upload a CSV or Excel file here to update ownership or notes later.
+        This queue shows every lead marked as <strong>Follow Up</strong> by staff. Scheduled leads stay highlighted here until the staff makes the next follow-up call. After <strong>3 unanswered tries</strong>, the lead is ready to close as <strong>No Response</strong> or <strong>Rejected</strong>.
     </div>
 
     <div class="hc-search-box">
         <i class="bi bi-search"></i>
-        <input type="search" id="followupSearchInput" placeholder="Search positive lead, phone, note, or staff">
+        <input type="search" id="followupSearchInput" placeholder="Search follow-up lead, phone, schedule, note, or staff">
     </div>
 
     <div class="table-responsive">
@@ -54,10 +61,10 @@
             <thead>
                 <tr>
                     <th>Lead</th>
-                    <th>Phone</th>
-                    <th>Handover</th>
+                    <th>Schedule</th>
                     <th>Staff</th>
-                    <th>Last Contact</th>
+                    <th>Progress</th>
+                    <th>Handover</th>
                     <th>Updated</th>
                     <th>Actions</th>
                 </tr>
@@ -67,11 +74,13 @@
                 <tr data-status="{{ lead.status }}">
                     <td>
                         <strong>{{ lead.name }}</strong>
-                        <div class="text-muted small">{{ lead.notes|default:"No notes" }}</div>
+                        <div class="small text-muted">{{ lead.phone }}</div>
+                        <div class="text-muted small mt-1">{{ lead.notes|default:"No notes" }}</div>
                     </td>
-                    <td>{{ lead.phone }}</td>
                     <td>
-                        <span class="hc-status hc-status-primary mb-1">{{ lead.handover_status_label }}</span>
+                        <span class="hc-status hc-status-{{ lead.schedule_state_tone }} mb-1">{{ lead.schedule_state_label }}</span>
+                        <div class="mt-1">{{ lead.callback_schedule_label|default:"No time set" }}</div>
+                        <div class="small text-muted mt-1">{{ lead.next_step_label }}</div>
                     </td>
                     <td>
                         <span class="hc-status hc-status-success mb-1">{{ lead.status_label }}</span>
@@ -80,7 +89,18 @@
                         <div class="small text-muted">{{ lead.assigned_to_phone }}</div>
                         {% endif %}
                     </td>
-                    <td>{{ lead.last_contacted }}</td>
+                    <td>
+                        <div><strong>{{ lead.followup_attempt_count }}</strong> unanswered follow-up tries</div>
+                        {% if lead.can_close_as_no_response %}
+                        <div class="small text-danger mt-1">Ready to close as No Response or Rejected</div>
+                        {% else %}
+                        <div class="small text-muted mt-1">{{ lead.attempts_remaining }} tries remaining before closing</div>
+                        {% endif %}
+                        <div class="small text-muted mt-1">Last contact: {{ lead.last_contacted }}</div>
+                    </td>
+                    <td>
+                        <span class="hc-status hc-status-primary mb-1">{{ lead.handover_status_label }}</span>
+                    </td>
                     <td>{{ lead.updated_at }}</td>
                     <td>
                         <div class="d-flex gap-2 flex-wrap">
@@ -101,7 +121,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" class="text-center py-4">No positive follow-up leads are ready right now.</td></tr>
+                <tr><td colspan="7" class="text-center py-4">No follow-up leads are in the queue right now.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -112,7 +132,7 @@
     <div class="mf-db2-panel-head mb-3">
         <div>
             <span class="mf-db2-kicker">History</span>
-            <h5>Recent follow-up activity</h5>
+            <h5>Recent follow-up queue updates</h5>
         </div>
     </div>
     <div class="table-responsive">
@@ -120,7 +140,7 @@
             <thead>
                 <tr>
                     <th>Lead</th>
-                    <th>Phone</th>
+                    <th>Schedule</th>
                     <th>Status</th>
                     <th>Handover</th>
                     <th>Staff</th>
@@ -130,8 +150,14 @@
             <tbody>
                 {% for row in followup_history_rows %}
                 <tr>
-                    <td><strong>{{ row.name }}</strong></td>
-                    <td>{{ row.phone }}</td>
+                    <td>
+                        <strong>{{ row.name }}</strong>
+                        <div class="small text-muted">{{ row.phone }}</div>
+                    </td>
+                    <td>
+                        <span class="hc-status hc-status-{{ row.schedule_state_tone }}">{{ row.schedule_state_label }}</span>
+                        <div class="small text-muted mt-1">{{ row.callback_schedule_label }}</div>
+                    </td>
                     <td><span class="hc-status hc-status-success">{{ row.status_label }}</span></td>
                     <td><span class="hc-status hc-status-primary">{{ row.handover_status_label }}</span></td>
                     <td>{{ row.assigned_to }}</td>
@@ -167,7 +193,7 @@
                         </div>
                     </div>
                     <div class="alert alert-light border mb-0">
-                        Supported update columns: <strong>Status</strong>, <strong>Handover Status</strong>, <strong>Notes</strong>, <strong>Assigned Staff</strong>, and <strong>Assigned Staff Phone</strong>.
+                        Supported update columns: <strong>Status</strong>, <strong>Handover Status</strong>, <strong>Notes</strong>, <strong>Assigned Staff</strong>, <strong>Assigned Staff Phone</strong>, and <strong>Follow-Up Slot</strong>.
                     </div>
                     <div class="d-flex justify-content-end gap-2 mt-4">
                         <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>

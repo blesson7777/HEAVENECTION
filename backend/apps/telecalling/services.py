@@ -140,6 +140,10 @@ CALLBACK_WINDOW_COLUMN_ALIASES = {
     "time slot",
     "schedule",
     "callback time",
+    "followup slot",
+    "follow up slot",
+    "followup time",
+    "follow up time",
 }
 NOTES_COLUMN_ALIASES = {
     "notes",
@@ -5884,10 +5888,44 @@ def build_lead_management_payload():
 
 
 def build_followup_payload():
-    followups = _follow_up_queryset().select_related("assigned_to").order_by("-updated_at", "-last_contacted_at")
+    today = timezone.localdate()
+    reference = timezone.now()
+    followups = list(
+        _follow_up_queryset().select_related("assigned_to").order_by("-updated_at", "-last_contacted_at")
+    )
 
     followup_rows = []
     for lead in followups:
+        is_scheduled = _is_scheduled_followup(lead)
+        is_due_today = bool(lead.callback_date and lead.callback_date == today)
+        is_due_now = _is_callback_due(lead.callback_date, lead.callback_window, now=reference)
+        is_overdue = bool(lead.callback_date and lead.callback_date < today)
+        is_unscheduled = not is_scheduled
+        followup_attempt_count = _followup_no_answer_attempt_count(lead)
+        attempts_remaining = max(0, FOLLOWUP_NO_RESPONSE_LIMIT - followup_attempt_count)
+        can_close_as_no_response = followup_attempt_count >= FOLLOWUP_NO_RESPONSE_LIMIT
+
+        if is_due_now:
+            schedule_state_label = "Due now"
+            schedule_state_tone = "warning"
+            next_step_label = "Staff should contact now"
+        elif is_overdue:
+            schedule_state_label = "Overdue"
+            schedule_state_tone = "danger"
+            next_step_label = "Needs staff follow-up"
+        elif is_due_today:
+            schedule_state_label = "Due today"
+            schedule_state_tone = "primary"
+            next_step_label = "Watch for today's slot"
+        elif is_unscheduled:
+            schedule_state_label = "No time set"
+            schedule_state_tone = "muted"
+            next_step_label = "Staff can open from Follow Ups menu anytime"
+        else:
+            schedule_state_label = "Upcoming"
+            schedule_state_tone = "success"
+            next_step_label = "Wait for scheduled slot"
+
         followup_rows.append(
             {
                 "id": str(lead.id),
@@ -5911,8 +5949,39 @@ def build_followup_payload():
                 "notes": lead.notes,
                 "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
                 "updated_at": _format_datetime(lead.updated_at),
+                "updated_at_sort": lead.updated_at.isoformat() if lead.updated_at else "",
+                "is_scheduled": is_scheduled,
+                "is_due_today": is_due_today,
+                "is_due_now": is_due_now,
+                "is_overdue": is_overdue,
+                "is_unscheduled": is_unscheduled,
+                "schedule_state_label": schedule_state_label,
+                "schedule_state_tone": schedule_state_tone,
+                "next_step_label": next_step_label,
+                "followup_attempt_count": followup_attempt_count,
+                "attempts_remaining": attempts_remaining,
+                "can_close_as_no_response": can_close_as_no_response,
             }
         )
+
+    def _followup_sort_key(row):
+        priority = 4
+        if row["is_due_now"]:
+            priority = 0
+        elif row["is_overdue"]:
+            priority = 1
+        elif row["is_due_today"]:
+            priority = 2
+        elif row["is_unscheduled"]:
+            priority = 3
+        return (
+            priority,
+            row["callback_date"] or "9999-12-31",
+            row["callback_window_label"] or "zzz",
+            row["updated_at_sort"],
+        )
+
+    followup_rows.sort(key=_followup_sort_key)
 
     return {
         "followup_rows": followup_rows,
@@ -5923,10 +5992,13 @@ def build_followup_payload():
                 "phone": row["phone"],
                 "status_label": row["status_label"],
                 "handover_status_label": row["handover_status_label"],
+                "schedule_state_label": row["schedule_state_label"],
+                "schedule_state_tone": row["schedule_state_tone"],
+                "callback_schedule_label": row["callback_schedule_label"] or "No time set",
                 "assigned_to": row["assigned_to"],
                 "updated_at": row["updated_at"],
             }
-            for row in followup_rows[:10]
+            for row in sorted(followup_rows, key=lambda row: row["updated_at_sort"], reverse=True)[:12]
         ],
         "staff_options": [
             {"id": str(staff.id), "name": staff.name}
@@ -5934,6 +6006,11 @@ def build_followup_payload():
         ],
         "followup_summary": {
             "total_followups": len(followup_rows),
+            "scheduled_count": sum(1 for row in followup_rows if row["is_scheduled"]),
+            "unscheduled_count": sum(1 for row in followup_rows if row["is_unscheduled"]),
+            "due_now_count": sum(1 for row in followup_rows if row["is_due_now"]),
+            "overdue_count": sum(1 for row in followup_rows if row["is_overdue"]),
+            "close_ready_count": sum(1 for row in followup_rows if row["can_close_as_no_response"]),
             "assigned_count": sum(1 for row in followup_rows if row["assigned_to_id"]),
             "unassigned_count": sum(1 for row in followup_rows if not row["assigned_to_id"]),
             "with_notes_count": sum(1 for row in followup_rows if row["notes"]),
@@ -5951,8 +6028,8 @@ def build_followup_csv_response():
             "Phone",
             "Status",
             "Handover Status",
-            "Callback Date",
-            "Callback Window",
+            "Follow-Up Date",
+            "Follow-Up Slot",
             "Assigned Staff",
             "Assigned Staff Phone",
             "Notes",
@@ -5996,8 +6073,8 @@ def build_followup_excel_response():
             "Phone",
             "Status",
             "Handover Status",
-            "Callback Date",
-            "Callback Window",
+            "Follow-Up Date",
+            "Follow-Up Slot",
             "Assigned Staff",
             "Assigned Staff Phone",
             "Notes",

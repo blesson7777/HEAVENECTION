@@ -1699,7 +1699,7 @@ def followups_page(request):
         active_page="followups",
         page_title="Follow-Up Queue",
         page_heading="Follow-Up Queue",
-        page_subtitle="Review the positive leads found by staff and export them for the lending partners.",
+        page_subtitle="Track scheduled and unscheduled follow-ups, unanswered tries, and client handover from one queue.",
         extra_context=build_followup_payload(),
     )
     return render(request, "admin_followups.html", context)
