@@ -1,0 +1,94 @@
+{% extends "admin_base.html" %}
+
+{% block page_actions %}
+<a href="{% url 'followups-page' %}" class="btn btn-outline-primary btn-sm">Follow-Up Queue</a>
+<a href="{% url 'calls-page' %}" class="btn btn-outline-primary btn-sm">Call Details</a>
+{% endblock %}
+
+{% block admin_content %}
+<section class="hc-surface-card animate-on-scroll">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Interested Capture</span>
+            <h5>Interested customer details from staff</h5>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Total</span>
+                <h3 class="mb-1">{{ interested_lead_summary.total_count }}</h3>
+                <p class="mb-0 text-muted">Interested customer entries saved by staff.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Today</span>
+                <h3 class="mb-1">{{ interested_lead_summary.today_count }}</h3>
+                <p class="mb-0 text-muted">Captured today after interested calls.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">With Notes</span>
+                <h3 class="mb-1">{{ interested_lead_summary.with_notes_count }}</h3>
+                <p class="mb-0 text-muted">Entries that include discussion notes.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Call Time Set</span>
+                <h3 class="mb-1">{{ interested_lead_summary.scheduled_count }}</h3>
+                <p class="mb-0 text-muted">Entries with a preferred call time saved.</p>
+            </div>
+        </div>
+    </div>
+
+    <form method="get" class="hc-search-box mb-4">
+        <i class="bi bi-search"></i>
+        <input type="search" name="q" value="{{ interested_search_query }}" placeholder="Search customer, number, product, note, or staff">
+    </form>
+
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Product</th>
+                    <th>Preferred Call Time</th>
+                    <th>Notes</th>
+                    <th>Staff</th>
+                    <th>Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in interested_lead_rows %}
+                <tr>
+                    <td>
+                        <strong>{{ row.customer_name }}</strong>
+                        <div class="small text-muted">{{ row.customer_phone }}</div>
+                        <div class="small text-muted">Lead Status: {{ row.lead_status_label }}</div>
+                    </td>
+                    <td>{{ row.product_enquired }}</td>
+                    <td>{{ row.preferred_call_time|default:"Not set" }}</td>
+                    <td>{{ row.enquiry_notes|default:"No notes" }}</td>
+                    <td>
+                        <strong>{{ row.staff_name }}</strong>
+                        <div class="small text-muted">{{ row.staff_phone }}</div>
+                    </td>
+                    <td>
+                        <div>{{ row.updated_at }}</div>
+                        <div class="small text-muted">Created {{ row.created_at }}</div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center py-4">No interested customer details have been submitted yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

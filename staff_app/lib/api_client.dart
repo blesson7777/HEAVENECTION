@@ -217,6 +217,19 @@ class ApiClient {
         .toList();
   }
 
+  Future<List<LeadItem>> fetchFollowups() async {
+    final response = await _send('GET', '/api/staff/followups/');
+    final payload = _decodeMap(response.body);
+    final rows = payload['followups'];
+    if (rows is! List) {
+      return const [];
+    }
+    return rows
+        .whereType<Map<String, dynamic>>()
+        .map(LeadItem.fromJson)
+        .toList();
+  }
+
   Future<List<LeadItem>> searchCustomerHistory({String query = ''}) async {
     final encodedQuery = Uri.encodeQueryComponent(query.trim());
     final path = query.trim().isEmpty
@@ -292,11 +305,17 @@ class ApiClient {
     return SessionResponse.fromJson(_decodeMap(response.body));
   }
 
-  Future<CallRecord> startCall({required String leadId}) async {
+  Future<CallRecord> startCall({
+    required String leadId,
+    bool fromFollowupMenu = false,
+  }) async {
     final response = await _send(
       'POST',
       '/api/staff/calls/start/',
-      body: {'lead_id': leadId},
+      body: {
+        'lead_id': leadId,
+        'from_followup_menu': fromFollowupMenu,
+      },
     );
     return CallRecord.fromJson(_decodeMap(response.body));
   }
@@ -359,6 +378,28 @@ class ApiClient {
       body: body,
     );
     return CallRecord.fromJson(_decodeMap(response.body));
+  }
+
+  Future<InterestedLeadDetail> submitInterestedLeadDetail({
+    required String callId,
+    required String customerName,
+    required String customerPhone,
+    required String productEnquired,
+    required String enquiryNotes,
+    required String preferredCallTime,
+  }) async {
+    final response = await _send(
+      'POST',
+      '/api/staff/calls/$callId/interested-detail/',
+      body: {
+        'customer_name': customerName,
+        'customer_phone': customerPhone,
+        'product_enquired': productEnquired,
+        'enquiry_notes': enquiryNotes,
+        'preferred_call_time': preferredCallTime,
+      },
+    );
+    return InterestedLeadDetail.fromJson(_decodeMap(response.body));
   }
 
   Future<void> _persistTokens() async {

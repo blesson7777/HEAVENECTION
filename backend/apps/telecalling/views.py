@@ -24,6 +24,7 @@ from backend.apps.telecalling.auth import (
 from backend.apps.telecalling.models import (
     AppRelease,
     Call,
+    InterestedLeadDetail,
     Lead,
     ReferralReward,
     Salary,
@@ -49,6 +50,8 @@ from backend.apps.telecalling.serializers import (
     EndCallSerializer,
     FollowupUpdateUploadSerializer,
     HeartbeatSerializer,
+    InterestedLeadCaptureSerializer,
+    InterestedLeadDetailSerializer,
     LeadSerializer,
     LeadImportUploadSerializer,
     LoginSerializer,
@@ -81,6 +84,7 @@ from backend.apps.telecalling.services import (
     build_followup_csv_response,
     build_followup_excel_response,
     build_followup_payload,
+    build_interested_lead_payload,
     build_learning_management_payload,
     build_lead_management_payload,
     build_recovery_lead_payload,
@@ -100,6 +104,7 @@ from backend.apps.telecalling.services import (
     build_work_review_payload,
     build_staff_profile_payload,
     build_staff_learning_payload,
+    build_staff_followups_payload,
     build_staff_today_payload,
     build_team_management_payload,
     build_work_hours_payload,
@@ -115,6 +120,7 @@ from backend.apps.telecalling.services import (
     publish_app_release,
     queue_salary_payment_acknowledgement,
     record_referral_reward_payment,
+    save_interested_lead_detail,
     import_leads_from_upload,
     is_staff_lead_visible_now,
     mark_staff_seen,
@@ -1700,6 +1706,25 @@ def followups_page(request):
 
 
 @require_GET
+def interested_leads_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    search_query = request.GET.get("q", "").strip()
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="interested-leads",
+        page_title="Interested Leads",
+        page_heading="Interested Leads",
+        page_subtitle="Review the customer details captured by staff after a successful interested call.",
+        extra_context=build_interested_lead_payload(query=search_query),
+    )
+    return render(request, "admin_interested_leads.html", context)
+
+
+@require_GET
 def callbacks_page(request):
     current_user = _get_admin_user_or_redirect(request)
     if not current_user:
@@ -2767,6 +2792,12 @@ def staff_today_summary_api(request):
 
 @api_view(["GET"])
 @permission_classes([IsCallingStaff])
+def staff_followups_api(request):
+    return Response(build_staff_followups_payload(request.user))
+
+
+@api_view(["GET"])
+@permission_classes([IsCallingStaff])
 def assigned_leads_api(request):
     queryset = get_assigned_leads(request.user)
     status_value = request.query_params.get("status")
@@ -2924,7 +2955,10 @@ def start_call_api(request):
     except Lead.DoesNotExist:
         return Response({"detail": "Lead not found."}, status=404)
 
-    if not is_staff_lead_visible_now(lead):
+    if (
+        not serializer.validated_data.get("from_followup_menu", False)
+        and not is_staff_lead_visible_now(lead)
+    ):
         return Response(
             {
                 "detail": "This callback lead is only available on its requested date and time.",
@@ -3024,6 +3058,27 @@ def update_call_status_api(request, call_id):
     except ValueError as error:
         return Response({"detail": str(error)}, status=400)
     return Response(CallSerializer(call).data)
+
+
+@api_view(["POST"])
+@permission_classes([IsCallingStaff])
+def interested_lead_capture_api(request, call_id):
+    serializer = InterestedLeadCaptureSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    try:
+        call = request.user.calls.select_related("lead", "staff").get(id=call_id)
+    except request.user.calls.model.DoesNotExist:
+        return Response({"detail": "Call not found."}, status=404)
+
+    try:
+        detail = save_interested_lead_detail(call, **serializer.validated_data)
+    except ValueError as error:
+        return Response({"detail": str(error)}, status=400)
+
+    return Response(
+        InterestedLeadDetailSerializer(detail).data,
+        status=201,
+    )
 
 
 

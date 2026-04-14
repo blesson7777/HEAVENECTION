@@ -173,11 +173,13 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   DailySummary _summary = DailySummary.empty();
   LearningSummary _learningSummary = LearningSummary.empty();
   List<LeadItem> _leads = const [];
+  List<LeadItem> _followups = const [];
   List<TrainingLesson> _lessons = const [];
 
   bool _isBootstrapping = true;
   bool _isLoggingIn = false;
   bool _isLoadingData = false;
+  bool _isFollowupsLoading = false;
   bool _isProfileLoading = false;
   bool _isProfileSaving = false;
   bool _isSessionBusy = false;
@@ -186,17 +188,19 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   int _tab = 0;
   int _lastLoadedTab = 0;
   int _leadIndex = 0;
-  String _callStatus = 'Follow Up';
+  String _callStatus = 'Interested';
   String _learningQuery = '';
   String? _loginErrorText;
   String _networkErrorMessage = 'Connection interrupted.';
   String? _activeCallId;
   String? _activeCallLeadId;
+  bool _activeCallFromFollowup = false;
   PendingDialerCall? _pendingDialerCall;
   String? _pendingStatusCallId;
   String? _pendingStatusLeadId;
   String _pendingStatusLeadName = '';
   String _pendingStatusLeadPhone = '';
+  bool _pendingStatusFromFollowup = false;
   Duration _elapsed = Duration.zero;
   Timer? _callTimer;
   Timer? _heartbeatTimer;
@@ -385,6 +389,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _pendingStatusLeadId = null;
     _pendingStatusLeadName = '';
     _pendingStatusLeadPhone = '';
+    _pendingStatusFromFollowup = false;
   }
 
   void _dismissPendingCallStatusPrompt() {
@@ -494,11 +499,16 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
-  Future<void> _showCallScreenForLead(LeadItem lead, {int? index}) async {
+  Future<void> _showCallScreenForLead(
+    LeadItem lead, {
+    int? index,
+    bool fromFollowup = false,
+  }) async {
     if (!mounted) {
       return;
     }
 
+    final isFollowupLead = fromFollowup || lead.status == 'call_back';
     _registerInteraction(syncServer: false);
     setState(() {
       if (index != null) {
@@ -509,7 +519,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           _leadIndex = resolvedIndex;
         }
       }
-      _callStatus = 'Follow Up';
+      _callStatus = isFollowupLead ? 'Follow Up' : 'Interested';
     });
 
     if (_isCallScreenOpen) {
@@ -554,7 +564,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             ? _summary.recoverableCallLeadPhone
             : (_pendingDialerCall?.phone ?? _pendingStatusLeadPhone);
 
-        if (fallbackLeadId != null && fallbackLeadId.isNotEmpty) {
+        if (fallbackLeadId.isNotEmpty) {
           final placeholderLead = LeadItem(
             id: fallbackLeadId,
             name: fallbackLeadName,
@@ -571,7 +581,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           if (notice != null && notice.isNotEmpty) {
             _showMessage(notice, isError: true);
           }
-          await _showCallScreenForLead(placeholderLead);
+          await _showCallScreenForLead(
+            placeholderLead,
+            fromFollowup: _activeCallFromFollowup || placeholderLead.status == 'call_back',
+          );
           return;
         }
       }
@@ -590,7 +603,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (notice != null && notice.isNotEmpty) {
       _showMessage(notice, isError: true);
     }
-    await _showCallScreenForLead(activeLead);
+    await _showCallScreenForLead(
+      activeLead,
+      fromFollowup: _activeCallFromFollowup || activeLead.status == 'call_back',
+    );
   }
 
   Future<void> _retryPendingCustomerCall() async {
@@ -1361,13 +1377,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     bool promptTrainingGate = false,
   }) async {
     if (showLoader && mounted) {
-      setState(() => _isLoadingData = true);
+      setState(() {
+        _isLoadingData = true;
+        _isFollowupsLoading = true;
+      });
     }
 
     try {
       final results = await Future.wait<dynamic>([
         _apiClient.fetchTodaySummary(),
         _apiClient.fetchAssignedLeads(),
+        _apiClient.fetchFollowups(),
         _apiClient.fetchLearningCenter(),
       ]);
       if (!mounted) {
@@ -1376,7 +1396,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       setState(() {
         _summary = results[0] as DailySummary;
         _leads = results[1] as List<LeadItem>;
-        _applyLearningPayload(results[2] as LearningCenterPayload);
+        _followups = results[2] as List<LeadItem>;
+        _applyLearningPayload(results[3] as LearningCenterPayload);
         _syncPendingCallStatusFromSummary();
         if (_summary.pendingCallStatusRequired) {
           _resetActiveCallTracking();
@@ -1424,7 +1445,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _showMessage(error.message, isError: true);
     } finally {
       if (mounted) {
-        setState(() => _isLoadingData = false);
+        setState(() {
+          _isLoadingData = false;
+          _isFollowupsLoading = false;
+        });
       }
     }
   }
@@ -1969,7 +1993,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    if (result.statusLabel == 'Call Back' &&
+    if (result.statusLabel == 'Follow Up' &&
         result.callbackScheduleLabel.isNotEmpty) {
       _showMessage(
         '${result.leadName} moved back to your list for ${result.callbackScheduleLabel}.',
@@ -1977,7 +2001,115 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    _showMessage('${result.leadName} added back to your follow-up list.');
+    _showMessage('${result.leadName} added back to your interested list.');
+  }
+
+  Future<void> _openFollowupQueuePage() async {
+    _registerInteraction(syncServer: false);
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => FollowupQueuePage(
+          apiClient: _apiClient,
+          onCall: (lead) async {
+            _registerInteraction(syncServer: false);
+            await _showCallScreenForLead(lead, fromFollowup: true);
+          },
+        ),
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+  }
+
+  Future<bool> _submitInterestedLeadDetail({
+    required String callId,
+    required String customerName,
+    required String customerPhone,
+    required String productEnquired,
+    required String enquiryNotes,
+    required String preferredCallTime,
+  }) async {
+    try {
+      await _apiClient.submitInterestedLeadDetail(
+        callId: callId,
+        customerName: customerName,
+        customerPhone: customerPhone,
+        productEnquired: productEnquired,
+        enquiryNotes: enquiryNotes,
+        preferredCallTime: preferredCallTime,
+      );
+      return true;
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+        return false;
+      }
+      if (error.code == 'network_error') {
+        _showNetworkError(
+          'Connection lost while saving the interested customer details.',
+        );
+        return false;
+      }
+      _showMessage(error.message, isError: true);
+      return false;
+    }
+  }
+
+  Future<bool> _openInterestedLeadCapturePage(
+    LeadItem? lead, {
+    required String callId,
+  }) async {
+    if (!mounted) {
+      return false;
+    }
+    final customerLead =
+        lead ??
+        LeadItem(
+          id: _pendingStatusLeadId ?? '',
+          name: _pendingStatusLeadName.isNotEmpty
+              ? _pendingStatusLeadName
+              : 'Customer',
+          phone: _pendingStatusLeadPhone,
+          status: 'interested',
+          statusLabel: 'Interested',
+          callbackWindow: '',
+          callbackWindowLabel: '',
+          callbackDate: null,
+          callbackDateLabel: '',
+          callbackScheduleLabel: '',
+          notes: '',
+        );
+    final submitted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => InterestedLeadCapturePage(
+          lead: customerLead,
+          onSubmit: ({
+            required customerName,
+            required customerPhone,
+            required productEnquired,
+            required enquiryNotes,
+            required preferredCallTime,
+          }) => _submitInterestedLeadDetail(
+            callId: callId,
+            customerName: customerName,
+            customerPhone: customerPhone,
+            productEnquired: productEnquired,
+            enquiryNotes: enquiryNotes,
+            preferredCallTime: preferredCallTime,
+          ),
+        ),
+      ),
+    );
+    if (submitted == true) {
+      await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+      if (mounted) {
+        _showMessage('Interested customer details saved.');
+      }
+      return true;
+    }
+    return false;
   }
 
   Future<void> _handleLogin() async {
@@ -2719,6 +2851,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _callTimer?.cancel();
     _activeCallId = null;
     _activeCallLeadId = null;
+    _activeCallFromFollowup = false;
     _pendingDialerCall = null;
     _elapsed = Duration.zero;
     _isSyncingCallLog = false;
@@ -2729,6 +2862,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return null;
     }
     for (final lead in _leads) {
+      if (lead.id == leadId) {
+        return lead;
+      }
+    }
+    for (final lead in _followups) {
       if (lead.id == leadId) {
         return lead;
       }
@@ -2757,8 +2895,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       id: leadId,
       name: fallbackName,
       phone: fallbackPhone,
-      status: 'new',
-      statusLabel: 'New',
+      status: _pendingStatusFromFollowup ? 'call_back' : 'new',
+      statusLabel: _pendingStatusFromFollowup ? 'Follow Up' : 'New',
       callbackWindow: '',
       callbackWindowLabel: '',
       callbackDate: null,
@@ -2766,6 +2904,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       callbackScheduleLabel: '',
       notes: '',
     );
+  }
+
+  bool _isFollowupLeadContext(LeadItem? lead) {
+    return _pendingStatusFromFollowup ||
+        _activeCallFromFollowup ||
+        (lead?.status == 'call_back');
   }
 
   Future<void> _placeCallForLead(LeadItem lead) async {
@@ -2779,7 +2923,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     final dialStartedAt = DateTime.now();
-    final call = await _apiClient.startCall(leadId: lead.id);
+    final isFollowupLead = _activeCallFromFollowup || lead.status == 'call_back';
+    final call = await _apiClient.startCall(
+      leadId: lead.id,
+      fromFollowupMenu: isFollowupLead,
+    );
     final launched = await FlutterPhoneDirectCaller.callNumber(lead.phone);
     if (launched != true) {
       await _apiClient.endCall(
@@ -2800,6 +2948,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     setState(() {
       _activeCallId = call.id;
       _activeCallLeadId = lead.id;
+      _activeCallFromFollowup = isFollowupLead;
       _pendingDialerCall = PendingDialerCall(
         callId: call.id,
         leadId: lead.id,
@@ -2958,6 +3107,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     bool allowRetryAction = false,
     String retryButtonLabel = 'Call Again',
     bool trackPendingPrompt = false,
+    bool allowUnscheduledFollowup = false,
+    String unscheduledFollowupTitle = 'Keep Follow Up Without Schedule?',
+    String unscheduledFollowupMessage =
+        'This follow-up will stay in the Follow Ups menu without a date or time. Continue?',
   }) async {
     if (!mounted) {
       return null;
@@ -3040,8 +3193,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                   : () {
                                       setDialogState(() {
                                         selectedStatus = item;
-                                        if (item != 'Call Back') {
+                                        if (item != 'Follow Up') {
                                           selectedCallbackWindow = '';
+                                          selectedCallbackDate = null;
                                         }
                                       });
                                     },
@@ -3112,10 +3266,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                             ),
                           );
                         }),
-                        if (selectedStatus == 'Call Back') ...[
+                        if (selectedStatus == 'Follow Up') ...[
                           const SizedBox(height: 8),
                           const Text(
-                            'Choose the callback date and time requested by the customer',
+                            'Choose the follow-up date and time requested by the customer',
                             style: TextStyle(fontWeight: FontWeight.w800),
                           ),
                           const SizedBox(height: 10),
@@ -3247,12 +3401,31 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     ),
                   ElevatedButton(
                     onPressed:
-                        isSaving ||
-                            (selectedStatus == 'Call Back' &&
-                                (selectedCallbackWindow.isEmpty ||
-                                    selectedCallbackDate == null))
+                        isSaving
                         ? null
                         : () async {
+                            if (selectedStatus == 'Follow Up' &&
+                                (selectedCallbackWindow.isEmpty ||
+                                    selectedCallbackDate == null) &&
+                                !allowUnscheduledFollowup) {
+                              return;
+                            }
+                            if (selectedStatus == 'Follow Up' &&
+                                (selectedCallbackWindow.isEmpty ||
+                                    selectedCallbackDate == null) &&
+                                allowUnscheduledFollowup) {
+                              final shouldContinue =
+                                  await _confirmUnscheduledFollowup(
+                                    title: unscheduledFollowupTitle,
+                                    message: unscheduledFollowupMessage,
+                                  );
+                              if (!shouldContinue) {
+                                return;
+                              }
+                              if (!dialogContext.mounted) {
+                                return;
+                              }
+                            }
                             setDialogState(() => isSaving = true);
                             final callbackDateLabel =
                                 selectedCallbackDate == null
@@ -3288,7 +3461,34 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     );
   }
 
-  Future<ShortCallDecision?> _askShortCallDecision(int durationSeconds) async {
+  Future<ShortCallDecision?> _askShortCallDecision(
+    int durationSeconds, {
+    LeadItem? lead,
+  }) async {
+    if (_isFollowupLeadContext(lead)) {
+      final followupLead =
+          lead ??
+          _pendingStatusLeadPlaceholder() ??
+          LeadItem(
+            id: _pendingStatusLeadId ?? '',
+            name: _pendingStatusLeadName.isNotEmpty
+                ? _pendingStatusLeadName
+                : 'Follow Up Customer',
+            phone: _pendingStatusLeadPhone,
+            status: 'call_back',
+            statusLabel: 'Follow Up',
+            callbackWindow: '',
+            callbackWindowLabel: '',
+            callbackDate: null,
+            callbackDateLabel: '',
+            callbackScheduleLabel: '',
+            notes: '',
+          );
+      return _showFollowupNoResponseDialog(
+        followupLead,
+        durationSeconds,
+      );
+    }
     final isNoResponse = durationSeconds <= 0;
     final result = await _showCallRemarkDialog(
       title: 'Select Customer Remark',
@@ -3320,21 +3520,24 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     required int durationSeconds,
     required ShortCallDecision decision,
   }) async {
+    final lead = _leadById(pendingCall.leadId);
+    final isFollowupLead = _isFollowupLeadContext(lead);
     final status = switch (decision) {
       ShortCallDecision.markRejected => 'not_interested',
       ShortCallDecision.markNoResponse => 'no_answer',
-      ShortCallDecision.callAgain => null,
+      ShortCallDecision.callAgain => isFollowupLead ? 'no_answer' : null,
     };
     final call = await _apiClient.endCall(
       callId: pendingCall.callId,
       status: status,
       durationSeconds: durationSeconds,
       endedAt: endedAt,
-      source: decision == ShortCallDecision.callAgain
+      source: decision == ShortCallDecision.callAgain && !isFollowupLead
           ? 'call_log_short_recall'
           : 'call_log_short_resolution',
     );
 
+    final wasFollowupLead = isFollowupLead;
     _resetActiveCallTracking();
     if (!mounted) {
       return;
@@ -3343,6 +3546,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     setState(() {
       _callStatus = decision == ShortCallDecision.markRejected
           ? 'Rejected'
+          : (wasFollowupLead && decision == ShortCallDecision.callAgain)
+          ? 'Follow Up'
           : 'No Response';
     });
     await _loadDashboardData(showLoader: false);
@@ -3351,10 +3556,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     if (decision == ShortCallDecision.callAgain) {
-      _showMessage('Short call detected. Calling the customer again.');
-      final lead = _leadById(pendingCall.leadId);
-      if (lead != null) {
-        await _placeCallForLead(lead);
+      _showMessage('Follow-up try saved. Calling the customer again.');
+      final refreshedLead = _leadById(pendingCall.leadId);
+      if (refreshedLead != null) {
+        _activeCallFromFollowup = true;
+        _pendingStatusFromFollowup = true;
+        await _placeCallForLead(refreshedLead);
       } else {
         _showMessage(
           'Lead was updated, but a new call could not be started.',
@@ -3362,6 +3569,20 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         );
       }
       return;
+    }
+
+    if (call.status == 'no_answer' && wasFollowupLead) {
+      final refreshedLead = _leadById(pendingCall.leadId);
+      if (refreshedLead != null && refreshedLead.status == 'call_back') {
+        _showMessage(
+          'Follow-up try saved. Keep contacting this customer from the Follow Ups menu.',
+        );
+        setState(() {
+          _tab = 0;
+          _lastLoadedTab = 0;
+        });
+        return;
+      }
     }
 
     if (call.status == 'no_answer') {
@@ -3388,9 +3609,13 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       entry.timestamp ?? pendingCall.startedAt.millisecondsSinceEpoch,
     );
     final endedAt = startedAt.add(Duration(seconds: durationSeconds));
+    final lead = _leadById(pendingCall.leadId);
 
     if (durationSeconds < kShortCallReviewThreshold.inSeconds) {
-      final decision = await _askShortCallDecision(durationSeconds);
+      final decision = await _askShortCallDecision(
+        durationSeconds,
+        lead: lead,
+      );
       if (decision == null) {
         return;
       }
@@ -3410,7 +3635,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       source: 'call_log',
     );
 
-    final lead = _leadById(pendingCall.leadId);
     _resetActiveCallTracking();
     if (!mounted) {
       return;
@@ -3424,7 +3648,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _pendingStatusLeadId = pendingCall.leadId;
         _pendingStatusLeadName = lead?.name ?? '';
         _pendingStatusLeadPhone = lead?.phone ?? pendingCall.phone;
-        _callStatus = 'Follow Up';
+        _pendingStatusFromFollowup =
+            _activeCallFromFollowup || lead?.status == 'call_back';
+        _callStatus = 'Interested';
       }
     });
 
@@ -3472,7 +3698,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _pendingStatusLeadId = leadId;
         _pendingStatusLeadName = lead?.name ?? '';
         _pendingStatusLeadPhone = lead?.phone ?? '';
-        _callStatus = 'Follow Up';
+        _pendingStatusFromFollowup =
+            _activeCallFromFollowup || lead?.status == 'call_back';
+        _callStatus = 'Interested';
       }
     });
 
@@ -3999,7 +4227,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     });
   }
 
-  Future<bool> _submitPendingCallStatus(
+  Future<CallRecord?> _submitPendingCallStatus(
     String label, {
     String callbackWindow = '',
     DateTime? callbackDate,
@@ -4007,7 +4235,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   }) async {
     final callId = _pendingStatusCallId;
     if (callId == null || callId.isEmpty) {
-      return true;
+      return null;
     }
 
     try {
@@ -4019,7 +4247,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       );
       final savedLabel = _statusLabelFromValue(savedCall.status);
       if (!mounted) {
-        return true;
+        return savedCall;
       }
 
       setState(() {
@@ -4031,8 +4259,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       });
       await _loadDashboardData(showLoader: false, promptTrainingGate: false);
       if (mounted) {
-        if (savedLabel == 'Call Back' && callbackScheduleLabel.isNotEmpty) {
-          _showMessage('Call Back scheduled for $callbackScheduleLabel.');
+        if (savedLabel == 'Follow Up' && callbackScheduleLabel.isNotEmpty) {
+          _showMessage('Follow Up scheduled for $callbackScheduleLabel.');
+        } else if (savedLabel == 'Interested') {
+          // The interested detail form opens next, so skip the interim toast.
         } else if (label == 'Rejected' && savedLabel != label) {
           _showMessage(
             'No real connected call was found, so the remark was saved as $savedLabel.',
@@ -4041,20 +4271,20 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           _showMessage('Remark saved as $savedLabel.');
         }
       }
-      return true;
+      return savedCall;
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
         await _handleForcedLogout();
-        return false;
+        return null;
       }
       if (error.code == 'network_error') {
         _showNetworkError(
           'Connection lost while saving the call result. Reconnect to continue.',
         );
-        return false;
+        return null;
       }
       _showMessage(error.message, isError: true);
-      return false;
+      return null;
     }
   }
 
@@ -4064,15 +4294,25 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     _isCallStatusPromptVisible = true;
+    final pendingLead = _pendingStatusLeadPlaceholder();
+    final isFollowupLead = _isFollowupLeadContext(pendingLead);
     final selection = await _showCallRemarkDialog(
-      title: 'Select Customer Remark',
-      message: 'Choose one simple remark before moving to the next customer.',
-      choices: const ['Rejected', 'Follow Up', 'Call Back', 'No Response'],
-      saveButtonLabel: 'Save Remark',
-      initialStatus: _callStatus,
+      title: isFollowupLead ? 'Update Follow Up' : 'Select Customer Remark',
+      message: isFollowupLead
+          ? 'Choose the next step for this follow-up customer. Use Follow Up to reschedule, Rejected if the customer declined, or Interested if you are ready to move them forward.'
+          : 'Choose one simple remark before moving to the next customer.',
+      choices: isFollowupLead
+          ? const ['Interested', 'Follow Up', 'Rejected']
+          : const ['Rejected', 'Interested', 'Follow Up', 'No Response'],
+      saveButtonLabel: isFollowupLead ? 'Save Follow Up' : 'Save Remark',
+      initialStatus: isFollowupLead ? 'Interested' : _callStatus,
       trackPendingPrompt: true,
-      allowRetryAction: true,
+      allowRetryAction: !isFollowupLead,
       retryButtonLabel: 'Call Again',
+      allowUnscheduledFollowup: true,
+      unscheduledFollowupTitle: 'Save Follow Up Without Schedule?',
+      unscheduledFollowupMessage:
+          'This customer will stay in your Follow Ups menu without a date or time. Continue?',
     );
     _callStatusDialogContext = null;
     _isCallStatusPromptVisible = false;
@@ -4086,8 +4326,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           );
           return;
         }
-        final didSave = await _submitPendingCallStatus('No Response');
-        if (!didSave) {
+        final savedCall = await _submitPendingCallStatus('No Response');
+        if (savedCall == null) {
           return;
         }
         _showMessage('Calling the customer again.');
@@ -4095,13 +4335,33 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       return;
     }
-    final didSave = await _submitPendingCallStatus(
+    final savedCall = await _submitPendingCallStatus(
       selection.statusLabel,
       callbackWindow: selection.callbackWindow,
       callbackDate: selection.callbackDate,
       callbackScheduleLabel: selection.callbackScheduleLabel,
     );
-    if (didSave) {
+    if (savedCall != null) {
+      if (selection.statusLabel == 'Interested') {
+        final didSubmitInterestedDetail = await _openInterestedLeadCapturePage(
+          pendingLead ?? _pendingStatusLeadPlaceholder(),
+          callId: savedCall.id,
+        );
+        if (!didSubmitInterestedDetail) {
+          return;
+        }
+      }
+      if (isFollowupLead) {
+        await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _tab = 1;
+          _lastLoadedTab = 1;
+        });
+        return;
+      }
       await _focusLeadWorkflowAfterCallResultSaved();
     }
   }
@@ -4186,10 +4446,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   String _statusValue(String label) {
     return switch (label) {
-      'Follow Up' => 'interested',
+      'Interested' => 'interested',
       'Rejected' => 'not_interested',
       'No Response' => 'no_answer',
-      'Call Back' => 'call_back',
+      'Follow Up' => 'call_back',
       'Converted' => 'converted',
       _ => 'interested',
     };
@@ -4197,19 +4457,19 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   String _statusLabelFromValue(String value) {
     return switch (value) {
-      'interested' => 'Follow Up',
+      'interested' => 'Interested',
       'not_interested' => 'Rejected',
       'no_answer' => 'No Response',
-      'call_back' => 'Call Back',
+      'call_back' => 'Follow Up',
       'converted' => 'Converted',
-      _ => 'Follow Up',
+      _ => 'Interested',
     };
   }
 
   IconData _remarkIcon(String label) {
     return switch (label) {
-      'Follow Up' => Icons.trending_up_rounded,
-      'Call Back' => Icons.schedule_rounded,
+      'Interested' => Icons.trending_up_rounded,
+      'Follow Up' => Icons.schedule_rounded,
       'Rejected' => Icons.block_rounded,
       'No Response' => Icons.phone_missed_rounded,
       _ => Icons.assignment_turned_in_rounded,
@@ -4218,8 +4478,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   Color _remarkColor(String label) {
     return switch (label) {
-      'Follow Up' => kGreen,
-      'Call Back' => kOrange,
+      'Interested' => kGreen,
+      'Follow Up' => kOrange,
       'Rejected' => kRed,
       'No Response' => kPrimaryDark,
       _ => kPrimary,
@@ -4228,9 +4488,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   String _remarkDescription(String label) {
     return switch (label) {
-      'Follow Up' => 'Customer spoke and needs the next step from you.',
-      'Call Back' =>
-        'Customer asked for a scheduled callback to discuss later.',
+      'Interested' => 'Customer spoke and is interested in the next step.',
+      'Follow Up' =>
+        'Customer asked for a scheduled follow-up to discuss later.',
       'Rejected' => 'Customer clearly said they are not interested.',
       'No Response' =>
         'No useful discussion happened or the customer did not respond.',
@@ -4678,6 +4938,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             color: kPrimaryDark,
             icon: Icons.analytics_outlined,
           ),
+          const SizedBox(height: 12),
+          InfoCard(
+            title: 'Follow Ups',
+            value: _isFollowupsLoading
+                ? 'Loading...'
+                : _followups.length.toString(),
+            color: kOrange,
+            icon: Icons.calendar_today_outlined,
+          ),
           const SizedBox(height: 18),
           ElevatedButton.icon(
             onPressed: () {
@@ -4689,6 +4958,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             },
             icon: const Icon(Icons.people),
             label: const Text('Open Lead List'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _openFollowupQueuePage,
+            icon: const Icon(Icons.calendar_today_outlined),
+            label: const Text('Open Follow Ups'),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
@@ -4726,7 +5001,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           ),
           const SizedBox(height: 8),
           Text(
-            '${_leads.length} customer(s) are ready right now. Scheduled callbacks appear here only on their requested date and time.',
+            '${_leads.length} customer(s) are ready right now. Scheduled follow-ups appear here only on their requested date and time.',
             style: const TextStyle(fontSize: 16.5, color: Colors.black54),
           ),
           const SizedBox(height: 16),
@@ -4777,7 +5052,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: const Text(
-                          'Priority callback',
+                          'Priority follow-up',
                           style: TextStyle(
                             color: kOrange,
                             fontWeight: FontWeight.w800,
@@ -4816,7 +5091,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                                 Padding(
                                   padding: const EdgeInsets.only(top: 6),
                                   child: Text(
-                                    'Call Back: ${_leads[i].callbackScheduleLabel}',
+                                    'Follow Up: ${_leads[i].callbackScheduleLabel}',
                                     style: const TextStyle(
                                       fontSize: 14.5,
                                       color: kPrimaryDark,
@@ -4874,7 +5149,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'If a customer calls back later, search here and move them back to Follow Up or schedule a Call Back only when they ask for a timed discussion.',
+                  'If a customer returns later, search here and move them back to Interested or schedule a Follow Up only when they ask for a timed discussion.',
                   style: TextStyle(fontSize: 15.5, color: Colors.black54),
                 ),
                 const SizedBox(height: 14),
@@ -5134,7 +5409,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 if (lead.callbackScheduleLabel.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(
-                    'Scheduled callback: ${lead.callbackScheduleLabel}',
+                    'Scheduled follow-up: ${lead.callbackScheduleLabel}',
                     style: const TextStyle(
                       fontSize: 15,
                       color: kPrimaryDark,
@@ -5235,7 +5510,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               ),
               const SizedBox(height: 10),
               const Text(
-                'After the call ends, mark one simple remark. Choose Call Back only when the customer specifically asks for a scheduled callback. The next lead stays blocked until the remark is saved.',
+                'After the call ends, mark one simple remark. Choose Follow Up only when the customer specifically asks for a scheduled follow-up. The next lead stays blocked until the remark is saved.',
                 style: TextStyle(fontSize: 15.5, color: Colors.black54),
               ),
               if (_hasPendingCallStatus) ...[
@@ -5390,6 +5665,112 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           ],
         ),
       ),
+    );
+  }
+
+  Future<bool> _confirmUnscheduledFollowup({
+    required String title,
+    required String message,
+  }) async {
+    if (!mounted) {
+      return false;
+    }
+    return await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: Text(title),
+              content: Text(message),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Go Back'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                  child: const Text('Continue'),
+                ),
+              ],
+            );
+          },
+        ) ??
+        false;
+  }
+
+  Future<ShortCallDecision?> _showFollowupNoResponseDialog(
+    LeadItem lead,
+    int durationSeconds,
+  ) async {
+    final canCloseAsNoResponse = lead.canMarkFollowupNoResponse;
+    final attemptNumber = lead.followupAttemptCount + 1;
+    final message = durationSeconds <= 0
+        ? canCloseAsNoResponse
+            ? 'The customer did not attend this follow-up call. This is try $attemptNumber, so you can now move it to No Response.'
+            : 'The customer did not attend this follow-up call. Save this try and call again until 3 tries are completed.'
+        : canCloseAsNoResponse
+        ? 'The follow-up call was too short to confirm a real discussion. This is try $attemptNumber, so you can now move it to No Response.'
+        : 'The follow-up call was too short to confirm a real discussion. Save this try and call again until 3 tries are completed.';
+
+    return await showDialog<ShortCallDecision>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: const Text('Follow Up Result'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(message),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: kSoft,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Text(
+                  'Saved tries: ${lead.followupAttemptCount}/3',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: kPrimaryDark,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            if (!canCloseAsNoResponse)
+              TextButton(
+                onPressed: () => Navigator.of(
+                  dialogContext,
+                ).pop(ShortCallDecision.markNoResponse),
+                child: const Text('Save This Try'),
+              ),
+            if (!canCloseAsNoResponse)
+              ElevatedButton(
+                onPressed: () =>
+                    Navigator.of(dialogContext).pop(ShortCallDecision.callAgain),
+                child: const Text('Call Again'),
+              )
+            else
+              ElevatedButton(
+                onPressed: () => Navigator.of(
+                  dialogContext,
+                ).pop(ShortCallDecision.markNoResponse),
+                child: const Text('Mark No Response'),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -6890,6 +7271,439 @@ class RecoveredLeadResult {
   final String callbackScheduleLabel;
 }
 
+class FollowupQueuePage extends StatefulWidget {
+  const FollowupQueuePage({
+    super.key,
+    required this.apiClient,
+    required this.onCall,
+  });
+
+  final ApiClient apiClient;
+  final Future<void> Function(LeadItem lead) onCall;
+
+  @override
+  State<FollowupQueuePage> createState() => _FollowupQueuePageState();
+}
+
+class _FollowupQueuePageState extends State<FollowupQueuePage> {
+  List<LeadItem> _rows = const [];
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFollowups();
+  }
+
+  Future<void> _loadFollowups({bool showLoader = true}) async {
+    if (showLoader && mounted) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
+    try {
+      final rows = await widget.apiClient.fetchFollowups();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _rows = rows;
+        _isLoading = false;
+        _errorMessage = null;
+      });
+    } on ApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoading = false;
+        _errorMessage = error.message;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Follow Ups')),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () => _loadFollowups(showLoader: false),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            children: [
+              const Text(
+                'Scheduled follow-ups',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _rows.isEmpty
+                    ? 'No follow-ups are scheduled yet.'
+                    : '${_rows.length} follow-up(s) are saved here. Scheduled ones are highlighted when their time starts.',
+                style: const TextStyle(fontSize: 16.5, color: Colors.black54),
+              ),
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: kSoft,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Text(
+                    _errorMessage!,
+                    style: const TextStyle(color: Colors.black54),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              if (_isLoading)
+                const Center(child: CircularProgressIndicator())
+              else if (_rows.isEmpty)
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(26),
+                  ),
+                  child: const Text(
+                    'No follow-ups are available right now.',
+                    style: TextStyle(fontSize: 16),
+                  ),
+                )
+              else
+                for (final lead in _rows)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Container(
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: lead.isDueNow
+                            ? const Color(0xFFFFF6EA)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: lead.isDueNow
+                            ? Border.all(color: kOrange.withValues(alpha: 0.32))
+                            : null,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                backgroundColor: kSoft,
+                                foregroundColor: kPrimary,
+                                child: Text(lead.name.characters.first),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      lead.name,
+                                      style: const TextStyle(
+                                        fontSize: 21,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                    Text(
+                                      lead.phone,
+                                      style: const TextStyle(
+                                        fontSize: 16.5,
+                                        color: Colors.black54,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              StatusPill(
+                                label: lead.isDueNow ? 'Due now' : 'Scheduled',
+                              ),
+                            ],
+                          ),
+                          if (lead.callbackScheduleLabel.isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              'Follow Up: ${lead.callbackScheduleLabel}',
+                              style: const TextStyle(
+                                fontSize: 14.5,
+                                color: kPrimaryDark,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              StatusPill(
+                                label: lead.isScheduledFollowup
+                                    ? 'Scheduled'
+                                    : 'No Schedule',
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: kSoft,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  'Tries: ${lead.followupAttemptCount}/3',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: kPrimaryDark,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (lead.notes.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              lead.notes,
+                              style: const TextStyle(fontSize: 15.5),
+                            ),
+                          ],
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () async {
+                                    await widget.onCall(lead);
+                                    if (!mounted) {
+                                      return;
+                                    }
+                                    await _loadFollowups(
+                                      showLoader: false,
+                                    );
+                                  },
+                                  icon: const Icon(Icons.phone_in_talk),
+                                  label: Text(
+                                    lead.isDueNow
+                                        ? 'Call Highlighted Follow Up'
+                                        : 'Open Follow Up',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class InterestedLeadCapturePage extends StatefulWidget {
+  const InterestedLeadCapturePage({
+    super.key,
+    required this.lead,
+    required this.onSubmit,
+  });
+
+  final LeadItem lead;
+  final Future<bool> Function({
+    required String customerName,
+    required String customerPhone,
+    required String productEnquired,
+    required String enquiryNotes,
+    required String preferredCallTime,
+  })
+  onSubmit;
+
+  @override
+  State<InterestedLeadCapturePage> createState() =>
+      _InterestedLeadCapturePageState();
+}
+
+class _InterestedLeadCapturePageState extends State<InterestedLeadCapturePage> {
+  late final TextEditingController _customerNameController;
+  late final TextEditingController _customerPhoneController;
+  final TextEditingController _productController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
+  final TextEditingController _preferredTimeController = TextEditingController(
+    text: 'Now',
+  );
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _customerNameController = TextEditingController(text: widget.lead.name);
+    _customerPhoneController = TextEditingController(text: widget.lead.phone);
+  }
+
+  @override
+  void dispose() {
+    _customerNameController.dispose();
+    _customerPhoneController.dispose();
+    _productController.dispose();
+    _notesController.dispose();
+    _preferredTimeController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_isSaving) {
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() => _isSaving = true);
+    final didSave = await widget.onSubmit(
+      customerName: _customerNameController.text.trim(),
+      customerPhone: _customerPhoneController.text.trim(),
+      productEnquired: _productController.text.trim(),
+      enquiryNotes: _notesController.text.trim(),
+      preferredCallTime: _preferredTimeController.text.trim(),
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() => _isSaving = false);
+    if (didSave) {
+      Navigator.of(context).pop(true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_isSaving,
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: const Text('Interested Lead Details'),
+        ),
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            children: [
+              const Text(
+                'Save customer enquiry details',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Complete these details now so the admin can review this interested customer properly.',
+                style: TextStyle(fontSize: 16.5, color: Colors.black54),
+              ),
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(26),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildField(
+                      label: 'Name',
+                      controller: _customerNameController,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildField(
+                      label: 'Number',
+                      controller: _customerPhoneController,
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildField(
+                      label: 'Product Enquired',
+                      controller: _productController,
+                      hintText: 'Example: Personal loan',
+                    ),
+                    const SizedBox(height: 14),
+                    _buildField(
+                      label: 'Notes',
+                      controller: _notesController,
+                      hintText: 'Example: Wants to know the interest rate details',
+                      minLines: 3,
+                      maxLines: 5,
+                    ),
+                    const SizedBox(height: 14),
+                    _buildField(
+                      label: 'Time For Call',
+                      controller: _preferredTimeController,
+                      hintText: 'Example: Now',
+                    ),
+                    const SizedBox(height: 18),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: kSoft,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Text(
+                        'Lead: ${widget.lead.name} (${widget.lead.phone})',
+                        style: const TextStyle(
+                          color: kPrimaryDark,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    ElevatedButton.icon(
+                      onPressed: _isSaving ? null : _save,
+                      icon: const Icon(Icons.save_rounded),
+                      label: Text(
+                        _isSaving ? 'Saving...' : 'Submit Interested Lead',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildField({
+    required String label,
+    required TextEditingController controller,
+    String hintText = '',
+    TextInputType? keyboardType,
+    int minLines = 1,
+    int maxLines = 1,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          minLines: minLines,
+          maxLines: maxLines,
+          decoration: InputDecoration(hintText: hintText),
+        ),
+      ],
+    );
+  }
+}
+
 class CustomerRecoveryPage extends StatefulWidget {
   const CustomerRecoveryPage({
     super.key,
@@ -6975,7 +7789,9 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
 
   Future<_RecoverySelection?> _pickRecoverySelection(LeadItem lead) async {
     const callbackChoices = ['Noon', 'Evening', 'Night'];
-    var selectedStatus = lead.status == 'call_back' ? 'Call Back' : 'Follow Up';
+    var selectedStatus = lead.status == 'call_back'
+        ? 'Follow Up'
+        : 'Interested';
     var selectedCallbackWindow = lead.callbackWindowLabel;
     DateTime? selectedCallbackDate = lead.callbackDate;
 
@@ -6994,21 +7810,21 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${lead.name} can be moved back into your active lead list. Choose Call Back only if the customer requested a timed callback.',
+                    '${lead.name} can be moved back into your active lead list. Choose Follow Up only if the customer requested a timed discussion.',
                     style: const TextStyle(color: Colors.black54),
                   ),
                   const SizedBox(height: 16),
                   Wrap(
                     spacing: 10,
                     runSpacing: 10,
-                    children: ['Follow Up', 'Call Back']
+                    children: ['Interested', 'Follow Up']
                         .map(
                           (label) => ChoiceChip(
                             selected: selectedStatus == label,
                             onSelected: (_) {
                               setDialogState(() {
                                 selectedStatus = label;
-                                if (label != 'Call Back') {
+                                if (label != 'Follow Up') {
                                   selectedCallbackWindow = '';
                                 }
                               });
@@ -7028,10 +7844,10 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
                         )
                         .toList(),
                   ),
-                  if (selectedStatus == 'Call Back') ...[
+                  if (selectedStatus == 'Follow Up') ...[
                     const SizedBox(height: 16),
                     const Text(
-                      'Choose the callback date and time',
+                      'Choose the follow-up date and time',
                       style: TextStyle(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 10),
@@ -7137,7 +7953,7 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
                 ),
                 ElevatedButton(
                   onPressed:
-                      selectedStatus == 'Call Back' &&
+                      selectedStatus == 'Follow Up' &&
                           (selectedCallbackWindow.isEmpty ||
                               selectedCallbackDate == null)
                       ? null
@@ -7213,7 +8029,7 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Search with the customer name or phone number. If they later called back and showed interest, you can move them back into Follow Up or schedule a Call Back here.',
+              'Search with the customer name or phone number. If they later showed interest, you can move them back into Interested or schedule a Follow Up here.',
               style: TextStyle(fontSize: 16.5, color: Colors.black54),
             ),
             const SizedBox(height: 18),
@@ -8543,8 +9359,8 @@ class StatusPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (label) {
-      'Follow Up' => kGreen,
-      'Call Back' => kOrange,
+      'Interested' => kGreen,
+      'Follow Up' => kOrange,
       'No Response' => kRed,
       'Converted' => kGreen,
       'Rejected' => kRed,

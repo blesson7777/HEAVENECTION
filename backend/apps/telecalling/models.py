@@ -232,6 +232,33 @@ class Call(models.Model):
         ordering = ("-start_time",)
 
 
+class InterestedLeadDetail(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    lead = models.OneToOneField(Lead, on_delete=models.CASCADE, related_name="interested_detail")
+    staff = models.ForeignKey(
+        Staff,
+        on_delete=models.CASCADE,
+        related_name="interested_lead_details",
+    )
+    call = models.ForeignKey(
+        Call,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="interested_lead_details",
+    )
+    customer_name = models.CharField(max_length=150)
+    customer_phone = models.CharField(max_length=20, db_index=True)
+    product_enquired = models.CharField(max_length=150)
+    enquiry_notes = models.TextField(blank=True)
+    preferred_call_time = models.CharField(max_length=120, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-updated_at",)
+
+
 class Session(models.Model):
     class AppState(models.TextChoices):
         FOREGROUND = "foreground", "Foreground"

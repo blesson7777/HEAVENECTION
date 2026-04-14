@@ -5,7 +5,7 @@ import logging
 import re
 import uuid
 from collections import Counter, defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
 from threading import Thread
 
@@ -23,6 +23,7 @@ from backend.apps.telecalling.models import (
     AppRelease,
     Call,
     CompanyProfile,
+    InterestedLeadDetail,
     Lead,
     ReferralSubmission,
     ReferralReward,
@@ -68,6 +69,7 @@ CALLBACK_NOON_HOURS = range(12, 16)
 logger = logging.getLogger(__name__)
 CALLBACK_EVENING_HOURS = range(16, 20)
 CALLBACK_NIGHT_HOURS = range(20, 24)
+FOLLOWUP_NO_RESPONSE_LIMIT = 3
 ACTIVE_QUEUE_STATUSES = (
     Lead.Status.NEW,
     Lead.Status.CALL_BACK,
@@ -2329,7 +2331,7 @@ def _touch_session_interaction(session, now, *, metadata=None):
 def _session_status_label(open_session, latest_session=None):
     if open_session:
         if open_session.last_known_state == Session.AppState.OFFLINE and not open_session.last_verified_call_at:
-            return "Call a customer to begin time tracking"
+            return "Call a customer to begin working"
         return {
             Session.AppState.FOREGROUND: "Working",
             Session.AppState.BACKGROUND: "Away from app",
@@ -2615,6 +2617,56 @@ def _is_callback_due(callback_date, callback_window, *, now=None):
         callback_date == timezone.localdate(reference)
         and callback_window == _current_callback_window(reference)
     )
+
+
+def _callback_window_start_hour(callback_window):
+    return {
+        Lead.CallbackWindow.NOON: 12,
+        Lead.CallbackWindow.EVENING: 16,
+        Lead.CallbackWindow.NIGHT: 20,
+    }.get(callback_window)
+
+
+def _callback_due_at(callback_date, callback_window):
+    if not callback_date or not callback_window:
+        return None
+    start_hour = _callback_window_start_hour(callback_window)
+    if start_hour is None:
+        return None
+    return timezone.make_aware(
+        datetime.combine(callback_date, time(hour=start_hour)),
+        timezone.get_current_timezone(),
+    )
+
+
+def _is_followup_highlighted(lead, *, now=None):
+    due_at = _callback_due_at(lead.callback_date, lead.callback_window)
+    if due_at is None:
+        return False
+    reference = timezone.localtime(now or timezone.now())
+    if reference < due_at:
+        return False
+    if lead.last_contacted_at is None:
+        return True
+    return timezone.localtime(lead.last_contacted_at) < due_at
+
+
+def _followup_no_answer_attempt_count(lead, *, staff=None, exclude_call_id=None):
+    queryset = lead.calls.all()
+    if staff is not None:
+        queryset = queryset.filter(staff=staff)
+    if exclude_call_id:
+        queryset = queryset.exclude(id=exclude_call_id)
+
+    count = 0
+    for status in queryset.order_by("-start_time", "-created_at").values_list("status", flat=True):
+        if status == Call.Status.NO_ANSWER:
+            count += 1
+            continue
+        if status == Call.Status.INVALID_SHORT:
+            continue
+        break
+    return count
 
 
 def _quality_tone(score):
@@ -6761,6 +6813,137 @@ def build_staff_today_payload(staff):
     }
 
 
+def build_staff_followups_payload(staff):
+    now = timezone.now()
+    followups = (
+        Lead.objects.select_related("assigned_to")
+        .filter(assigned_to=staff, status=Lead.Status.CALL_BACK)
+        .order_by("callback_date", "callback_window", "-updated_at", "-last_contacted_at")
+    )
+    rows = []
+    for lead in followups:
+        no_answer_attempt_count = _followup_no_answer_attempt_count(lead, staff=staff)
+        is_due_now = _is_followup_highlighted(lead, now=now)
+        rows.append(
+            {
+                "id": str(lead.id),
+                "name": lead.name,
+                "phone": lead.phone,
+                "status": lead.status,
+                "status_label": "Follow Up",
+                "callback_window": lead.callback_window,
+                "callback_window_label": lead.get_callback_window_display() if lead.callback_window else "",
+                "callback_date": lead.callback_date.isoformat() if lead.callback_date else "",
+                "callback_date_label": _format_callback_date_label(lead.callback_date),
+                "callback_schedule_label": _format_callback_schedule_label(
+                    lead.callback_date,
+                    lead.callback_window,
+                ),
+                "notes": lead.notes,
+                "last_contacted_at": lead.last_contacted_at.isoformat() if lead.last_contacted_at else "",
+                "updated_at": lead.updated_at.isoformat(),
+                "is_due_now": is_due_now,
+                "followup_attempt_count": no_answer_attempt_count,
+                "followup_attempts_remaining": max(
+                    0,
+                    FOLLOWUP_NO_RESPONSE_LIMIT - no_answer_attempt_count,
+                ),
+                "can_mark_followup_no_response": no_answer_attempt_count
+                >= (FOLLOWUP_NO_RESPONSE_LIMIT - 1),
+                "is_scheduled_followup": bool(lead.callback_date and lead.callback_window),
+            }
+        )
+    rows.sort(
+        key=lambda row: (
+            0 if row["is_due_now"] else 1,
+            0 if row["is_scheduled_followup"] else 1,
+            row["callback_date"] or "9999-12-31",
+            row["callback_window"] or "zzzz",
+            row["updated_at"],
+        )
+    )
+    return {"followups": rows}
+
+
+def save_interested_lead_detail(
+    call,
+    *,
+    customer_name,
+    customer_phone,
+    product_enquired,
+    enquiry_notes="",
+    preferred_call_time="",
+):
+    if call.status != Call.Status.INTERESTED:
+        raise ValueError("Interested enquiry details can only be saved after marking the call as Interested.")
+
+    lead = call.lead
+    lead.name = customer_name.strip()
+    lead.phone = customer_phone.strip()
+    lead.save(update_fields=["name", "phone", "updated_at"])
+
+    detail, _ = InterestedLeadDetail.objects.update_or_create(
+        lead=lead,
+        defaults={
+            "staff": call.staff,
+            "call": call,
+            "customer_name": customer_name.strip(),
+            "customer_phone": customer_phone.strip(),
+            "product_enquired": product_enquired.strip(),
+            "enquiry_notes": (enquiry_notes or "").strip(),
+            "preferred_call_time": preferred_call_time.strip(),
+        },
+    )
+    return detail
+
+
+def build_interested_lead_payload(*, query=""):
+    queryset = InterestedLeadDetail.objects.select_related("lead", "staff", "call")
+    trimmed_query = (query or "").strip()
+    if trimmed_query:
+        queryset = queryset.filter(
+            Q(customer_name__icontains=trimmed_query)
+            | Q(customer_phone__icontains=trimmed_query)
+            | Q(product_enquired__icontains=trimmed_query)
+            | Q(enquiry_notes__icontains=trimmed_query)
+            | Q(staff__name__icontains=trimmed_query)
+        )
+
+    rows = []
+    for detail in queryset.order_by("-updated_at"):
+        rows.append(
+            {
+                "id": str(detail.id),
+                "lead_id": str(detail.lead_id),
+                "customer_name": detail.customer_name,
+                "customer_phone": detail.customer_phone,
+                "product_enquired": detail.product_enquired,
+                "enquiry_notes": detail.enquiry_notes,
+                "preferred_call_time": detail.preferred_call_time,
+                "staff_name": detail.staff.name,
+                "staff_phone": detail.staff.phone,
+                "updated_at": _format_datetime(detail.updated_at),
+                "created_at": _format_datetime(detail.created_at),
+                "lead_status_label": detail.lead.get_status_display(),
+            }
+        )
+
+    return {
+        "interested_lead_rows": rows,
+        "interested_lead_summary": {
+            "total_count": len(rows),
+            "today_count": sum(
+                1
+                for row in rows
+                if row["created_at"].startswith(timezone.localdate().strftime("%d %b %Y"))
+            ),
+            "with_notes_count": sum(1 for row in rows if row["enquiry_notes"]),
+            "scheduled_count": sum(1 for row in rows if row["preferred_call_time"]),
+        },
+        "interested_search_query": trimmed_query,
+    }
+
+
 def get_assigned_leads(staff):
     now = timezone.now()
     auto_allocate_leads(target_staff=staff)
@@ -7079,6 +7262,20 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
 
     resolved_callback_window = callback_window if status == Call.Status.CALL_BACK else ""
     resolved_callback_date = callback_date if status == Call.Status.CALL_BACK else None
+    lead_status = status
+    lead_callback_window = resolved_callback_window
+    lead_callback_date = resolved_callback_date
+    if call.lead.status == Lead.Status.CALL_BACK and status == Call.Status.NO_ANSWER:
+        previous_no_answer_attempts = _followup_no_answer_attempt_count(
+            call.lead,
+            staff=call.staff,
+            exclude_call_id=call.id,
+        )
+        total_no_answer_attempts = previous_no_answer_attempts + 1
+        if total_no_answer_attempts < FOLLOWUP_NO_RESPONSE_LIMIT:
+            lead_status = Lead.Status.CALL_BACK
+            lead_callback_window = call.lead.callback_window
+            lead_callback_date = call.lead.callback_date
     update_fields = ["status", "callback_window", "callback_date", "updated_at"]
     if call.end_time is None:
         call.end_time = now
@@ -7098,9 +7295,9 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
     call.callback_window = resolved_callback_window
     call.callback_date = resolved_callback_date
     call.save(update_fields=update_fields)
-    call.lead.status = status
-    call.lead.callback_window = resolved_callback_window
-    call.lead.callback_date = resolved_callback_date
+    call.lead.status = lead_status
+    call.lead.callback_window = lead_callback_window
+    call.lead.callback_date = lead_callback_date
     call.lead.last_contacted_at = call.end_time or now
     call.lead.save(
         update_fields=[
@@ -7123,11 +7320,12 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
             "status": status,
             "callback_window": resolved_callback_window,
             "callback_date": resolved_callback_date.isoformat() if resolved_callback_date else "",
+            "lead_status": lead_status,
         },
     )
-    if status == Call.Status.CALL_BACK:
+    if lead_status == Lead.Status.CALL_BACK:
         auto_allocate_leads(target_staff=call.staff)
-    elif status in TERMINAL_QUEUE_STATUSES:
+    elif lead_status in TERMINAL_QUEUE_STATUSES:
         auto_allocate_leads(target_staff=call.staff)
     return call
 

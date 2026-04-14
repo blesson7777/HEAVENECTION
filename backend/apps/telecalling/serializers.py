@@ -10,6 +10,7 @@ from backend.apps.telecalling.models import (
     AppRelease,
     Call,
     CompanyProfile,
+    InterestedLeadDetail,
     Lead,
     ReferralSubmission,
     Salary,
@@ -96,6 +97,7 @@ class HeartbeatSerializer(serializers.Serializer):
 
 class StartCallSerializer(serializers.Serializer):
     lead_id = serializers.UUIDField()
+    from_followup_menu = serializers.BooleanField(required=False, default=False)
 
 
 class EndCallSerializer(serializers.Serializer):
@@ -120,14 +122,6 @@ class EndCallSerializer(serializers.Serializer):
     source = serializers.CharField(max_length=50, required=False, default="app")
 
     def validate(self, attrs):
-        if attrs.get("status") == Call.Status.CALL_BACK:
-            errors = {}
-            if not attrs.get("callback_window"):
-                errors["callback_window"] = "Select Noon, Evening, or Night for a callback."
-            if not attrs.get("callback_date"):
-                errors["callback_date"] = "Select the requested callback date."
-            if errors:
-                raise serializers.ValidationError(errors)
         if ("duration_seconds" in attrs) != ("ended_at" in attrs):
             raise serializers.ValidationError(
                 "Provide both duration and ended time for a verified call-log sync."
@@ -153,14 +147,6 @@ class CallStatusSerializer(serializers.Serializer):
     callback_date = serializers.DateField(required=False)
 
     def validate(self, attrs):
-        if attrs.get("status") == Call.Status.CALL_BACK:
-            errors = {}
-            if not attrs.get("callback_window"):
-                errors["callback_window"] = "Select Noon, Evening, or Night for a callback."
-            if not attrs.get("callback_date"):
-                errors["callback_date"] = "Select the requested callback date."
-            if errors:
-                raise serializers.ValidationError(errors)
         return attrs
 
 
@@ -179,15 +165,87 @@ class StaffLeadRecoverySerializer(serializers.Serializer):
     callback_date = serializers.DateField(required=False)
 
     def validate(self, attrs):
-        if attrs.get("status") == Lead.Status.CALL_BACK:
-            errors = {}
-            if not attrs.get("callback_window"):
-                errors["callback_window"] = "Select Noon, Evening, or Night for a callback."
-            if not attrs.get("callback_date"):
-                errors["callback_date"] = "Select the requested callback date."
-            if errors:
-                raise serializers.ValidationError(errors)
         return attrs
+
+
+class InterestedLeadDetailSerializer(serializers.ModelSerializer):
+    staff_name = serializers.CharField(source="staff.name", read_only=True)
+    lead_name = serializers.CharField(source="lead.name", read_only=True)
+    lead_phone = serializers.CharField(source="lead.phone", read_only=True)
+    updated_at_label = serializers.SerializerMethodField()
+    created_at_label = serializers.SerializerMethodField()
+
+    class Meta:
+        model = InterestedLeadDetail
+        fields = (
+            "id",
+            "lead",
+            "lead_name",
+            "lead_phone",
+            "staff",
+            "staff_name",
+            "call",
+            "customer_name",
+            "customer_phone",
+            "product_enquired",
+            "enquiry_notes",
+            "preferred_call_time",
+            "created_at",
+            "created_at_label",
+            "updated_at",
+            "updated_at_label",
+        )
+        read_only_fields = (
+            "id",
+            "lead",
+            "lead_name",
+            "lead_phone",
+            "staff",
+            "staff_name",
+            "call",
+            "created_at",
+            "created_at_label",
+            "updated_at",
+            "updated_at_label",
+        )
+
+    def get_updated_at_label(self, obj):
+        return timezone.localtime(obj.updated_at).strftime("%d %b %Y, %I:%M %p")
+
+    def get_created_at_label(self, obj):
+        return timezone.localtime(obj.created_at).strftime("%d %b %Y, %I:%M %p")
+
+
+class InterestedLeadCaptureSerializer(serializers.Serializer):
+    customer_name = serializers.CharField(max_length=150)
+    customer_phone = serializers.CharField(max_length=20)
+    product_enquired = serializers.CharField(max_length=150)
+    enquiry_notes = serializers.CharField(required=False, allow_blank=True)
+    preferred_call_time = serializers.CharField(max_length=120)
+
+    def validate_customer_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Enter the customer name.")
+        return value
+
+    def validate_customer_phone(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Enter the customer number.")
+        return value
+
+    def validate_product_enquired(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Enter the product enquired.")
+        return value
+
+    def validate_preferred_call_time(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Enter the preferred call time.")
+        return value
 
 
 class StaffSerializer(serializers.ModelSerializer):

@@ -729,6 +729,11 @@ class LeadItem {
     this.assignedToName = '',
     this.lastContactedAt,
     this.updatedAt,
+    this.isDueNow = false,
+    this.followupAttemptCount = 0,
+    this.followupAttemptsRemaining = 3,
+    this.canMarkFollowupNoResponse = false,
+    this.isScheduledFollowup = false,
   });
 
   final String id;
@@ -745,6 +750,11 @@ class LeadItem {
   final String assignedToName;
   final DateTime? lastContactedAt;
   final DateTime? updatedAt;
+  final bool isDueNow;
+  final int followupAttemptCount;
+  final int followupAttemptsRemaining;
+  final bool canMarkFollowupNoResponse;
+  final bool isScheduledFollowup;
 
   bool get isRecoveryLead =>
       status == 'no_answer' || status == 'not_interested';
@@ -753,12 +763,22 @@ class LeadItem {
   factory LeadItem.fromJson(Map<String, dynamic> json) {
     final callbackDateLabel = json['callback_date_label']?.toString() ?? '';
     final callbackWindowLabel = json['callback_window_label']?.toString() ?? '';
+    final rawStatus = json['status']?.toString() ?? '';
+    final displayStatus = rawStatus == 'call_back'
+        ? 'Follow Up'
+        : (rawStatus == 'interested' ? 'Interested' : '');
+    final statusLabel =
+        json['status_label']?.toString().trim().isNotEmpty == true
+            ? json['status_label']?.toString() ?? 'New'
+            : (displayStatus.isNotEmpty ? displayStatus : 'New');
+    final normalizedStatusLabel =
+        displayStatus.isNotEmpty ? displayStatus : statusLabel;
     return LeadItem(
       id: json['id']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
-      statusLabel: json['status_label']?.toString() ?? 'New',
+      statusLabel: normalizedStatusLabel,
       callbackWindow: json['callback_window']?.toString() ?? '',
       callbackWindowLabel: callbackWindowLabel,
       callbackDate: json['callback_date'] == null
@@ -776,6 +796,45 @@ class LeadItem {
       updatedAt: json['updated_at'] == null
           ? null
           : DateTime.tryParse(json['updated_at'].toString())?.toLocal(),
+      isDueNow: json['is_due_now'] == true,
+      followupAttemptCount: _asInt(json['followup_attempt_count']),
+      followupAttemptsRemaining: _asInt(
+        json['followup_attempts_remaining'],
+      ),
+      canMarkFollowupNoResponse: json['can_mark_followup_no_response'] == true,
+      isScheduledFollowup: json['is_scheduled_followup'] == true,
+    );
+  }
+}
+
+class InterestedLeadDetail {
+  const InterestedLeadDetail({
+    required this.id,
+    required this.customerName,
+    required this.customerPhone,
+    required this.productEnquired,
+    required this.enquiryNotes,
+    required this.preferredCallTime,
+    required this.updatedAtLabel,
+  });
+
+  final String id;
+  final String customerName;
+  final String customerPhone;
+  final String productEnquired;
+  final String enquiryNotes;
+  final String preferredCallTime;
+  final String updatedAtLabel;
+
+  factory InterestedLeadDetail.fromJson(Map<String, dynamic> json) {
+    return InterestedLeadDetail(
+      id: json['id']?.toString() ?? '',
+      customerName: json['customer_name']?.toString() ?? '',
+      customerPhone: json['customer_phone']?.toString() ?? '',
+      productEnquired: json['product_enquired']?.toString() ?? '',
+      enquiryNotes: json['enquiry_notes']?.toString() ?? '',
+      preferredCallTime: json['preferred_call_time']?.toString() ?? '',
+      updatedAtLabel: json['updated_at_label']?.toString() ?? '--',
     );
   }
 }

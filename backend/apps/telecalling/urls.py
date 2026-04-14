@@ -32,6 +32,7 @@ urlpatterns = [
     path("salary/control/", views.salary_control_api, name="api-salary-control"),
     path("salary/control/<uuid:staff_id>/", views.salary_control_detail_api, name="api-salary-control-detail"),
     path("staff/today-summary/", views.staff_today_summary_api, name="api-staff-today-summary"),
+    path("staff/followups/", views.staff_followups_api, name="api-staff-followups"),
     path("staff/leads/", views.assigned_leads_api, name="api-staff-leads"),
     path("staff/customers/", views.staff_customer_history_api, name="api-staff-customer-history"),
     path("staff/customers/<uuid:lead_id>/recover/", views.recover_staff_lead_api, name="api-staff-lead-recover"),
@@ -53,5 +54,6 @@ urlpatterns = [
     path("staff/calls/<uuid:call_id>/end/", views.end_call_api, name="api-call-end"),
     path("staff/calls/<uuid:call_id>/retry/", views.retry_call_api, name="api-call-retry"),
     path("staff/calls/<uuid:call_id>/status/", views.update_call_status_api, name="api-call-status"),
+    path("staff/calls/<uuid:call_id>/interested-detail/", views.interested_lead_capture_api, name="api-call-interested-detail"),
 ]
 
