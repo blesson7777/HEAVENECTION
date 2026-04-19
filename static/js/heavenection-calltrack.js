@@ -1099,6 +1099,138 @@
         });
     }
 
+    function bindInterestedLeadDecisions() {
+        const config = window.heavenectionAdmin;
+        if (!config?.leadsUrl) {
+            return;
+        }
+
+        const successModalNode = document.getElementById("interestedSuccessModal");
+        const successConfirmButton = document.getElementById("interestedSuccessConfirm");
+        const successTitleNode = document.getElementById("interestedSuccessTitle");
+        const successMessageNode = document.getElementById("interestedSuccessMessage");
+        const successFeedback = document.getElementById("interestedSuccessFeedback");
+        const unsuccessfulModalNode = document.getElementById("interestedUnsuccessfulModal");
+        const unsuccessfulForm = document.getElementById("interestedUnsuccessfulForm");
+        const unsuccessfulLeadIdInput = document.getElementById("interestedUnsuccessfulLeadId");
+        const unsuccessfulStatusInput = document.getElementById("interestedUnsuccessfulStatus");
+        const unsuccessfulTitleNode = document.getElementById("interestedUnsuccessfulTitle");
+        const unsuccessfulFeedback = document.getElementById("interestedUnsuccessfulFeedback");
+        const unsuccessfulSubmitButton = document.getElementById("interestedUnsuccessfulSubmit");
+
+        const successModal = successModalNode
+            ? bootstrap.Modal.getOrCreateInstance(successModalNode)
+            : null;
+        const unsuccessfulModal = unsuccessfulModalNode
+            ? bootstrap.Modal.getOrCreateInstance(unsuccessfulModalNode)
+            : null;
+        let activeLeadId = "";
+
+        function showFeedback(node, message, isError) {
+            if (!node) {
+                return;
+            }
+            node.textContent = message;
+            node.classList.remove("d-none", "is-success", "is-error");
+            node.classList.add(isError ? "is-error" : "is-success");
+        }
+
+        function clearFeedback(node) {
+            if (!node) {
+                return;
+            }
+            node.textContent = "";
+            node.classList.add("d-none");
+            node.classList.remove("is-success", "is-error");
+        }
+
+        document.querySelectorAll(".js-interested-success").forEach((button) => {
+            button.addEventListener("click", () => {
+                clearFeedback(successFeedback);
+                activeLeadId = button.dataset.leadId || "";
+                const leadName = button.dataset.leadName || "this lead";
+                if (successTitleNode) {
+                    successTitleNode.textContent = "Mark Successful";
+                }
+                if (successMessageNode) {
+                    successMessageNode.textContent = `Confirm ${leadName} as successful? This will move the lead to Converted.`;
+                }
+                successModal?.show();
+            });
+        });
+
+        if (successConfirmButton) {
+            successConfirmButton.addEventListener("click", async () => {
+                if (!activeLeadId) {
+                    return;
+                }
+                clearFeedback(successFeedback);
+                successConfirmButton.disabled = true;
+                try {
+                    await requestJson(`${config.leadsUrl}${activeLeadId}/`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ status: "converted" }),
+                    });
+                    showFeedback(successFeedback, "Lead marked as successful.", false);
+                    window.setTimeout(() => window.location.reload(), 500);
+                } catch (error) {
+                    showFeedback(successFeedback, error.message, true);
+                } finally {
+                    successConfirmButton.disabled = false;
+                }
+            });
+        }
+
+        document.querySelectorAll(".js-interested-unsuccessful").forEach((button) => {
+            button.addEventListener("click", () => {
+                clearFeedback(unsuccessfulFeedback);
+                if (unsuccessfulLeadIdInput) {
+                    unsuccessfulLeadIdInput.value = button.dataset.leadId || "";
+                }
+                if (unsuccessfulStatusInput) {
+                    unsuccessfulStatusInput.value = button.dataset.currentStatus || "interested";
+                    if (!["interested", "not_interested", "no_answer"].includes(unsuccessfulStatusInput.value)) {
+                        unsuccessfulStatusInput.value = "interested";
+                    }
+                }
+                if (unsuccessfulTitleNode) {
+                    unsuccessfulTitleNode.textContent = `Mark Unsuccessful - ${button.dataset.leadName || "Lead"}`;
+                }
+                unsuccessfulModal?.show();
+            });
+        });
+
+        if (unsuccessfulForm) {
+            unsuccessfulForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                clearFeedback(unsuccessfulFeedback);
+                const leadId = unsuccessfulLeadIdInput?.value || "";
+                const targetStatus = unsuccessfulStatusInput?.value || "interested";
+                if (!leadId) {
+                    showFeedback(unsuccessfulFeedback, "Select a lead before saving.", true);
+                    return;
+                }
+                if (unsuccessfulSubmitButton) {
+                    unsuccessfulSubmitButton.disabled = true;
+                }
+                try {
+                    await requestJson(`${config.leadsUrl}${leadId}/`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ status: targetStatus }),
+                    });
+                    showFeedback(unsuccessfulFeedback, "Lead updated successfully.", false);
+                    window.setTimeout(() => window.location.reload(), 500);
+                } catch (error) {
+                    showFeedback(unsuccessfulFeedback, error.message, true);
+                } finally {
+                    if (unsuccessfulSubmitButton) {
+                        unsuccessfulSubmitButton.disabled = false;
+                    }
+                }
+            });
+        }
+    }
+
     function bindSalaryControlCrud() {
         const config = window.heavenectionAdmin;
         const modalNode = document.getElementById("salaryControlModal");
@@ -1418,6 +1550,7 @@
     bindLeadCrud();
     bindHandoverUpdates();
     bindFollowupConversion();
+    bindInterestedLeadDecisions();
     bindLeadImport();
     bindTrainingCrud();
     bindSalaryControlCrud();

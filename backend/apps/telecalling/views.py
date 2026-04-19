@@ -1718,7 +1718,7 @@ def interested_leads_page(request):
         active_page="interested-leads",
         page_title="Interested Leads",
         page_heading="Interested Leads",
-        page_subtitle="Review the customer details captured by staff after a successful interested call.",
+        page_subtitle="Review interested customer details, then mark each lead as successful or unsuccessful.",
         extra_context=build_interested_lead_payload(query=search_query),
     )
     return render(request, "admin_interested_leads.html", context)

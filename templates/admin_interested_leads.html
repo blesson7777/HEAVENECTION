@@ -43,6 +43,13 @@
                 <p class="mb-0 text-muted">Entries with a preferred call time saved.</p>
             </div>
         </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Successful</span>
+                <h3 class="mb-1">{{ interested_lead_summary.converted_count }}</h3>
+                <p class="mb-0 text-muted">{{ interested_lead_summary.open_count }} still need an admin decision.</p>
+            </div>
+        </div>
     </div>
 
     <form method="get" class="hc-search-box mb-4">
@@ -59,7 +66,9 @@
                     <th>Preferred Call Time</th>
                     <th>Notes</th>
                     <th>Staff</th>
+                    <th>Lead Status</th>
                     <th>Updated</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -78,17 +87,100 @@
                         <div class="small text-muted">{{ row.staff_phone }}</div>
                     </td>
                     <td>
+                        <span class="hc-status hc-status-{{ row.lead_status_tone }}">{{ row.lead_status_label }}</span>
+                    </td>
+                    <td>
                         <div>{{ row.updated_at }}</div>
                         <div class="small text-muted">Created {{ row.created_at }}</div>
+                    </td>
+                    <td>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button
+                                type="button"
+                                class="btn btn-outline-success btn-sm js-interested-success"
+                                data-lead-id="{{ row.lead_id }}"
+                                data-lead-name="{{ row.customer_name }}"
+                                {% if row.is_converted %}disabled{% endif %}
+                            >
+                                {% if row.is_converted %}Successful{% else %}Mark Successful{% endif %}
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-outline-secondary btn-sm js-interested-unsuccessful"
+                                data-lead-id="{{ row.lead_id }}"
+                                data-lead-name="{{ row.customer_name }}"
+                                data-current-status="{{ row.lead_status }}"
+                            >Mark Unsuccessful</button>
+                        </div>
                     </td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="text-center py-4">No interested customer details have been submitted yet.</td>
+                    <td colspan="8" class="text-center py-4">No interested customer details have been submitted yet.</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </section>
+
+<div class="modal fade" id="interestedSuccessModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content hc-modal-card">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <span class="mf-db2-kicker">Successful Lead</span>
+                    <h5 class="modal-title mt-1" id="interestedSuccessTitle">Mark Successful</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <p class="text-muted mb-3" id="interestedSuccessMessage">Mark this interested lead as successful and converted?</p>
+                <div class="alert alert-light border mb-0">
+                    Once marked successful, this lead becomes <strong>Converted</strong> and the staff reward is counted with the successful-lead bonus.
+                </div>
+                <div id="interestedSuccessFeedback" class="hc-form-feedback d-none mt-3"></div>
+                <div class="d-flex justify-content-end gap-2 mt-4">
+                    <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="interestedSuccessConfirm">Yes, Mark Successful</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="interestedUnsuccessfulModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content hc-modal-card">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <span class="mf-db2-kicker">Unsuccessful Lead</span>
+                    <h5 class="modal-title mt-1" id="interestedUnsuccessfulTitle">Mark Unsuccessful</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <form id="interestedUnsuccessfulForm">
+                    <input type="hidden" id="interestedUnsuccessfulLeadId">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="interestedUnsuccessfulStatus">Move lead to</label>
+                        <select class="form-select" id="interestedUnsuccessfulStatus" required>
+                            <option value="interested">Follow Up</option>
+                            <option value="not_interested">Rejected</option>
+                            <option value="no_answer">No Response</option>
+                        </select>
+                    </div>
+                    <div class="alert alert-light border mb-0">
+                        Use <strong>Follow Up</strong> if the customer still has a chance, <strong>Rejected</strong> if they clearly declined, or <strong>No Response</strong> if the attempt did not move forward.
+                    </div>
+                    <div id="interestedUnsuccessfulFeedback" class="hc-form-feedback d-none mt-3"></div>
+                    <div class="d-flex justify-content-end gap-2 mt-4">
+                        <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary" id="interestedUnsuccessfulSubmit">Save Result</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

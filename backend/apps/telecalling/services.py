@@ -7022,6 +7022,14 @@ def build_interested_lead_payload(*, query=""):
 
     rows = []
     for detail in queryset.order_by("-updated_at"):
+        lead_status = detail.lead.status
+        status_tone = {
+            Lead.Status.CONVERTED: "success",
+            Lead.Status.INTERESTED: "warning",
+            Lead.Status.NOT_INTERESTED: "danger",
+            Lead.Status.NO_ANSWER: "primary",
+            Lead.Status.NEW: "muted",
+        }.get(lead_status, "muted")
         rows.append(
             {
                 "id": str(detail.id),
@@ -7035,7 +7043,10 @@ def build_interested_lead_payload(*, query=""):
                 "staff_phone": detail.staff.phone,
                 "updated_at": _format_datetime(detail.updated_at),
                 "created_at": _format_datetime(detail.created_at),
+                "lead_status": lead_status,
                 "lead_status_label": detail.lead.get_status_display(),
+                "lead_status_tone": status_tone,
+                "is_converted": lead_status == Lead.Status.CONVERTED,
             }
         )
 
@@ -7050,6 +7061,8 @@ def build_interested_lead_payload(*, query=""):
             ),
             "with_notes_count": sum(1 for row in rows if row["enquiry_notes"]),
             "scheduled_count": sum(1 for row in rows if row["preferred_call_time"]),
+            "converted_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.CONVERTED),
+            "open_count": sum(1 for row in rows if row["lead_status"] != Lead.Status.CONVERTED),
         },
         "interested_search_query": trimmed_query,
     }

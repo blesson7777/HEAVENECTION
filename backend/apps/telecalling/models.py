@@ -69,7 +69,7 @@ class Staff(AbstractBaseUser, PermissionsMixin):
         default=WeeklyPayoutDay.WEDNESDAY,
     )
     call_rate = models.DecimalField(max_digits=10, decimal_places=2, default=3)
-    bonus_per_conversion = models.DecimalField(max_digits=10, decimal_places=2, default=500)
+    bonus_per_conversion = models.DecimalField(max_digits=10, decimal_places=2, default=10)
     bank_account_name = models.CharField(max_length=150, blank=True)
     bank_name = models.CharField(max_length=150, blank=True)
     bank_account_number = models.CharField(max_length=50, blank=True)
