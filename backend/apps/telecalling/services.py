@@ -63,6 +63,7 @@ VERIFIED_CALL_SOURCES = {
 }
 QUALITY_SCORE_LOOKBACK_DAYS = 30
 MISSED_CALLBACK_AFTER_HOURS = 24
+PENDING_STATUS_BLOCK_HOURS = 12
 TWOPLACES = Decimal("0.01")
 DEFAULT_LEAD_QUEUE_LIMIT = 1
 CALLBACK_NOON_HOURS = range(12, 16)
@@ -6810,7 +6811,9 @@ def end_staff_session(staff, *, close_reason="manual"):
 
 
 def get_pending_status_call(staff):
-    return (
+    now = timezone.now()
+    stale_cutoff = now - timedelta(hours=PENDING_STATUS_BLOCK_HOURS)
+    pending_calls = list(
         Call.objects.filter(
             staff=staff,
             status=Call.Status.STARTED,
@@ -6818,8 +6821,22 @@ def get_pending_status_call(staff):
         )
         .select_related("lead")
         .order_by("-end_time", "-start_time")
-        .first()
     )
+
+    for call in pending_calls:
+        if call.end_time and call.end_time < stale_cutoff:
+            continue
+
+        superseded_by_newer_call = Call.objects.filter(
+            staff=staff,
+            start_time__gt=call.end_time or call.start_time,
+        ).exclude(id=call.id).exists()
+        if superseded_by_newer_call:
+            continue
+
+        return call
+
+    return None
 
 
 def build_staff_today_payload(staff):
