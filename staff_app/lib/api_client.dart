@@ -112,10 +112,7 @@ class ApiClient {
     await _send(
       'POST',
       '/api/staff/referrals/',
-      body: {
-        'referred_name': referredName,
-        'referred_phone': referredPhone,
-      },
+      body: {'referred_name': referredName, 'referred_phone': referredPhone},
     );
   }
 
@@ -251,6 +248,11 @@ class ApiClient {
     required String status,
     String? callbackWindow,
     DateTime? callbackDate,
+    String? customerName,
+    String? customerPhone,
+    String? productEnquired,
+    String? enquiryNotes,
+    String? preferredCallTime,
   }) async {
     final body = <String, dynamic>{'status': status};
     if (callbackWindow != null && callbackWindow.isNotEmpty) {
@@ -258,6 +260,21 @@ class ApiClient {
     }
     if (callbackDate != null) {
       body['callback_date'] = _dateOnlyString(callbackDate);
+    }
+    if (customerName != null && customerName.trim().isNotEmpty) {
+      body['customer_name'] = customerName.trim();
+    }
+    if (customerPhone != null && customerPhone.trim().isNotEmpty) {
+      body['customer_phone'] = customerPhone.trim();
+    }
+    if (productEnquired != null && productEnquired.trim().isNotEmpty) {
+      body['product_enquired'] = productEnquired.trim();
+    }
+    if (enquiryNotes != null && enquiryNotes.trim().isNotEmpty) {
+      body['enquiry_notes'] = enquiryNotes.trim();
+    }
+    if (preferredCallTime != null && preferredCallTime.trim().isNotEmpty) {
+      body['preferred_call_time'] = preferredCallTime.trim();
     }
     final response = await _send(
       'POST',
@@ -312,10 +329,7 @@ class ApiClient {
     final response = await _send(
       'POST',
       '/api/staff/calls/start/',
-      body: {
-        'lead_id': leadId,
-        'from_followup_menu': fromFollowupMenu,
-      },
+      body: {'lead_id': leadId, 'from_followup_menu': fromFollowupMenu},
     );
     return CallRecord.fromJson(_decodeMap(response.body));
   }

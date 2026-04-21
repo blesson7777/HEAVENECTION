@@ -7126,6 +7126,7 @@ def build_staff_followups_payload(staff):
         .filter(
             assigned_to=staff,
             status__in=(Lead.Status.INTERESTED, Lead.Status.CALL_BACK),
+            interested_detail__isnull=True,
         )
         .order_by("callback_date", "callback_window", "-updated_at", "-last_contacted_at")
     )
@@ -7187,13 +7188,8 @@ def save_interested_lead_detail(
     if call.status != Call.Status.INTERESTED:
         raise ValueError("Interested enquiry details can only be saved after marking the call as Interested.")
 
-    lead = call.lead
-    lead.name = customer_name.strip()
-    lead.phone = customer_phone.strip()
-    lead.save(update_fields=["name", "phone", "updated_at"])
-
     detail, _ = InterestedLeadDetail.objects.update_or_create(
-        lead=lead,
+        lead=call.lead,
         defaults={
             "staff": call.staff,
             "call": call,
@@ -7306,7 +7302,42 @@ def search_staff_customer_history(staff, *, query="", limit=25):
     return queryset.distinct()[:limit]
 
 
-def recover_staff_customer_lead(staff, lead, *, status, callback_window="", callback_date=None):
+def _save_recovered_interested_detail(staff, lead, interested_detail):
+    if not interested_detail:
+        return
+    customer_name = (interested_detail.get("customer_name") or "").strip()
+    customer_phone = (interested_detail.get("customer_phone") or "").strip()
+    product_enquired = (interested_detail.get("product_enquired") or "").strip()
+    preferred_call_time = (interested_detail.get("preferred_call_time") or "").strip()
+    if not all([customer_name, customer_phone, product_enquired, preferred_call_time]):
+        return
+
+    latest_call = (
+        Call.objects.filter(staff=staff, lead=lead).order_by("-start_time", "-created_at").first()
+    )
+    InterestedLeadDetail.objects.update_or_create(
+        lead=lead,
+        defaults={
+            "staff": staff,
+            "call": latest_call,
+            "customer_name": customer_name,
+            "customer_phone": customer_phone,
+            "product_enquired": product_enquired,
+            "enquiry_notes": (interested_detail.get("enquiry_notes") or "").strip(),
+            "preferred_call_time": preferred_call_time,
+        },
+    )
+
+
+def recover_staff_customer_lead(
+    staff,
+    lead,
+    *,
+    status,
+    callback_window="",
+    callback_date=None,
+    interested_detail=None,
+):
     has_staff_history = lead.assigned_to_id == staff.id or Call.objects.filter(staff=staff, lead=lead).exists()
     if not has_staff_history:
         raise PermissionError("This customer is not in your calling history.")
@@ -7358,6 +7389,9 @@ def recover_staff_customer_lead(staff, lead, *, status, callback_window="", call
             "previous_owner": previous_owner,
         },
     )
+
+    if status == Lead.Status.INTERESTED:
+        _save_recovered_interested_detail(staff, lead, interested_detail)
 
     auto_allocate_leads(target_staff=staff, prioritized_lead_ids=[lead.id])
     return lead

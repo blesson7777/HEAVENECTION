@@ -163,8 +163,56 @@ class StaffLeadRecoverySerializer(serializers.Serializer):
         allow_blank=False,
     )
     callback_date = serializers.DateField(required=False)
+    customer_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    customer_phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    product_enquired = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    enquiry_notes = serializers.CharField(required=False, allow_blank=True)
+    preferred_call_time = serializers.CharField(max_length=120, required=False, allow_blank=True)
 
     def validate(self, attrs):
+        status = attrs.get("status")
+        if status != Lead.Status.INTERESTED:
+            return attrs
+
+        detail_fields = (
+            "customer_name",
+            "customer_phone",
+            "product_enquired",
+            "enquiry_notes",
+            "preferred_call_time",
+        )
+        has_detail_payload = any((attrs.get(field) or "").strip() for field in detail_fields)
+        if not has_detail_payload:
+            raise serializers.ValidationError(
+                {
+                    "customer_name": "Fill interested customer details before saving as Follow Up.",
+                    "customer_phone": "Fill interested customer details before saving as Follow Up.",
+                    "product_enquired": "Fill interested customer details before saving as Follow Up.",
+                    "preferred_call_time": "Fill interested customer details before saving as Follow Up.",
+                }
+            )
+
+        required_fields = (
+            "customer_name",
+            "customer_phone",
+            "product_enquired",
+            "preferred_call_time",
+        )
+        errors = {}
+        normalized = {}
+        for field in required_fields:
+            value = (attrs.get(field) or "").strip()
+            if not value:
+                errors[field] = "This field is required when saving interested details."
+            else:
+                normalized[field] = value
+        if errors:
+            raise serializers.ValidationError(errors)
+
+        attrs["interested_detail"] = {
+            **normalized,
+            "enquiry_notes": (attrs.get("enquiry_notes") or "").strip(),
+        }
         return attrs
 
 

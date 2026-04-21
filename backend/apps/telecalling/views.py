@@ -2906,6 +2906,7 @@ def recover_staff_lead_api(request, lead_id):
             status=serializer.validated_data["status"],
             callback_window=serializer.validated_data.get("callback_window", ""),
             callback_date=serializer.validated_data.get("callback_date"),
+            interested_detail=serializer.validated_data.get("interested_detail"),
         )
     except PermissionError as error:
         return Response({"detail": str(error)}, status=403)
