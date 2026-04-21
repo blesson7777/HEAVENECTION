@@ -3029,6 +3029,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     await _syncCallFromLog(allowManualFallback: true, showMissingMessage: true);
   }
 
+  Future<void> _solveSyncIssue({String? notice}) async {
+    _registerInteraction(syncServer: false);
+    await _openCurrentCallScreen(
+      notice:
+          notice ??
+          'Solve the current call sync issue before moving to another customer.',
+    );
+  }
+
   Future<void> _escapeSyncIssueCall() async {
     _registerInteraction(syncServer: false);
     if (_activeCallId == null || _pendingDialerCall == null || _isSyncingCallLog) {
@@ -3043,7 +3052,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
-          title: const Text('Exit Sync Issue Call?'),
+          title: const Text('Close Sync Issue Call?'),
           content: const Text(
             'Use this only if the customer call cannot be synced from the phone. The call will be closed without phone-log verification and no work hours will be added.',
           ),
@@ -3054,7 +3063,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             ),
             ElevatedButton(
               onPressed: () => Navigator.of(dialogContext).pop(true),
-              child: const Text('Exit Call'),
+              child: const Text('Close Without Sync'),
             ),
           ],
         );
@@ -3818,7 +3827,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
-          title: const Text('Call Could Not Sync'),
+          title: const Text('Sync Issue Detected'),
           content: Text(
             '$message\n\nYou can exit this call without phone-log verification and ask the staff to call the customer again.',
           ),
@@ -5327,20 +5336,20 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color(0xFFFFF6EC),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: kPrimary.withValues(alpha: 0.22)),
+        border: Border.all(color: const Color(0xFFF1A34B)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Row(
             children: [
-              Icon(Icons.sync_problem, color: kPrimary),
+              Icon(Icons.warning_amber_rounded, color: Color(0xFFB96B17)),
               SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Current Call Needs Sync',
+                  'Call Sync Issue Detected',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
               ),
@@ -5348,23 +5357,53 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           ),
           const SizedBox(height: 8),
           Text(
-            'Finish syncing the recent customer call for $leadSummary before moving to another customer.',
-            style: const TextStyle(fontSize: 15.5, color: Colors.black54),
+            'The recent customer call for $leadSummary still needs to be solved before another call can start.',
+            style: const TextStyle(fontSize: 15.5, color: Color(0xFF6F4A16)),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.86),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.lock_clock_outlined, color: Color(0xFFB96B17)),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'New customer calls stay locked until this sync issue is solved.',
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF6F4A16),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           ElevatedButton.icon(
-            onPressed: () => _openCurrentCallScreen(
+            onPressed: () => _solveSyncIssue(
               notice:
-                  'Sync the current customer call before starting another one.',
+                  'Solve the current customer call sync issue before starting another one.',
             ),
-            icon: const Icon(Icons.phone_in_talk),
-            label: const Text('Open Current Call'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFB96B17),
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.build_circle_outlined),
+            label: const Text('Solve Sync Issue'),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: _isSyncingCallLog ? null : _escapeSyncIssueCall,
             icon: const Icon(Icons.close_rounded),
-            label: const Text('Exit Sync Issue'),
+            label: const Text('Close Without Sync'),
           ),
         ],
       ),
@@ -5624,10 +5663,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                             : null,
                         style: ElevatedButton.styleFrom(backgroundColor: kRed),
                         icon: Icon(
-                          _isSyncingCallLog ? Icons.hourglass_top : Icons.sync,
+                          _isSyncingCallLog
+                              ? Icons.hourglass_top
+                              : Icons.build_circle_outlined,
                         ),
                         label: Text(
-                          _isSyncingCallLog ? 'Syncing...' : 'Sync Call',
+                          _isSyncingCallLog
+                              ? 'Solving...'
+                              : 'Solve Sync Issue',
                         ),
                       ),
                     ),
@@ -5635,12 +5678,42 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 ),
                 if (hasActiveCallForLead) ...[
                   const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF6EC),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFF1A34B)),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          color: Color(0xFFB96B17),
+                        ),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Call sync issue is active. Tap "Solve Sync Issue" to finish this customer call before moving on.',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF6F4A16),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
                       onPressed: _isSyncingCallLog ? null : _escapeSyncIssueCall,
                       icon: const Icon(Icons.close_rounded),
-                      label: const Text('Exit Sync Issue'),
+                      label: const Text('Close Without Sync'),
                     ),
                   ),
                 ],
