@@ -7601,7 +7601,7 @@ class _FollowupQueuePageState extends State<FollowupQueuePage> {
               Text(
                 _rows.isEmpty
                     ? 'No follow-ups are scheduled yet.'
-                    : '${_rows.length} follow-up(s) are saved here. Scheduled ones are highlighted when their time starts.',
+                    : '${_rows.length} follow-up(s) are saved here. Scheduled ones are highlighted once their date starts.',
                 style: const TextStyle(fontSize: 16.5, color: Colors.black54),
               ),
               if (_errorMessage != null) ...[

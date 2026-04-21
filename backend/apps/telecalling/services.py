@@ -2655,13 +2655,10 @@ def _current_callback_window(now=None):
 
 
 def _is_callback_due(callback_date, callback_window, *, now=None):
-    if not callback_date or not callback_window:
+    if not callback_date:
         return False
     reference = now or timezone.now()
-    return (
-        callback_date == timezone.localdate(reference)
-        and callback_window == _current_callback_window(reference)
-    )
+    return timezone.localdate(reference) >= callback_date
 
 
 def _callback_window_start_hour(callback_window):
@@ -2685,15 +2682,14 @@ def _callback_due_at(callback_date, callback_window):
 
 
 def _is_followup_highlighted(lead, *, now=None):
-    due_at = _callback_due_at(lead.callback_date, lead.callback_window)
-    if due_at is None:
+    if not lead.callback_date:
         return False
     reference = timezone.localtime(now or timezone.now())
-    if reference < due_at:
+    if timezone.localdate(reference) < lead.callback_date:
         return False
     if lead.last_contacted_at is None:
         return True
-    return timezone.localtime(lead.last_contacted_at) < due_at
+    return timezone.localdate(timezone.localtime(lead.last_contacted_at)) < lead.callback_date
 
 
 def _normalize_followup_status(status):
