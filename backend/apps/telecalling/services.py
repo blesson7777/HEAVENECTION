@@ -4700,6 +4700,7 @@ def build_live_monitoring_payload():
                 "id": row["id"],
                 "name": row["name"],
                 "phone": row["phone"],
+                "is_active": bool(row.get("is_active", True)),
                 "compensation_type_label": row.get("compensation_type_label", "Hourly"),
                 "online_label": online_label,
                 "status_tone": row.get("status_tone", "muted"),

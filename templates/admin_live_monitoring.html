@@ -14,7 +14,15 @@
 {% block admin_content %}
 {{ live_monitoring_payload|json_script:"heavenectionLiveMonitoringPayload" }}
 
-<div id="heavenectionLiveMonitoringPage" class="hc-live-shell" data-api-url="{% url 'api-live-monitoring' %}">
+<div
+    id="heavenectionLiveMonitoringPage"
+    class="hc-live-shell"
+    data-api-url="{% url 'api-live-monitoring' %}"
+    data-team-member-url-template="{% url 'api-team-member-detail' '00000000-0000-0000-0000-000000000000' %}"
+    data-profile-url-template="{% url 'staff-profile-page' '00000000-0000-0000-0000-000000000000' %}"
+    data-work-review-url="{% url 'work-review-page' %}"
+    data-calls-url="{% url 'calls-page' %}"
+>
     <section class="hc-live-hero animate-on-scroll">
         <div class="hc-live-hero-copy">
             <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
@@ -92,88 +100,6 @@
         </aside>
     </section>
 
-    <section class="hc-live-panel hc-command-deck animate-on-scroll">
-        <div class="mf-db2-panel-head mb-3">
-            <div>
-                <span class="mf-db2-kicker">System Command Deck</span>
-                <h5>Instant management shortcuts across the entire platform</h5>
-            </div>
-            <span class="hc-live-panel-hint">Use these controls to open operations, reviews, payroll, referrals, and release management without leaving this command center.</span>
-        </div>
-        <div class="hc-command-deck-grid">
-            <a href="{% url 'staff-page' %}" class="hc-command-link">
-                <i class="bi bi-people-fill"></i>
-                <strong>Staff Management</strong>
-                <small>Create, edit, and control staff access.</small>
-            </a>
-            <a href="{% url 'leads-page' %}" class="hc-command-link">
-                <i class="bi bi-person-lines-fill"></i>
-                <strong>Lead Management</strong>
-                <small>Import, assign, and clean lead queues.</small>
-            </a>
-            <a href="{% url 'followups-page' %}" class="hc-command-link">
-                <i class="bi bi-list-check"></i>
-                <strong>Follow-Up Queue</strong>
-                <small>Manage scheduled follow-up calls and retries.</small>
-            </a>
-            <a href="{% url 'interested-leads-page' %}" class="hc-command-link">
-                <i class="bi bi-journal-check"></i>
-                <strong>Interested Leads</strong>
-                <small>Confirm successful and unsuccessful interested leads.</small>
-            </a>
-            <a href="{% url 'recovery-leads-page' %}" class="hc-command-link">
-                <i class="bi bi-arrow-repeat"></i>
-                <strong>Recovery Queue</strong>
-                <small>Re-add and clean rejected or no-response leads.</small>
-            </a>
-            <a href="{% url 'calls-page' %}" class="hc-command-link">
-                <i class="bi bi-telephone-forward-fill"></i>
-                <strong>Call Details</strong>
-                <small>Audit full call logs and call outcomes.</small>
-            </a>
-            <a href="{% url 'working-hours-page' %}" class="hc-command-link">
-                <i class="bi bi-clock-history"></i>
-                <strong>Working Hours</strong>
-                <small>Review active time, gaps, and uncounted periods.</small>
-            </a>
-            <a href="{% url 'work-review-page' %}" class="hc-command-link">
-                <i class="bi bi-shield-exclamation"></i>
-                <strong>Work Review Center</strong>
-                <small>Investigate suspicious patterns and quality signals.</small>
-            </a>
-            <a href="{% url 'referral-monitoring-page' %}" class="hc-command-link">
-                <i class="bi bi-person-heart"></i>
-                <strong>Referral Monitoring</strong>
-                <small>Track referral stages and reward eligibility.</small>
-            </a>
-            <a href="{% url 'salary-page' %}" class="hc-command-link">
-                <i class="bi bi-wallet2"></i>
-                <strong>Salary Overview</strong>
-                <small>Pay due salary and view payment history.</small>
-            </a>
-            <a href="{% url 'salary-control-page' %}" class="hc-command-link">
-                <i class="bi bi-sliders2-vertical"></i>
-                <strong>Salary Control</strong>
-                <small>Configure payout, rewards, and bonus settings.</small>
-            </a>
-            <a href="{% url 'learning-page' %}" class="hc-command-link">
-                <i class="bi bi-mortarboard-fill"></i>
-                <strong>Learning Center</strong>
-                <small>Publish and update staff learning content.</small>
-            </a>
-            <a href="{% url 'settings-page' %}" class="hc-command-link">
-                <i class="bi bi-gear-fill"></i>
-                <strong>Admin Settings</strong>
-                <small>Update profile, company details, and logo.</small>
-            </a>
-            <a href="{% url 'developer-releases-page' %}" class="hc-command-link">
-                <i class="bi bi-code-square"></i>
-                <strong>Release Center</strong>
-                <small>Upload APK updates and release metadata.</small>
-            </a>
-        </div>
-    </section>
-
     <section class="hc-live-panel animate-on-scroll">
         <div class="mf-db2-panel-head mb-3">
             <div>
@@ -214,6 +140,51 @@
                 <small>{{ summary.away_now }} away and {{ summary.offline_now }} offline</small>
             </article>
         </div>
+    </section>
+
+    <section class="hc-live-panel animate-on-scroll">
+        <div class="mf-db2-panel-head mb-3">
+            <div>
+                <span class="mf-db2-kicker">Smart Alert Engine</span>
+                <h5>Prioritized action alerts generated from live behaviour</h5>
+            </div>
+            <span class="hc-live-panel-hint">High-impact issues are listed first so supervisors can act immediately.</span>
+        </div>
+        <div class="hc-live-smart-alert-grid" id="liveMonitoringSmartAlerts">
+            <div class="hc-work-review-empty-note">Live alert scoring will appear here.</div>
+        </div>
+    </section>
+
+    <section class="hc-live-panel animate-on-scroll">
+        <div class="mf-db2-panel-head mb-3">
+            <div>
+                <span class="mf-db2-kicker">Queue Health Heatmap</span>
+                <h5>Live queue pressure and risk map across all staff</h5>
+            </div>
+            <span class="hc-live-panel-hint">Shows who is overloaded, balanced, or at risk in one glance.</span>
+        </div>
+        <div class="hc-live-heatmap-grid" id="liveMonitoringQueueHeatmap">
+            <div class="hc-work-review-empty-note">Queue heatmap is loading.</div>
+        </div>
+    </section>
+
+    <section class="hc-live-panel animate-on-scroll">
+        <div class="mf-db2-panel-head mb-3">
+            <div>
+                <span class="mf-db2-kicker">Supervisor Action Center</span>
+                <h5>Pick a staff member and run quick control actions</h5>
+            </div>
+            <span class="hc-live-panel-hint">Open profile, jump to review pages, and activate or disable staff access instantly.</span>
+        </div>
+        <div class="hc-live-supervisor-grid">
+            <div id="liveMonitoringSupervisorRoster" class="hc-live-supervisor-roster">
+                <div class="hc-work-review-empty-note">Staff roster is loading.</div>
+            </div>
+            <div id="liveMonitoringSupervisorDetail" class="hc-live-supervisor-detail">
+                <div class="hc-work-review-empty-note">Select a staff member to open controls.</div>
+            </div>
+        </div>
+        <div id="liveMonitoringSupervisorFeedback" class="hc-live-supervisor-feedback d-none"></div>
     </section>
 
     <div class="hc-live-layout-grid">
