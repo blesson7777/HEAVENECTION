@@ -87,6 +87,7 @@ from backend.apps.telecalling.services import (
     build_interested_lead_payload,
     build_learning_management_payload,
     build_lead_management_payload,
+    build_live_monitoring_payload,
     build_recovery_lead_payload,
     build_salary_control_payload,
     build_staff_salary_details_payload,
@@ -397,6 +398,46 @@ def _fallback_work_review_payload():
             "flagged_day_total": 0,
         },
         "review_rows": review_rows,
+    }
+
+
+def _fallback_live_monitoring_payload():
+    team_payload = _fallback_team_payload()
+    staff_rows = []
+    for row in team_payload["team_rows"]:
+        staff_rows.append(
+            {
+                **row,
+                "session_state_label": "Unavailable",
+                "gap_count": 0,
+                "gap_total_label": "0s",
+                "gap_uncounted_label": "0s",
+                "gap_buffer_label": "0s",
+                "call_time_label": "0s",
+                "status_note": "Live monitoring details are temporarily unavailable. Basic staff details are still shown.",
+                "is_on_call": False,
+                "current_call": None,
+            }
+        )
+    return {
+        "today_label": _fallback_today_label(),
+        "generated_at_label": _fallback_today_label(),
+        "summary": {
+            "total_staff": team_payload["team_summary"]["total_staff"],
+            "active_accounts": team_payload["team_summary"]["active_accounts"],
+            "online_now": 0,
+            "on_call_now": 0,
+            "away_now": 0,
+            "offline_now": team_payload["team_summary"]["total_staff"],
+            "review_needed_now": 0,
+            "alert_now": 0,
+            "total_assigned": team_payload["team_summary"]["total_assigned"],
+            "total_calls_today": 0,
+            "total_converted_today": 0,
+            "active_hours_label": "0.0h",
+        },
+        "spotlight_rows": staff_rows[:6],
+        "staff_rows": staff_rows,
     }
 
 
@@ -1881,6 +1922,33 @@ def work_review_page(request):
     return render(request, "admin_work_review.html", context)
 
 
+@require_GET
+def live_monitoring_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    payload = _safe_admin_payload(
+        build_live_monitoring_payload,
+        _fallback_live_monitoring_payload,
+        label="live-monitoring-page",
+        request=request,
+    )
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="live-monitoring",
+        page_title="Live Monitoring",
+        page_heading="Live Monitoring",
+        page_subtitle="Watch live staff behaviour, current call activity, worktime movement, and attention signals without refreshing the page.",
+        extra_context={
+            **payload,
+            "live_monitoring_payload": payload,
+        },
+    )
+    return render(request, "admin_live_monitoring.html", context)
+
+
 def referral_monitoring_page(request):
     current_user = _get_admin_user_or_redirect(request)
     if not current_user:
@@ -2665,6 +2733,18 @@ def live_staff_api(request):
         label="live-staff-api",
     )
     return Response(payload["live_staff"])
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminStaff])
+def live_monitoring_api(request):
+    return Response(
+        _safe_admin_payload(
+            build_live_monitoring_payload,
+            _fallback_live_monitoring_payload,
+            label="live-monitoring-api",
+        )
+    )
 
 
 @api_view(["GET", "POST"])

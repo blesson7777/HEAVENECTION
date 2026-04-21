@@ -32,83 +32,43 @@
 <section class="hc-surface-card animate-on-scroll mt-4">
     <div class="mf-db2-panel-head mb-3">
         <div>
-            <span class="mf-db2-kicker">Referral Reward Program</span>
-            <h5>Enable referral rewards and define the qualifying hours and reward amount</h5>
+            <span class="mf-db2-kicker">Advanced Reward Controls</span>
+            <h5>Open and manage referral rewards and hourly call bonus rules only when needed</h5>
         </div>
-        <span class="hc-sync-pill"><i class="bi bi-diagram-3"></i> Referral Setup</span>
+        <span class="hc-sync-pill"><i class="bi bi-sliders"></i> Popup Controls</span>
     </div>
-
-    <form method="post" class="row g-3 align-items-end">
-        {% csrf_token %}
-        <input type="hidden" name="salary_control_action" value="update_referral_settings">
-        <div class="col-md-3">
-            <div class="form-check form-switch pt-4">
-                <input class="form-check-input" type="checkbox" role="switch" id="referralProgramEnabled" name="referral_program_enabled" {% if referral_settings.enabled %}checked{% endif %}>
-                <label class="form-check-label fw-semibold" for="referralProgramEnabled">Enable referral reward</label>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label fw-semibold" for="referralRequiredHours">Required Work Hours</label>
-            <input type="number" class="form-control" id="referralRequiredHours" name="referral_required_hours" step="0.01" min="0" value="{{ referral_settings.required_hours }}">
-            <div class="form-text">Reward becomes available after the referred staff completes this total work time.</div>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label fw-semibold" for="referralRewardAmount">Reward Amount</label>
-            <input type="number" class="form-control" id="referralRewardAmount" name="referral_reward_amount" step="0.01" min="0" value="{{ referral_settings.reward_amount }}">
-            <div class="form-text">This extra amount is paid separately as a referral reward.</div>
-        </div>
-        <div class="col-md-3">
+    <div class="row g-3">
+        <div class="col-lg-6">
             <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Current Rule</span>
+                <span class="mf-db2-kicker">Referral Reward Program</span>
                 <h6 class="mb-1">{{ referral_settings.required_hours_label }}</h6>
-                <p class="text-muted mb-0">Reward {{ referral_settings.reward_amount_label }}</p>
+                <p class="text-muted mb-3 mb-lg-4">Reward {{ referral_settings.reward_amount_label }}</p>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="hc-status {% if referral_settings.enabled %}hc-status-success{% else %}hc-status-muted{% endif %}">
+                        {% if referral_settings.enabled %}Enabled{% else %}Disabled{% endif %}
+                    </span>
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#referralSettingsModal">
+                        Edit Referral Rule
+                    </button>
+                </div>
             </div>
         </div>
-        <div class="col-12 d-flex justify-content-end">
-            <button type="submit" class="btn btn-primary">Save Referral Settings</button>
-        </div>
-    </form>
-</section>
-
-<section class="hc-surface-card animate-on-scroll mt-4">
-    <div class="mf-db2-panel-head mb-3">
-        <div>
-            <span class="mf-db2-kicker">Hourly Call Bonus</span>
-            <h5>Reward staff for calls completed above the hourly target</h5>
-        </div>
-        <span class="hc-sync-pill"><i class="bi bi-lightning-charge"></i> Editable Bonus Rule</span>
-    </div>
-
-    <form method="post" class="row g-3 align-items-end">
-        {% csrf_token %}
-        <input type="hidden" name="salary_control_action" value="update_call_bonus_settings">
-        <div class="col-md-3">
-            <div class="form-check form-switch pt-4">
-                <input class="form-check-input" type="checkbox" role="switch" id="hourlyCallBonusEnabled" name="hourly_call_bonus_enabled" {% if call_bonus_settings.enabled %}checked{% endif %}>
-                <label class="form-check-label fw-semibold" for="hourlyCallBonusEnabled">Enable hourly call bonus</label>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label fw-semibold" for="hourlyCallBonusThreshold">Target Calls per Hour</label>
-            <input type="number" class="form-control" id="hourlyCallBonusThreshold" name="hourly_call_bonus_threshold" min="1" value="{{ call_bonus_settings.threshold }}">
-            <div class="form-text">Example: `50` means the bonus starts only after 50 calls for every 1 hour of work.</div>
-        </div>
-        <div class="col-md-3">
-            <label class="form-label fw-semibold" for="hourlyCallBonusRate">Bonus per Extra Call</label>
-            <input type="number" class="form-control" id="hourlyCallBonusRate" name="hourly_call_bonus_rate" step="0.01" min="0" value="{{ call_bonus_settings.rate }}">
-            <div class="form-text">Example: `0.50` adds 50 paise for every extra call above the target.</div>
-        </div>
-        <div class="col-md-3">
+        <div class="col-lg-6">
             <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Current Rule</span>
+                <span class="mf-db2-kicker">Hourly Call Bonus</span>
                 <h6 class="mb-1">{{ call_bonus_settings.threshold_label }}</h6>
-                <p class="text-muted mb-0">{{ call_bonus_settings.rate_label }} per extra call</p>
+                <p class="text-muted mb-3 mb-lg-4">{{ call_bonus_settings.rate_label }} per extra call</p>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <span class="hc-status {% if call_bonus_settings.enabled %}hc-status-success{% else %}hc-status-muted{% endif %}">
+                        {% if call_bonus_settings.enabled %}Enabled{% else %}Disabled{% endif %}
+                    </span>
+                    <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#callBonusSettingsModal">
+                        Edit Hourly Bonus Rule
+                    </button>
+                </div>
             </div>
         </div>
-        <div class="col-12 d-flex justify-content-end">
-            <button type="submit" class="btn btn-primary">Save Hourly Bonus Rule</button>
-        </div>
-    </form>
+    </div>
 </section>
 
 <section class="hc-surface-card animate-on-scroll mt-4">
@@ -185,7 +145,7 @@
                     </td>
                     <td>
                         <strong>{{ row.call_rate }}</strong>
-                        <div class="text-muted small">Bonus {{ row.bonus_per_conversion }}</div>
+                        <div class="text-muted small">Success reward {{ row.bonus_per_conversion }}</div>
                     </td>
                     <td>
                         <strong>{{ row.referred_by_name }}</strong>
@@ -295,8 +255,9 @@
                             <input type="number" class="form-control" id="salaryCallRate" step="0.01">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label fw-semibold" for="salaryBonusRate">Bonus per Conversion</label>
+                            <label class="form-label fw-semibold" for="salaryBonusRate">Reward per Successful Lead</label>
                             <input type="number" class="form-control" id="salaryBonusRate" step="0.01">
+                            <div class="form-text">This extra amount is added for each converted lead and shown in the staff salary page.</div>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold" for="salaryReferredBy">Referred By</label>
@@ -367,6 +328,104 @@
                     </div>
                 </form>
             </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="referralSettingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content hc-modal-card">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="salary_control_action" value="update_referral_settings">
+                <div class="modal-header border-0 pb-0">
+                    <div>
+                        <span class="mf-db2-kicker">Referral Reward Program</span>
+                        <h5 class="modal-title mt-1">Edit Referral Rule</h5>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body pt-3">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="referralProgramEnabled" name="referral_program_enabled" {% if referral_settings.enabled %}checked{% endif %}>
+                                <label class="form-check-label fw-semibold" for="referralProgramEnabled">Enable referral reward</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="referralRequiredHours">Required Work Hours</label>
+                            <input type="number" class="form-control" id="referralRequiredHours" name="referral_required_hours" step="0.01" min="0" value="{{ referral_settings.required_hours }}">
+                            <div class="form-text">Reward becomes available after the referred staff completes this total work time.</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="referralRewardAmount">Reward Amount</label>
+                            <input type="number" class="form-control" id="referralRewardAmount" name="referral_reward_amount" step="0.01" min="0" value="{{ referral_settings.reward_amount }}">
+                            <div class="form-text">This extra amount is paid separately as a referral reward.</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="hc-summary-card">
+                                <span class="mf-db2-kicker">Current Rule</span>
+                                <h6 class="mb-1">{{ referral_settings.required_hours_label }}</h6>
+                                <p class="text-muted mb-0">Reward {{ referral_settings.reward_amount_label }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Referral Settings</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="callBonusSettingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content hc-modal-card">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="salary_control_action" value="update_call_bonus_settings">
+                <div class="modal-header border-0 pb-0">
+                    <div>
+                        <span class="mf-db2-kicker">Hourly Call Bonus</span>
+                        <h5 class="modal-title mt-1">Edit Hourly Bonus Rule</h5>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body pt-3">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="hourlyCallBonusEnabled" name="hourly_call_bonus_enabled" {% if call_bonus_settings.enabled %}checked{% endif %}>
+                                <label class="form-check-label fw-semibold" for="hourlyCallBonusEnabled">Enable hourly call bonus</label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="hourlyCallBonusThreshold">Target Calls per Hour</label>
+                            <input type="number" class="form-control" id="hourlyCallBonusThreshold" name="hourly_call_bonus_threshold" min="1" value="{{ call_bonus_settings.threshold }}">
+                            <div class="form-text">Example: `50` means the bonus starts only after 50 calls for every 1 hour of work.</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="hourlyCallBonusRate">Bonus per Extra Call</label>
+                            <input type="number" class="form-control" id="hourlyCallBonusRate" name="hourly_call_bonus_rate" step="0.01" min="0" value="{{ call_bonus_settings.rate }}">
+                            <div class="form-text">Example: `0.50` adds 50 paise for every extra call above the target.</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="hc-summary-card">
+                                <span class="mf-db2-kicker">Current Rule</span>
+                                <h6 class="mb-1">{{ call_bonus_settings.threshold_label }}</h6>
+                                <p class="text-muted mb-0">{{ call_bonus_settings.rate_label }} per extra call</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Hourly Bonus Rule</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

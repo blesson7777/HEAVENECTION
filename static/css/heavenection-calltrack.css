@@ -1259,6 +1259,67 @@
     min-width: 220px;
 }
 
+.hc-live-monitoring-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+}
+
+.hc-live-monitor-card {
+    padding: 1rem;
+    border-radius: 22px;
+    border: 1px solid rgba(77, 92, 144, 0.12);
+    background:
+        radial-gradient(circle at top right, rgba(77, 92, 144, 0.12), transparent 42%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(245, 248, 255, 0.96));
+    box-shadow: 0 24px 48px rgba(45, 61, 104, 0.08);
+}
+
+.hc-live-monitor-note {
+    color: #42516f;
+    line-height: 1.55;
+    min-height: 3rem;
+}
+
+.hc-live-monitor-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.hc-live-monitor-metrics span,
+.hc-live-monitor-call {
+    border-radius: 16px;
+    border: 1px solid rgba(77, 92, 144, 0.12);
+    background: rgba(255, 255, 255, 0.82);
+}
+
+.hc-live-monitor-metrics span {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.45rem 0.75rem;
+    color: #31405f;
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.hc-live-monitor-call {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+    padding: 0.75rem 0.85rem;
+}
+
+.hc-live-monitor-call strong {
+    color: #1f2c4e;
+    font-size: 0.95rem;
+}
+
+.hc-live-monitor-call span,
+.hc-live-monitor-call small {
+    color: #61708c;
+}
+
 .hc-work-review-table-scroller {
     max-height: 40rem;
     overflow-y: auto;

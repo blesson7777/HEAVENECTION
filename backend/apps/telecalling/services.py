@@ -1186,6 +1186,11 @@ def _salary_period_snapshot(staff, *, period_start, period_end, payout_cycle):
     paid_total = _salary_record_paid_total(record) if record else Decimal("0.00")
     earned_total = _money(breakdown["total_pay"])
     balance = max(earned_total - paid_total, Decimal("0.00"))
+    conversion_reward_rows = _conversion_reward_rows_for_period(
+        staff,
+        period_start=period_start,
+        period_end=period_end,
+    )
     return {
         "period_start": period_start,
         "period_end": period_end,
@@ -1202,7 +1207,11 @@ def _salary_period_snapshot(staff, *, period_start, period_end, payout_cycle):
         "balance_label": _format_currency(balance),
         "base_pay_label": _format_currency(breakdown["base_pay"]),
         "call_earnings_label": _format_currency(breakdown["call_earnings"]),
+        "conversion_reward_label": _format_currency(breakdown["conversion_bonus"]),
+        "hourly_call_bonus_label": _format_currency(breakdown["hourly_call_bonus"]),
         "bonus_earnings_label": _format_currency(breakdown["bonus_earnings"]),
+        "converted_lead_count": int(breakdown["converted_leads"]),
+        "conversion_reward_rows": conversion_reward_rows,
         "record": record,
     }
 
@@ -1531,6 +1540,32 @@ def build_staff_salary_history_rows(staff, limit=20):
     return rows
 
 
+def _conversion_reward_rows_for_period(staff, *, period_start, period_end):
+    start_at, end_at = _date_range_bounds(period_start, period_end)
+    reward_amount = _money(staff.bonus_per_conversion)
+    converted_calls = (
+        Call.objects.filter(
+            staff=staff,
+            start_time__range=(start_at, end_at),
+            status=Call.Status.CONVERTED,
+            is_qualifying=True,
+        )
+        .select_related("lead")
+        .order_by("-end_time", "-start_time", "-id")
+    )
+    return [
+        {
+            "id": str(call.id),
+            "lead_id": str(call.lead_id),
+            "lead_name": call.lead.name or "Lead",
+            "lead_phone": call.lead.phone or "--",
+            "reward_amount_label": _format_currency(reward_amount),
+            "converted_at_label": _format_datetime(call.end_time or call.start_time),
+        }
+        for call in converted_calls
+    ]
+
+
 def build_staff_referral_reward_rows(staff, limit=20):
     rewards = (
         ReferralReward.objects.filter(referrer=staff)
@@ -1579,7 +1614,11 @@ def _staff_salary_snapshot_block(title, snapshot, *, subtitle=""):
         "balance_label": snapshot["balance_label"],
         "base_pay_label": snapshot["base_pay_label"],
         "call_earnings_label": snapshot["call_earnings_label"],
+        "conversion_reward_label": snapshot["conversion_reward_label"],
+        "hourly_call_bonus_label": snapshot["hourly_call_bonus_label"],
         "bonus_earnings_label": snapshot["bonus_earnings_label"],
+        "converted_lead_count": snapshot["converted_lead_count"],
+        "conversion_reward_rows": snapshot["conversion_reward_rows"],
     }
 
 
@@ -4580,6 +4619,151 @@ def build_dashboard_payload():
         "lead_rows": lead_rows,
         "salary_records": salary_records,
         "team_directory": team_directory,
+    }
+
+
+def _current_open_call_map(*, now=None):
+    current_time = now or timezone.now()
+    _reconcile_open_calls(now=current_time)
+    open_calls = {}
+    queryset = (
+        Call.objects.filter(end_time__isnull=True)
+        .select_related("lead", "staff")
+        .order_by("staff_id", "-start_time", "-created_at")
+    )
+    for call in queryset:
+        if call.staff_id in open_calls:
+            continue
+        duration_seconds = max(0, int((current_time - call.start_time).total_seconds()))
+        open_calls[call.staff_id] = {
+            "call_id": str(call.id),
+            "lead_id": str(call.lead_id),
+            "lead_name": call.lead.name or "Lead",
+            "lead_phone": call.lead.phone or "--",
+            "started_at": _format_datetime(call.start_time),
+            "duration_label": _format_duration(duration_seconds),
+            "status_label": call.get_status_display(),
+        }
+    return open_calls
+
+
+def build_live_monitoring_payload():
+    today, start, end = _today_range()
+    now = timezone.now()
+    team_payload = build_team_management_payload()
+    team_rows = team_payload["team_rows"]
+    staff_ids = [uuid.UUID(str(row["id"])) for row in team_rows]
+    gap_summary_map = _work_gap_summary_map(start_at=start, end_at=end, staff_ids=staff_ids)
+    open_sessions = _open_sessions_by_staff()
+    current_open_calls = _current_open_call_map(now=now)
+
+    on_call_now = 0
+    online_now = 0
+    away_now = 0
+    offline_now = 0
+    active_hours_seconds = 0
+    review_needed_now = 0
+    alert_now = 0
+    live_rows = []
+
+    for row in team_rows:
+        staff_id = uuid.UUID(str(row["id"]))
+        gap_summary = gap_summary_map.get(staff_id, {})
+        session = open_sessions.get(staff_id)
+        current_call = current_open_calls.get(staff_id)
+        online_label = row.get("online_label", "Offline")
+        if current_call:
+            on_call_now += 1
+        elif online_label == "Online":
+            online_now += 1
+        elif online_label in {"Away", "Warning"}:
+            away_now += 1
+        else:
+            offline_now += 1
+
+        if row.get("quality_label") == "Review Needed":
+            review_needed_now += 1
+        elif row.get("quality_label") == "Needs Attention":
+            alert_now += 1
+
+        active_hours_seconds += int(row.get("active_seconds_today") or 0)
+        status_note = row.get("quality_note") or "Live staff activity is being monitored."
+        if current_call:
+            status_note = f"Talking with {current_call['lead_name']} for {current_call['duration_label']}."
+        elif online_label == "Online":
+            status_note = "Ready in the app and available for live calling."
+        elif online_label in {"Away", "Warning"}:
+            status_note = "Session is open, but the staff member is away from the app right now."
+
+        live_rows.append(
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "phone": row["phone"],
+                "compensation_type_label": row.get("compensation_type_label", "Hourly"),
+                "online_label": online_label,
+                "status_tone": row.get("status_tone", "muted"),
+                "session_state": row.get("session_state", "stopped"),
+                "session_state_label": _session_status_label(session),
+                "active_hours_today": row.get("active_hours_today", "0.0h"),
+                "calls_today": int(row.get("calls_today") or 0),
+                "converted_today": int(row.get("converted_today") or 0),
+                "assigned_leads": int(row.get("assigned_leads") or 0),
+                "quality_score": int(row.get("quality_score") or 0),
+                "quality_label": row.get("quality_label", "No Recent Activity"),
+                "quality_tone": row.get("quality_tone", "muted"),
+                "quality_note": row.get("quality_note", "Build more recent call activity for a fuller review."),
+                "attempt_review_label": row.get("attempt_review_label", "--"),
+                "away_review_label": row.get("away_review_label", "No long away periods"),
+                "real_call_count": int(row.get("real_call_count") or 0),
+                "verified_attempt_count": int(row.get("verified_attempt_count") or 0),
+                "zero_second_attempt_count": int(row.get("zero_second_attempt_count") or 0),
+                "invalid_short_count": int(row.get("invalid_short_count") or 0),
+                "missed_callbacks": int(row.get("missed_callbacks") or 0),
+                "suspicious_block_count": int(row.get("suspicious_block_count") or 0),
+                "zero_only_block_count": int(row.get("zero_only_block_count") or 0),
+                "gap_count": int(gap_summary.get("gap_count") or 0),
+                "gap_total_label": gap_summary.get("gap_total_label", "0s"),
+                "gap_uncounted_label": gap_summary.get("gap_uncounted_label", "0s"),
+                "gap_buffer_label": gap_summary.get("gap_buffer_label", "0s"),
+                "call_time_label": gap_summary.get("call_time_label", "0s"),
+                "last_seen": row.get("last_seen", "--"),
+                "status_note": status_note,
+                "is_on_call": bool(current_call),
+                "current_call": current_call,
+            }
+        )
+
+    live_rows.sort(
+        key=lambda row: (
+            0 if row["is_on_call"] else 1,
+            0 if row["online_label"] == "Online" else 1,
+            -row["calls_today"],
+            -row["quality_score"],
+            row["name"].lower(),
+        )
+    )
+
+    spotlight_rows = live_rows[:6]
+    return {
+        "today_label": today.strftime("%A, %d %b %Y"),
+        "generated_at_label": _format_datetime(now),
+        "summary": {
+            "total_staff": team_payload["team_summary"]["total_staff"],
+            "active_accounts": team_payload["team_summary"]["active_accounts"],
+            "online_now": online_now,
+            "on_call_now": on_call_now,
+            "away_now": away_now,
+            "offline_now": offline_now,
+            "review_needed_now": review_needed_now,
+            "alert_now": alert_now,
+            "total_assigned": team_payload["team_summary"]["total_assigned"],
+            "total_calls_today": team_payload["team_summary"]["total_calls_today"],
+            "total_converted_today": team_payload["team_summary"]["total_converted_today"],
+            "active_hours_label": _format_hours(active_hours_seconds),
+        },
+        "spotlight_rows": spotlight_rows,
+        "staff_rows": live_rows,
     }
 
 

@@ -344,6 +344,36 @@ class SalaryDetailSummary {
   }
 }
 
+class ConversionRewardItem {
+  const ConversionRewardItem({
+    required this.id,
+    required this.leadId,
+    required this.leadName,
+    required this.leadPhone,
+    required this.rewardAmountLabel,
+    required this.convertedAtLabel,
+  });
+
+  final String id;
+  final String leadId;
+  final String leadName;
+  final String leadPhone;
+  final String rewardAmountLabel;
+  final String convertedAtLabel;
+
+  factory ConversionRewardItem.fromJson(Map<String, dynamic> json) {
+    return ConversionRewardItem(
+      id: json['id']?.toString() ?? '',
+      leadId: json['lead_id']?.toString() ?? '',
+      leadName: json['lead_name']?.toString() ?? 'Lead',
+      leadPhone: json['lead_phone']?.toString() ?? '--',
+      rewardAmountLabel:
+          json['reward_amount_label']?.toString() ?? 'Rs. 0.00',
+      convertedAtLabel: json['converted_at_label']?.toString() ?? '--',
+    );
+  }
+}
+
 class SalaryDetailBlock {
   const SalaryDetailBlock({
     required this.title,
@@ -355,7 +385,11 @@ class SalaryDetailBlock {
     required this.balanceLabel,
     required this.basePayLabel,
     required this.callEarningsLabel,
+    required this.conversionRewardLabel,
+    required this.hourlyCallBonusLabel,
     required this.bonusEarningsLabel,
+    required this.convertedLeadCount,
+    required this.conversionRewardRows,
   });
 
   final String title;
@@ -367,7 +401,11 @@ class SalaryDetailBlock {
   final String balanceLabel;
   final String basePayLabel;
   final String callEarningsLabel;
+  final String conversionRewardLabel;
+  final String hourlyCallBonusLabel;
   final String bonusEarningsLabel;
+  final int convertedLeadCount;
+  final List<ConversionRewardItem> conversionRewardRows;
 
   factory SalaryDetailBlock.fromJson(Map<String, dynamic> json) {
     return SalaryDetailBlock(
@@ -381,8 +419,19 @@ class SalaryDetailBlock {
       basePayLabel: json['base_pay_label']?.toString() ?? 'Rs. 0.00',
       callEarningsLabel:
           json['call_earnings_label']?.toString() ?? 'Rs. 0.00',
+      conversionRewardLabel:
+          json['conversion_reward_label']?.toString() ?? 'Rs. 0.00',
+      hourlyCallBonusLabel:
+          json['hourly_call_bonus_label']?.toString() ?? 'Rs. 0.00',
       bonusEarningsLabel:
           json['bonus_earnings_label']?.toString() ?? 'Rs. 0.00',
+      convertedLeadCount: _asInt(json['converted_lead_count']),
+      conversionRewardRows:
+          (json['conversion_reward_rows'] as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .map(ConversionRewardItem.fromJson)
+              .toList() ??
+          const [],
     );
   }
 }

@@ -542,15 +542,28 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   }
 
   Future<void> _openCurrentCallScreen({String? notice}) async {
+    if (_hasPendingCallStatus) {
+      _openPendingCustomerPage();
+      await _recoverPendingCallStatusPrompt();
+      return;
+    }
+
+    if (_hasRecoverableCustomerCall && _pendingDialerCall != null) {
+      if (notice != null && notice.isNotEmpty) {
+        _showMessage(notice, isError: true);
+      }
+      final didResolve = await _syncCallFromLog(
+        allowManualFallback: true,
+        showMissingMessage: true,
+      );
+      if (didResolve || !mounted || _hasPendingCallStatus || !_hasRecoverableCustomerCall) {
+        return;
+      }
+    }
+
     final activeLeadId = _activeCallLeadId ?? _pendingDialerCall?.leadId;
     final activeLead = _leadById(activeLeadId);
     if (activeLead == null) {
-      if (_hasPendingCallStatus) {
-        _openPendingCustomerPage();
-        await _recoverPendingCallStatusPrompt();
-        return;
-      }
-
       if (_hasRecoverableCustomerCall ||
           (_pendingDialerCall != null &&
               (_pendingDialerCall?.leadId ?? '').isNotEmpty)) {
@@ -578,9 +591,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             callbackScheduleLabel: '',
             notes: '',
           );
-          if (notice != null && notice.isNotEmpty) {
-            _showMessage(notice, isError: true);
-          }
           await _showCallScreenForLead(
             placeholderLead,
             fromFollowup: _activeCallFromFollowup || placeholderLead.status == 'call_back',
@@ -3019,6 +3029,45 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     await _syncCallFromLog(allowManualFallback: true, showMissingMessage: true);
   }
 
+  Future<void> _escapeSyncIssueCall() async {
+    _registerInteraction(syncServer: false);
+    if (_activeCallId == null || _pendingDialerCall == null || _isSyncingCallLog) {
+      return;
+    }
+
+    final shouldEscape = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: const Text('Exit Sync Issue Call?'),
+          content: const Text(
+            'Use this only if the customer call cannot be synced from the phone. The call will be closed without phone-log verification and no work hours will be added.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Exit Call'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldEscape != true) {
+      return;
+    }
+
+    await _completeCallManually(source: 'manual_sync_escape');
+  }
+
   Future<bool> _ensureCallLogAccess() async {
     final permissionsReady = await _ensureRequiredPermissionsReady(
       requestIfMissing: true,
@@ -3731,6 +3780,96 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
+  Future<void> _handleSyncFailureRecallPrompt(
+    PendingDialerCall pendingCall, {
+    required String message,
+  }) async {
+    if (!mounted) {
+      return;
+    }
+
+    final existingLead = _leadById(pendingCall.leadId);
+    final isFollowupLead =
+        _activeCallFromFollowup || existingLead?.status == 'call_back';
+    final lead = existingLead ??
+        LeadItem(
+          id: pendingCall.leadId,
+          name: _summary.recoverableCallLeadName.isNotEmpty
+              ? _summary.recoverableCallLeadName
+              : (pendingCall.phone.isNotEmpty
+                    ? pendingCall.phone
+                    : 'Recent customer'),
+          phone: pendingCall.phone,
+          status: isFollowupLead ? 'call_back' : 'new',
+          statusLabel: isFollowupLead ? 'Follow Up' : 'New',
+          callbackWindow: '',
+          callbackWindowLabel: '',
+          callbackDate: null,
+          callbackDateLabel: '',
+          callbackScheduleLabel: '',
+          notes: '',
+        );
+
+    final action = await showDialog<_SyncFailureAction>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: const Text('Call Could Not Sync'),
+          content: Text(
+            '$message\n\nYou can exit this call without phone-log verification and ask the staff to call the customer again.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(_SyncFailureAction.cancel),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(_SyncFailureAction.exitCall),
+              child: const Text('Exit Call'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(_SyncFailureAction.callAgain),
+              child: const Text('Call Again'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (action == null || action == _SyncFailureAction.cancel) {
+      return;
+    }
+
+    await _completeCallManually(
+      source: action == _SyncFailureAction.callAgain
+          ? 'manual_call_log_retry_prompt'
+          : 'manual_call_log_issue_exit',
+    );
+
+    if (!mounted || action != _SyncFailureAction.callAgain) {
+      return;
+    }
+
+    _showMessage('Calling the customer again.');
+    try {
+      await _placeCallForLead(lead);
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+        return;
+      }
+      if (error.code == 'network_error') {
+        _showNetworkError('Connection lost while reopening the customer call.');
+        return;
+      }
+      _showMessage(error.message, isError: true);
+    }
+  }
+
   Future<bool> _syncCallFromLog({
     required bool allowManualFallback,
     bool showMissingMessage = false,
@@ -3743,7 +3882,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final canReadCallLog = await _ensureCallLogAccess();
     if (!canReadCallLog) {
       if (allowManualFallback) {
-        await _completeCallManually(source: 'manual_no_call_log');
+        await _handleSyncFailureRecallPrompt(
+          pendingCall,
+          message:
+              'The app could not read the phone call log for this customer call.',
+        );
       }
       return false;
     }
@@ -3763,7 +3906,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
 
       if (allowManualFallback) {
-        await _completeCallManually(source: 'manual_call_log_miss');
+        await _handleSyncFailureRecallPrompt(
+          pendingCall,
+          message:
+              'No matching phone call log was found for this customer call.',
+        );
       } else if (showMissingMessage) {
         _showMessage(
           'No matching phone call log was found yet. Open the app again after the call ends.',
@@ -5213,6 +5360,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             icon: const Icon(Icons.phone_in_talk),
             label: const Text('Open Current Call'),
           ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _isSyncingCallLog ? null : _escapeSyncIssueCall,
+            icon: const Icon(Icons.close_rounded),
+            label: const Text('Exit Sync Issue'),
+          ),
         ],
       ),
     );
@@ -5480,6 +5633,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     ),
                   ],
                 ),
+                if (hasActiveCallForLead) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _isSyncingCallLog ? null : _escapeSyncIssueCall,
+                      icon: const Icon(Icons.close_rounded),
+                      label: const Text('Exit Sync Issue'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -8266,6 +8430,8 @@ class _CallRemarkDialogResult {
 
 enum ShortCallDecision { markNoResponse, markRejected, callAgain }
 
+enum _SyncFailureAction { cancel, exitCall, callAgain }
+
 enum _PendingCallAction { markStatus, callRecent, cancel }
 
 enum _AppUpdateAction { download, install, later }
@@ -8521,7 +8687,8 @@ class _StaffSalaryDetailsPageState extends State<StaffSalaryDetailsPage> {
                           ),
                           _SalaryMetaChip(
                             icon: Icons.workspace_premium_outlined,
-                            label: 'Bonus ${summary.bonusPerConversionLabel}',
+                            label:
+                                'Success reward ${summary.bonusPerConversionLabel}',
                           ),
                           _SalaryMetaChip(
                             icon: Icons.flag_outlined,
@@ -8837,9 +9004,33 @@ class _SalaryDetailCard extends StatelessWidget {
             value: block.callEarningsLabel,
           ),
           _SalaryMetricRow(
-            label: 'Bonus earnings',
+            label: 'Successful lead rewards',
+            value: block.conversionRewardLabel,
+          ),
+          _SalaryMetricRow(
+            label: 'Hourly bonus rewards',
+            value: block.hourlyCallBonusLabel,
+          ),
+          _SalaryMetricRow(
+            label: 'Total extra earnings',
             value: block.bonusEarningsLabel,
           ),
+          if (block.conversionRewardRows.isNotEmpty) ...[
+            const Divider(height: 28),
+            Text(
+              'Rewarded successful leads (${block.convertedLeadCount})',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: kPrimaryDark,
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (final reward in block.conversionRewardRows) ...[
+              _ConvertedLeadRewardCard(reward: reward),
+              const SizedBox(height: 10),
+            ],
+          ],
         ],
       ),
     );
@@ -8925,6 +9116,60 @@ class _SalaryPatternCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             'Worked ${row.hoursLabel} • Released ${row.paidTotalLabel} • Pending ${row.balanceLabel}',
+            style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConvertedLeadRewardCard extends StatelessWidget {
+  const _ConvertedLeadRewardCard({required this.reward});
+
+  final ConversionRewardItem reward;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kSoft,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  reward.leadName,
+                  style: const TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w800,
+                    color: kPrimaryDark,
+                  ),
+                ),
+              ),
+              Text(
+                reward.rewardAmountLabel,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: kGreen,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            reward.leadPhone,
+            style: const TextStyle(fontSize: 13.5, color: Colors.black54),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Reward added on ${reward.convertedAtLabel}',
             style: const TextStyle(fontSize: 13.5, color: Colors.black54),
           ),
         ],
