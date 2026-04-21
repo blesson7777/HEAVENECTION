@@ -1,6 +1,7 @@
 import logging
 import mimetypes
 from pathlib import Path
+from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
 from django.db.models import Count, Q
@@ -2369,6 +2370,26 @@ def salary_control_page(request):
                 "Please correct the hourly call bonus settings and try again. "
                 + " ".join(_normalize_errors(serializer.errors).values()),
             )
+        elif request.POST.get("salary_control_action") == "update_conversion_bonus_settings":
+            raw_amount = (request.POST.get("conversion_bonus_amount", "") or "").strip()
+            try:
+                amount = Decimal(raw_amount)
+            except (InvalidOperation, TypeError, ValueError):
+                messages.error(request, "Please enter a valid successful lead reward amount.")
+            else:
+                if amount < Decimal("0.00"):
+                    messages.error(request, "Successful lead reward amount cannot be negative.")
+                else:
+                    normalized_amount = amount.quantize(Decimal("0.01"))
+                    updated_count = (
+                        Staff.objects.filter(role=Staff.Role.STAFF)
+                        .update(bonus_per_conversion=normalized_amount)
+                    )
+                    messages.success(
+                        request,
+                        f"Successful lead reward updated to Rs. {float(normalized_amount):,.2f} for {updated_count} staff account(s).",
+                    )
+                    return redirect("salary-control-page")
 
     context = _admin_web_context(
         request,

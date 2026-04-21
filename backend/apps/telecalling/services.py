@@ -5474,6 +5474,14 @@ def build_salary_control_payload(request):
     monthly_count = 0
     salary_rows = []
     staff_queryset = list(_staff_queryset())
+    conversion_bonus_values = {
+        _money(staff.bonus_per_conversion)
+        for staff in staff_queryset
+    }
+    if conversion_bonus_values:
+        default_conversion_bonus = min(conversion_bonus_values)
+    else:
+        default_conversion_bonus = Decimal("10.00")
     referrer_options = [
         {"id": str(staff.id), "name": staff.name}
         for staff in staff_queryset
@@ -5551,6 +5559,12 @@ def build_salary_control_payload(request):
             "rate": f"{Decimal(company_profile.hourly_call_bonus_rate or 0):.2f}",
             "threshold_label": f"{int(company_profile.hourly_call_bonus_threshold or 0)} calls / hour",
             "rate_label": _format_currency(company_profile.hourly_call_bonus_rate or 0),
+        },
+        "conversion_bonus_settings": {
+            "amount": f"{default_conversion_bonus:.2f}",
+            "amount_label": _format_currency(default_conversion_bonus),
+            "mixed_values": len(conversion_bonus_values) > 1,
+            "staff_count": len(staff_queryset),
         },
         "referrer_options": referrer_options,
         "salary_rows": salary_rows,
