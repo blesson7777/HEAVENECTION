@@ -1405,61 +1405,136 @@
 
         const apiUrl = root.dataset.apiUrl || window.heavenectionAdmin?.liveMonitoringUrl;
         const summaryGrid = document.getElementById("liveMonitoringSummaryGrid");
+        const activeGrid = document.getElementById("liveMonitoringActiveGrid");
+        const alertGrid = document.getElementById("liveMonitoringAlertGrid");
         const spotlightGrid = document.getElementById("liveMonitoringSpotlightGrid");
-        const tableBody = document.getElementById("liveMonitoringTableBody");
+        const staffGrid = document.getElementById("liveMonitoringStaffGrid");
         const generatedAtNode = document.getElementById("liveMonitoringGeneratedAt");
         const refreshButton = document.getElementById("liveMonitoringRefreshButton");
         let refreshInFlight = false;
+
+        function asNumber(value) {
+            const number = Number(value || 0);
+            return Number.isFinite(number) ? number : 0;
+        }
 
         function renderSummary(summary) {
             if (!summaryGrid || !summary) {
                 return;
             }
-            const awayOffline = Number(summary.away_now || 0) + Number(summary.offline_now || 0);
+            const awayOffline = asNumber(summary.away_now) + asNumber(summary.offline_now);
             summaryGrid.innerHTML = `
-                <div class="col-xl-3 col-md-6">
-                    <div class="hc-summary-card h-100">
-                        <span class="mf-db2-kicker">On Call Now</span>
-                        <h3 class="mb-1">${Number(summary.on_call_now || 0)}</h3>
-                        <p class="mb-0 text-muted">${Number(summary.online_now || 0)} staff ready in the app right now.</p>
-                    </div>
-                </div>
-                <div class="col-xl-3 col-md-6">
-                    <div class="hc-summary-card h-100">
-                        <span class="mf-db2-kicker">Away / Offline</span>
-                        <h3 class="mb-1">${awayOffline}</h3>
-                        <p class="mb-0 text-muted">${Number(summary.away_now || 0)} away and ${Number(summary.offline_now || 0)} offline.</p>
-                    </div>
-                </div>
-                <div class="col-xl-3 col-md-6">
-                    <div class="hc-summary-card h-100">
-                        <span class="mf-db2-kicker">Calls Today</span>
-                        <h3 class="mb-1">${Number(summary.total_calls_today || 0)}</h3>
-                        <p class="mb-0 text-muted">${Number(summary.total_converted_today || 0)} successful leads recorded today.</p>
-                    </div>
-                </div>
-                <div class="col-xl-3 col-md-6">
-                    <div class="hc-summary-card h-100">
-                        <span class="mf-db2-kicker">Active Work Hours</span>
-                        <h3 class="mb-1">${escapeHtml(summary.active_hours_label || "0.0h")}</h3>
-                        <p class="mb-0 text-muted">${Number(summary.total_assigned || 0)} live queue leads are currently assigned.</p>
-                    </div>
-                </div>
-                <div class="col-xl-3 col-md-6">
-                    <div class="hc-summary-card h-100">
-                        <span class="mf-db2-kicker">Review Needed</span>
-                        <h3 class="mb-1">${Number(summary.review_needed_now || 0)}</h3>
-                        <p class="mb-0 text-muted">${Number(summary.alert_now || 0)} more staff need attention.</p>
-                    </div>
-                </div>
-                <div class="col-xl-3 col-md-6">
-                    <div class="hc-summary-card h-100">
-                        <span class="mf-db2-kicker">Active Accounts</span>
-                        <h3 class="mb-1">${Number(summary.active_accounts || 0)}</h3>
-                        <p class="mb-0 text-muted">${Number(summary.total_staff || 0)} total staff members in monitoring.</p>
-                    </div>
-                </div>
+                <article class="hc-live-command-card">
+                    <span class="hc-live-command-label">Ready In App</span>
+                    <strong>${asNumber(summary.online_now)}</strong>
+                    <small>${asNumber(summary.active_accounts)} active accounts today</small>
+                </article>
+                <article class="hc-live-command-card">
+                    <span class="hc-live-command-label">On Live Calls</span>
+                    <strong>${asNumber(summary.on_call_now)}</strong>
+                    <small>${asNumber(summary.total_calls_today)} calls recorded today</small>
+                </article>
+                <article class="hc-live-command-card">
+                    <span class="hc-live-command-label">Queue Pressure</span>
+                    <strong>${asNumber(summary.total_assigned)}</strong>
+                    <small>Assigned leads currently waiting</small>
+                </article>
+                <article class="hc-live-command-card">
+                    <span class="hc-live-command-label">Review Signals</span>
+                    <strong>${asNumber(summary.review_needed_now)}</strong>
+                    <small>${asNumber(summary.alert_now)} more alerts need attention</small>
+                </article>
+                <article class="hc-live-command-card">
+                    <span class="hc-live-command-label">Active Work</span>
+                    <strong>${escapeHtml(summary.active_hours_label || "0.0h")}</strong>
+                    <small>${asNumber(summary.total_converted_today)} successful leads today</small>
+                </article>
+                <article class="hc-live-command-card">
+                    <span class="hc-live-command-label">Away Or Offline</span>
+                    <strong>${awayOffline}</strong>
+                    <small>${asNumber(summary.away_now)} away and ${asNumber(summary.offline_now)} offline</small>
+                </article>
             `;
+        }
+
+        function renderActiveGrid(rows) {
+            if (!activeGrid) {
+                return;
+            }
+            const activeRows = (Array.isArray(rows) ? rows : []).filter((row) => row?.is_on_call || row?.online_label === "Online");
+            if (!activeRows.length) {
+                activeGrid.innerHTML = '<div class="hc-work-review-empty-note">No active staff are visible right now.</div>';
+                return;
+            }
+            activeGrid.innerHTML = activeRows.map((row) => `
+                <article class="hc-live-monitor-card hc-live-activity-card">
+                    <div class="d-flex align-items-start justify-content-between gap-3">
+                        <div class="hc-staff-persona">
+                            <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
+                            <div class="hc-staff-persona-copy">
+                                <strong>${escapeHtml(row.name || "Staff")}</strong>
+                                <span>${escapeHtml(row.phone || "--")}</span>
+                                <small>${escapeHtml(row.session_state_label || "Unavailable")}</small>
+                            </div>
+                        </div>
+                        <span class="hc-status hc-status-${escapeHtml(row.status_tone || "muted")}">${escapeHtml(row.online_label || "Offline")}</span>
+                    </div>
+                    <div class="hc-live-monitor-note mt-3">${escapeHtml(row.status_note || "")}</div>
+                    <div class="hc-live-monitor-metrics mt-3">
+                        <span>${escapeHtml(row.active_hours_today || "0.0h")} worked</span>
+                        <span>${asNumber(row.calls_today)} calls</span>
+                        <span>${asNumber(row.assigned_leads)} queue</span>
+                        <span>${escapeHtml(row.last_seen || "--")}</span>
+                    </div>
+                    ${row.current_call ? `
+                        <div class="hc-live-monitor-call mt-3">
+                            <strong>${escapeHtml(row.current_call.lead_name || "Lead")}</strong>
+                            <span>${escapeHtml(row.current_call.lead_phone || "--")}</span>
+                            <small>${escapeHtml(row.current_call.duration_label || "--")} live call</small>
+                        </div>
+                    ` : '<div class="hc-live-staff-empty mt-3">Ready in the app and available for the next customer call.</div>'}
+                </article>
+            `).join("");
+        }
+
+        function renderAlertGrid(rows) {
+            if (!alertGrid) {
+                return;
+            }
+            const alertRows = (Array.isArray(rows) ? rows : []).filter((row) => (
+                row?.quality_label === "Review Needed"
+                || row?.quality_label === "Needs Attention"
+                || row?.online_label === "Away"
+                || row?.online_label === "Warning"
+            ));
+            if (!alertRows.length) {
+                alertGrid.innerHTML = '<div class="hc-work-review-empty-note">No live review alerts are visible right now.</div>';
+                return;
+            }
+            alertGrid.innerHTML = alertRows.map((row) => `
+                <article class="hc-live-monitor-card hc-live-alert-card">
+                    <div class="d-flex align-items-start justify-content-between gap-3">
+                        <div class="hc-staff-persona">
+                            <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
+                            <div class="hc-staff-persona-copy">
+                                <strong>${escapeHtml(row.name || "Staff")}</strong>
+                                <span>${escapeHtml(row.phone || "--")}</span>
+                                <small>${escapeHtml(row.compensation_type_label || "Hourly")}</small>
+                            </div>
+                        </div>
+                        <span class="hc-status hc-status-${escapeHtml(row.quality_tone || "muted")}">${escapeHtml(row.quality_label || "Attention")}</span>
+                    </div>
+                    <div class="hc-live-monitor-note mt-3">${escapeHtml(row.quality_note || row.status_note || "")}</div>
+                    <div class="hc-live-monitor-metrics mt-3">
+                        <span>${asNumber(row.gap_count)} gaps</span>
+                        <span>${escapeHtml(row.gap_uncounted_label || "0s")} uncounted</span>
+                        <span>${asNumber(row.zero_only_block_count)} zero-talk blocks</span>
+                    </div>
+                    <div class="hc-live-caption mt-3">
+                        ${escapeHtml(row.attempt_review_label || "--")}. ${asNumber(row.real_call_count)} real calls, ${asNumber(row.zero_second_attempt_count)} zero-second, ${asNumber(row.invalid_short_count)} invalid short.
+                    </div>
+                </article>
+            `).join("");
         }
 
         function renderSpotlight(rows) {
@@ -1501,18 +1576,18 @@
             `).join("");
         }
 
-        function renderTable(rows) {
-            if (!tableBody) {
+        function renderStaffGrid(rows) {
+            if (!staffGrid) {
                 return;
             }
             if (!Array.isArray(rows) || !rows.length) {
-                tableBody.innerHTML = '<tr><td colspan="7" class="text-center py-4">No live monitoring details are available right now.</td></tr>';
+                staffGrid.innerHTML = '<div class="hc-work-review-empty-note">No live monitoring details are available right now.</div>';
                 return;
             }
 
-            tableBody.innerHTML = rows.map((row) => `
-                <tr>
-                    <td>
+            staffGrid.innerHTML = rows.map((row) => `
+                <article class="hc-live-staff-card">
+                    <div class="d-flex align-items-start justify-content-between gap-3">
                         <div class="hc-staff-persona">
                             <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
                             <div class="hc-staff-persona-copy">
@@ -1521,66 +1596,65 @@
                                 <small>${escapeHtml(row.compensation_type_label || "Hourly")}</small>
                             </div>
                         </div>
-                    </td>
-                    <td>
-                        <div class="hc-work-review-status">
-                            <div class="hc-quality-card-head">
-                                <strong>${escapeHtml(row.session_state_label || "Unavailable")}</strong>
-                                <span class="hc-status hc-status-${escapeHtml(row.status_tone || "muted")}">${escapeHtml(row.online_label || "Offline")}</span>
-                            </div>
-                            <small>${escapeHtml(row.status_note || "")}</small>
+                        <span class="hc-status hc-status-${escapeHtml(row.status_tone || "muted")}">${escapeHtml(row.online_label || "Offline")}</span>
+                    </div>
+
+                    <div class="hc-live-staff-meta">
+                        <div>
+                            <span class="hc-live-mini-label">Session</span>
+                            <strong>${escapeHtml(row.session_state_label || "Unavailable")}</strong>
                         </div>
-                    </td>
-                    <td>
-                        ${row.current_call ? `
-                            <div class="hc-live-monitor-call">
-                                <strong>${escapeHtml(row.current_call.lead_name || "Lead")}</strong>
-                                <span>${escapeHtml(row.current_call.lead_phone || "--")}</span>
-                                <small>${escapeHtml(row.current_call.duration_label || "--")} live</small>
-                            </div>
-                        ` : '<span class="text-muted small">No live customer call</span>'}
-                    </td>
-                    <td>
-                        <div class="hc-work-review-pattern">
-                            <div class="hc-work-review-chip-row">
-                                <span class="hc-work-review-chip">${escapeHtml(row.active_hours_today || "0.0h")}</span>
-                                <span class="hc-work-review-chip">${Number(row.calls_today || 0)} calls</span>
-                                <span class="hc-work-review-chip">${Number(row.converted_today || 0)} success</span>
-                            </div>
-                            <div class="hc-work-review-chip-row">
-                                <span class="hc-work-review-chip">${Number(row.assigned_leads || 0)} queue</span>
-                                <span class="hc-work-review-chip">${escapeHtml(row.call_time_label || "0s")} call time</span>
+                        <div>
+                            <span class="hc-live-mini-label">Last Seen</span>
+                            <strong>${escapeHtml(row.last_seen || "--")}</strong>
+                        </div>
+                    </div>
+
+                    <p class="hc-live-staff-note">${escapeHtml(row.status_note || "")}</p>
+
+                    ${row.current_call ? `
+                        <div class="hc-live-monitor-call">
+                            <strong>${escapeHtml(row.current_call.lead_name || "Lead")}</strong>
+                            <span>${escapeHtml(row.current_call.lead_phone || "--")}</span>
+                            <small>${escapeHtml(row.current_call.duration_label || "--")} live</small>
+                        </div>
+                    ` : '<div class="hc-live-staff-empty">No live customer call right now.</div>'}
+
+                    <div class="hc-live-staff-columns">
+                        <div class="hc-live-data-stack">
+                            <span class="hc-live-mini-label">Today</span>
+                            <div class="hc-live-pill-row">
+                                <span class="hc-live-pill">${escapeHtml(row.active_hours_today || "0.0h")}</span>
+                                <span class="hc-live-pill">${asNumber(row.calls_today)} calls</span>
+                                <span class="hc-live-pill">${asNumber(row.converted_today)} success</span>
+                                <span class="hc-live-pill">${asNumber(row.assigned_leads)} queue</span>
+                                <span class="hc-live-pill">${escapeHtml(row.call_time_label || "0s")} call time</span>
                             </div>
                         </div>
-                    </td>
-                    <td>
-                        <div class="hc-work-review-status">
+                        <div class="hc-live-data-stack">
+                            <span class="hc-live-mini-label">Review</span>
                             <div class="hc-quality-card-head">
-                                <strong>${Number(row.quality_score || 0)}</strong>
+                                <strong>${asNumber(row.quality_score)}</strong>
                                 <span class="hc-status hc-status-${escapeHtml(row.quality_tone || "muted")}">${escapeHtml(row.quality_label || "No Recent Activity")}</span>
                             </div>
-                            <small>${escapeHtml(row.attempt_review_label || "--")}</small>
-                            <div class="hc-work-review-caption">
-                                ${Number(row.real_call_count || 0)} real · ${Number(row.zero_second_attempt_count || 0)} zero-second · ${Number(row.invalid_short_count || 0)} invalid short
+                            <div class="hc-live-caption">${escapeHtml(row.attempt_review_label || "--")}</div>
+                            <div class="hc-live-caption">
+                                ${asNumber(row.real_call_count)} real &middot; ${asNumber(row.zero_second_attempt_count)} zero-second &middot; ${asNumber(row.invalid_short_count)} invalid short
                             </div>
                         </div>
-                    </td>
-                    <td>
-                        <div class="hc-work-review-pattern">
-                            <div class="hc-work-review-chip-row">
-                                <span class="hc-work-review-chip">${Number(row.gap_count || 0)} gaps</span>
-                                <span class="hc-work-review-chip">${escapeHtml(row.gap_uncounted_label || "0s")} uncounted</span>
+                        <div class="hc-live-data-stack">
+                            <span class="hc-live-mini-label">Gaps And Review Blocks</span>
+                            <div class="hc-live-pill-row">
+                                <span class="hc-live-pill">${asNumber(row.gap_count)} gaps</span>
+                                <span class="hc-live-pill">${escapeHtml(row.gap_uncounted_label || "0s")} uncounted</span>
+                                <span class="hc-live-pill">${escapeHtml(row.away_review_label || "No long away periods")}</span>
                             </div>
-                            <div class="hc-work-review-chip-row">
-                                <span class="hc-work-review-chip">${escapeHtml(row.away_review_label || "No long away periods")}</span>
-                            </div>
-                            <div class="hc-work-review-caption">
-                                ${Number(row.suspicious_block_count || 0)} review block(s) · ${Number(row.zero_only_block_count || 0)} zero-talk block(s)
+                            <div class="hc-live-caption">
+                                ${asNumber(row.suspicious_block_count)} review block(s) &middot; ${asNumber(row.zero_only_block_count)} zero-talk block(s)
                             </div>
                         </div>
-                    </td>
-                    <td>${escapeHtml(row.last_seen || "--")}</td>
-                </tr>
+                    </div>
+                </article>
             `).join("");
         }
 
@@ -1589,8 +1663,10 @@
                 return;
             }
             renderSummary(payload.summary || {});
+            renderActiveGrid(payload.staff_rows || []);
+            renderAlertGrid(payload.staff_rows || []);
             renderSpotlight(payload.spotlight_rows || []);
-            renderTable(payload.staff_rows || []);
+            renderStaffGrid(payload.staff_rows || []);
             if (generatedAtNode) {
                 generatedAtNode.textContent = payload.generated_at_label || "--";
             }
