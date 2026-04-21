@@ -144,6 +144,7 @@ from backend.apps.telecalling.services import (
     recover_staff_customer_lead,
     calculate_staff_payout_for_dates,
     delete_recovery_leads_filtered,
+    ensure_converted_call_credit,
 )
 
 
@@ -2651,9 +2652,12 @@ def lead_detail_api(request, lead_id):
         return Response(status=204)
 
     previous_assigned_to_id = lead.assigned_to_id
+    previous_status = lead.status
     serializer = UpdateLeadSerializer(lead, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     lead = serializer.save()
+    if previous_status != Lead.Status.CONVERTED and lead.status == Lead.Status.CONVERTED:
+        ensure_converted_call_credit(lead)
     explicit_assignment = "assigned_to" in request.data
     _refresh_queue_after_admin_lead_save(
         lead=lead,

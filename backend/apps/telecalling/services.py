@@ -7787,6 +7787,59 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
     return call
 
 
+def ensure_converted_call_credit(lead):
+    if lead.status != Lead.Status.CONVERTED:
+        return None
+
+    existing_converted_call = (
+        Call.objects.filter(
+            lead=lead,
+            status=Call.Status.CONVERTED,
+            is_qualifying=True,
+        )
+        .select_related("staff", "lead")
+        .order_by("-end_time", "-start_time", "-created_at")
+        .first()
+    )
+    if existing_converted_call:
+        return existing_converted_call
+
+    detail = getattr(lead, "interested_detail", None)
+    preferred_call = detail.call if detail and detail.call_id else None
+    if preferred_call and preferred_call.lead_id != lead.id:
+        preferred_call = None
+
+    candidate_call = preferred_call or (
+        Call.objects.filter(lead=lead)
+        .select_related("staff", "lead")
+        .order_by("-end_time", "-start_time", "-created_at")
+        .first()
+    )
+    if candidate_call is None:
+        return None
+
+    update_fields = []
+    if candidate_call.status != Call.Status.CONVERTED:
+        candidate_call.status = Call.Status.CONVERTED
+        update_fields.append("status")
+    if not candidate_call.is_qualifying:
+        candidate_call.is_qualifying = True
+        update_fields.append("is_qualifying")
+    if int(candidate_call.duration_seconds or 0) < SHORT_CALL_SECONDS:
+        candidate_call.duration_seconds = SHORT_CALL_SECONDS
+        update_fields.append("duration_seconds")
+    if candidate_call.end_time is None:
+        candidate_call.end_time = timezone.now()
+        update_fields.append("end_time")
+    if not candidate_call.verification_source:
+        candidate_call.verification_source = "admin_conversion"
+        update_fields.append("verification_source")
+
+    if update_fields:
+        candidate_call.save(update_fields=[*update_fields, "updated_at"])
+    return candidate_call
+
+
 def read_root_file(filename):
     return (settings.BASE_DIR / filename).read_text(encoding="utf-8")
 
