@@ -1347,6 +1347,89 @@
     color: #f7fbff;
 }
 
+.hc-live-sync-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 17rem;
+    padding: 0.7rem 0.95rem;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(12px);
+}
+
+.hc-live-sync-dot {
+    width: 0.8rem;
+    height: 0.8rem;
+    border-radius: 50%;
+    background: #5af4c2;
+    box-shadow: 0 0 0 0 rgba(90, 244, 194, 0.4);
+    flex-shrink: 0;
+}
+
+.hc-live-sync-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.hc-live-sync-copy strong {
+    color: #ffffff;
+    font-size: 0.88rem;
+    line-height: 1.2;
+}
+
+.hc-live-sync-copy small {
+    color: rgba(223, 231, 248, 0.78);
+    line-height: 1.35;
+}
+
+.hc-live-sync-badge.is-live .hc-live-sync-dot {
+    background: #5af4c2;
+    animation: hcLivePulse 1.8s ease-out infinite;
+}
+
+.hc-live-sync-badge.is-syncing .hc-live-sync-dot {
+    background: #6fd0ff;
+    animation: hcLivePulse 1s ease-out infinite;
+}
+
+.hc-live-sync-badge.is-reconnecting .hc-live-sync-dot {
+    background: #ffb74d;
+    animation: hcLivePulse 1.2s ease-out infinite;
+}
+
+.hc-live-sync-badge.is-paused .hc-live-sync-dot {
+    background: #b6bfd6;
+    box-shadow: none;
+    animation: none;
+}
+
+.hc-live-sync-ribbon {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem;
+    margin-top: 1rem;
+}
+
+.hc-live-sync-ribbon span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.55rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.07);
+    color: rgba(226, 235, 255, 0.84);
+    font-size: 0.84rem;
+    font-weight: 700;
+}
+
+.hc-live-sync-ribbon strong {
+    color: #ffffff;
+}
+
 .hc-live-command-strip {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1767,6 +1850,20 @@
     }
 }
 
+@keyframes hcLivePulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(111, 208, 255, 0.45);
+    }
+
+    70% {
+        box-shadow: 0 0 0 12px rgba(111, 208, 255, 0);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(111, 208, 255, 0);
+    }
+}
+
 @media (max-width: 1199.98px) {
     .hc-live-hero {
         grid-template-columns: 1fr;
@@ -1784,6 +1881,10 @@
 
     .hc-live-radar {
         min-height: 21rem;
+    }
+
+    .hc-live-sync-badge {
+        min-width: 100%;
     }
 }
 

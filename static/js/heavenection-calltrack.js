@@ -1410,12 +1410,88 @@
         const spotlightGrid = document.getElementById("liveMonitoringSpotlightGrid");
         const staffGrid = document.getElementById("liveMonitoringStaffGrid");
         const generatedAtNode = document.getElementById("liveMonitoringGeneratedAt");
+        const syncBadge = document.getElementById("liveMonitoringSyncBadge");
+        const syncStateNode = document.getElementById("liveMonitoringSyncState");
+        const syncDetailNode = document.getElementById("liveMonitoringSyncDetail");
+        const nextRefreshNode = document.getElementById("liveMonitoringNextRefresh");
         const refreshButton = document.getElementById("liveMonitoringRefreshButton");
+        const liveRefreshMs = 5000;
         let refreshInFlight = false;
+        let refreshTimer = null;
+        let countdownTimer = null;
+        let nextRefreshAt = null;
 
         function asNumber(value) {
             const number = Number(value || 0);
             return Number.isFinite(number) ? number : 0;
+        }
+
+        function setSyncState(mode, detail) {
+            if (!syncBadge) {
+                return;
+            }
+            syncBadge.classList.remove("is-live", "is-syncing", "is-reconnecting", "is-paused");
+            syncBadge.classList.add(`is-${mode}`);
+            if (syncStateNode) {
+                syncStateNode.textContent = {
+                    live: "Live Sync Active",
+                    syncing: "Syncing Live Data",
+                    reconnecting: "Reconnecting",
+                    paused: "Live Sync Paused",
+                }[mode] || "Live Sync Active";
+            }
+            if (syncDetailNode) {
+                syncDetailNode.textContent = detail || "Refreshing this dashboard automatically.";
+            }
+        }
+
+        function updateCountdown() {
+            if (!nextRefreshNode) {
+                return;
+            }
+            if (document.hidden || !nextRefreshAt) {
+                nextRefreshNode.textContent = "--";
+                return;
+            }
+            const remainingMs = Math.max(0, nextRefreshAt - Date.now());
+            nextRefreshNode.textContent = `${Math.ceil(remainingMs / 1000)}s`;
+        }
+
+        function ensureCountdown() {
+            if (countdownTimer) {
+                return;
+            }
+            countdownTimer = window.setInterval(updateCountdown, 1000);
+        }
+
+        function clearScheduledRefresh() {
+            if (refreshTimer) {
+                window.clearTimeout(refreshTimer);
+                refreshTimer = null;
+            }
+            nextRefreshAt = null;
+            updateCountdown();
+        }
+
+        function scheduleRefresh(delayMs = liveRefreshMs) {
+            clearScheduledRefresh();
+            if (document.hidden) {
+                setSyncState("paused", "Tab is hidden. Live sync will resume when you return.");
+                return;
+            }
+            nextRefreshAt = Date.now() + delayMs;
+            updateCountdown();
+            refreshTimer = window.setTimeout(() => {
+                refreshPayload({ silent: true });
+            }, delayMs);
+        }
+
+        function buildLiveUrl() {
+            if (!apiUrl) {
+                return "";
+            }
+            const separator = apiUrl.includes("?") ? "&" : "?";
+            return `${apiUrl}${separator}_live=${Date.now()}`;
         }
 
         function renderSummary(summary) {
@@ -1672,19 +1748,24 @@
             }
         }
 
-        async function refreshPayload() {
+        async function refreshPayload({ silent = false } = {}) {
             if (!apiUrl || refreshInFlight) {
                 return;
             }
             refreshInFlight = true;
+            clearScheduledRefresh();
             if (refreshButton) {
                 refreshButton.disabled = true;
             }
+            setSyncState("syncing", silent ? "Updating live activity in the background." : "Refreshing the latest staff activity now.");
             try {
-                const payload = await requestJson(apiUrl, { method: "GET" });
+                const payload = await requestJson(buildLiveUrl(), { method: "GET" });
                 renderPayload(payload);
+                setSyncState("live", "Dashboard is receiving live updates automatically.");
+                scheduleRefresh(liveRefreshMs);
             } catch (error) {
-                // Keep the last good render on screen.
+                setSyncState("reconnecting", "Connection slowed down. Keeping the last live view and trying again.");
+                scheduleRefresh(liveRefreshMs);
             } finally {
                 refreshInFlight = false;
                 if (refreshButton) {
@@ -1694,8 +1775,32 @@
         }
 
         renderPayload(readJsonScript("heavenectionLiveMonitoringPayload"));
-        refreshButton?.addEventListener("click", refreshPayload);
-        window.setInterval(refreshPayload, 15000);
+        setSyncState("live", "Dashboard is receiving live updates automatically.");
+        ensureCountdown();
+        scheduleRefresh(liveRefreshMs);
+        refreshButton?.addEventListener("click", () => refreshPayload({ silent: false }));
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+                clearScheduledRefresh();
+                setSyncState("paused", "Tab is hidden. Live sync will resume when you return.");
+                return;
+            }
+            setSyncState("syncing", "Tab is active again. Pulling the latest live activity.");
+            refreshPayload({ silent: false });
+        });
+        window.addEventListener("focus", () => {
+            if (!document.hidden) {
+                refreshPayload({ silent: true });
+            }
+        });
+        window.addEventListener("online", () => {
+            setSyncState("syncing", "Connection restored. Updating live activity now.");
+            refreshPayload({ silent: false });
+        });
+        window.addEventListener("offline", () => {
+            clearScheduledRefresh();
+            setSyncState("reconnecting", "Connection is unavailable. Live sync will continue when the network returns.");
+        });
     }
 
     function bindSidebarSections() {
