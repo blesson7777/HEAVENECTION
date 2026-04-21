@@ -135,6 +135,35 @@
                     <strong>{{ due_snapshot.paid_total_label }}</strong>
                 </div>
             </div>
+            <div class="mt-3">
+                <h6 class="mb-2">Successful Lead Bonus Details</h6>
+                {% if due_snapshot.conversion_reward_rows %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Lead</th>
+                                <th>Phone</th>
+                                <th>Reward</th>
+                                <th>Added On</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for reward in due_snapshot.conversion_reward_rows %}
+                            <tr>
+                                <td>{{ reward.lead_name }}</td>
+                                <td>{{ reward.lead_phone }}</td>
+                                <td>{{ reward.reward_amount_label }}</td>
+                                <td>{{ reward.converted_at_label }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-muted small">No successful lead reward entries in this due payout period.</div>
+                {% endif %}
+            </div>
 
             {% if due_snapshot.is_payable %}
             <form method="post" class="mt-4" novalidate>
@@ -218,6 +247,35 @@
                     <small>{{ running_snapshot.call_earnings_label }} calls | {{ running_snapshot.bonus_earnings_label }} bonus</small>
                 </div>
             </div>
+            <div class="mt-3">
+                <h6 class="mb-2">Successful Lead Bonus Details</h6>
+                {% if running_snapshot.conversion_reward_rows %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Lead</th>
+                                <th>Phone</th>
+                                <th>Reward</th>
+                                <th>Added On</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for reward in running_snapshot.conversion_reward_rows %}
+                            <tr>
+                                <td>{{ reward.lead_name }}</td>
+                                <td>{{ reward.lead_phone }}</td>
+                                <td>{{ reward.reward_amount_label }}</td>
+                                <td>{{ reward.converted_at_label }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-muted small">No successful lead reward entries in the running cycle.</div>
+                {% endif %}
+            </div>
 
             {% if running_snapshot.can_pay_advance %}
             <form method="post" class="mt-4" novalidate>
@@ -298,6 +356,35 @@
                     <strong>{{ previous_month_snapshot.base_pay_label }}</strong>
                     <small>{{ previous_month_snapshot.call_earnings_label }} calls | {{ previous_month_snapshot.bonus_earnings_label }} bonus</small>
                 </div>
+            </div>
+            <div class="mt-3">
+                <h6 class="mb-2">Successful Lead Bonus Details</h6>
+                {% if previous_month_snapshot.conversion_reward_rows %}
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Lead</th>
+                                <th>Phone</th>
+                                <th>Reward</th>
+                                <th>Added On</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for reward in previous_month_snapshot.conversion_reward_rows %}
+                            <tr>
+                                <td>{{ reward.lead_name }}</td>
+                                <td>{{ reward.lead_phone }}</td>
+                                <td>{{ reward.reward_amount_label }}</td>
+                                <td>{{ reward.converted_at_label }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-muted small">No successful lead reward entries in the previous month.</div>
+                {% endif %}
             </div>
         </div>
     </div>
