@@ -508,7 +508,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    final isFollowupLead = fromFollowup || lead.status == 'call_back';
+    final isFollowupLead = fromFollowup || _isFollowupLeadItem(lead);
     _registerInteraction(syncServer: false);
     setState(() {
       if (index != null) {
@@ -597,8 +597,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           await _showCallScreenForLead(
             placeholderLead,
             fromFollowup:
-                _activeCallFromFollowup ||
-                placeholderLead.status == 'call_back',
+                _activeCallFromFollowup || _isFollowupLeadItem(placeholderLead),
           );
           return;
         }
@@ -620,7 +619,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
     await _showCallScreenForLead(
       activeLead,
-      fromFollowup: _activeCallFromFollowup || activeLead.status == 'call_back',
+      fromFollowup: _activeCallFromFollowup || _isFollowupLeadItem(activeLead),
     );
   }
 
@@ -2928,10 +2927,21 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     );
   }
 
+  bool _isFollowupLeadItem(LeadItem? lead) {
+    if (lead == null) {
+      return false;
+    }
+    final status = lead.status.toLowerCase();
+    final statusLabel = lead.statusLabel.toLowerCase();
+    return status == 'call_back' ||
+        status == 'interested' ||
+        statusLabel == 'follow up';
+  }
+
   bool _isFollowupLeadContext(LeadItem? lead) {
     return _pendingStatusFromFollowup ||
         _activeCallFromFollowup ||
-        (lead?.status == 'call_back');
+        _isFollowupLeadItem(lead);
   }
 
   Future<void> _placeCallForLead(LeadItem lead) async {
@@ -2945,8 +2955,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     final dialStartedAt = DateTime.now();
-    final isFollowupLead =
-        _activeCallFromFollowup || lead.status == 'call_back';
+    final isFollowupLead = _activeCallFromFollowup || _isFollowupLeadItem(lead);
     final call = await _apiClient.startCall(
       leadId: lead.id,
       fromFollowupMenu: isFollowupLead,
@@ -3643,7 +3652,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     if (call.status == 'no_answer' && wasFollowupLead) {
       final refreshedLead = _leadById(pendingCall.leadId);
-      if (refreshedLead != null && refreshedLead.status == 'call_back') {
+      if (refreshedLead != null && _isFollowupLeadItem(refreshedLead)) {
         _showMessage(
           'Follow-up try saved. Keep contacting this customer from the Follow Ups menu.',
         );
@@ -3716,7 +3725,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _pendingStatusLeadName = lead?.name ?? '';
         _pendingStatusLeadPhone = lead?.phone ?? pendingCall.phone;
         _pendingStatusFromFollowup =
-            _activeCallFromFollowup || lead?.status == 'call_back';
+            _activeCallFromFollowup || _isFollowupLeadItem(lead);
         _callStatus = 'Interested';
       }
     });
@@ -3766,7 +3775,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _pendingStatusLeadName = lead?.name ?? '';
         _pendingStatusLeadPhone = lead?.phone ?? '';
         _pendingStatusFromFollowup =
-            _activeCallFromFollowup || lead?.status == 'call_back';
+            _activeCallFromFollowup || _isFollowupLeadItem(lead);
         _callStatus = 'Interested';
       }
     });
@@ -3808,7 +3817,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     final existingLead = _leadById(pendingCall.leadId);
     final isFollowupLead =
-        _activeCallFromFollowup || existingLead?.status == 'call_back';
+        _activeCallFromFollowup || _isFollowupLeadItem(existingLead);
     final lead =
         existingLead ??
         LeadItem(
@@ -5963,10 +5972,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final message = durationSeconds <= 0
         ? canCloseAsNoResponse
               ? 'The customer did not attend this follow-up call. This is try $attemptNumber, so you can now move it to No Response.'
-              : 'The customer did not attend this follow-up call. Save this try and call again until 3 tries are completed.'
+              : 'The customer did not attend this follow-up call. Save this try and call again until 3 proper tries are completed on different dates and times.'
         : canCloseAsNoResponse
         ? 'The follow-up call was too short to confirm a real discussion. This is try $attemptNumber, so you can now move it to No Response.'
-        : 'The follow-up call was too short to confirm a real discussion. Save this try and call again until 3 tries are completed.';
+        : 'The follow-up call was too short to confirm a real discussion. Save this try and call again until 3 proper tries are completed on different dates and times.';
 
     return await showDialog<ShortCallDecision>(
       context: context,
@@ -8074,7 +8083,10 @@ class _CustomerRecoveryPageState extends State<CustomerRecoveryPage> {
 
   Future<_RecoverySelection?> _pickRecoverySelection(LeadItem lead) async {
     const callbackChoices = ['Noon', 'Evening', 'Night'];
-    var selectedStatus = lead.status == 'call_back'
+    var selectedStatus =
+        lead.status == 'call_back' ||
+            lead.status == 'interested' ||
+            lead.statusLabel == 'Follow Up'
         ? 'Follow Up'
         : 'Interested';
     var selectedCallbackWindow = lead.callbackWindowLabel;

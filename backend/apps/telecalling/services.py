@@ -2714,21 +2714,70 @@ def _is_scheduled_followup(lead):
 
 
 def _followup_no_answer_attempt_count(lead, *, staff=None, exclude_call_id=None):
+    return _followup_no_response_progress(
+        lead,
+        staff=staff,
+        exclude_call_id=exclude_call_id,
+    )["attempt_count"]
+
+
+def _followup_no_response_progress(
+    lead,
+    *,
+    staff=None,
+    exclude_call_id=None,
+    include_attempt_at=None,
+):
     queryset = lead.calls.all()
     if staff is not None:
         queryset = queryset.filter(staff=staff)
     if exclude_call_id:
         queryset = queryset.exclude(id=exclude_call_id)
 
-    count = 0
-    for status in queryset.order_by("-start_time", "-created_at").values_list("status", flat=True):
+    attempt_times = []
+    for row in queryset.order_by("-start_time", "-created_at").values(
+        "status",
+        "end_time",
+        "start_time",
+        "created_at",
+    ):
+        status = row["status"]
         if status == Call.Status.NO_ANSWER:
-            count += 1
+            stamp = row["end_time"] or row["start_time"] or row["created_at"]
+            if stamp:
+                attempt_times.append(timezone.localtime(stamp))
             continue
         if status == Call.Status.INVALID_SHORT:
             continue
         break
-    return count
+
+    if include_attempt_at is not None:
+        attempt_times.append(timezone.localtime(include_attempt_at))
+
+    unique_dates = {stamp.date().isoformat() for stamp in attempt_times}
+    unique_times = {stamp.strftime("%H:%M") for stamp in attempt_times}
+    attempt_count = len(attempt_times)
+    date_count = len(unique_dates)
+    time_count = len(unique_times)
+    ready_threshold = FOLLOWUP_NO_RESPONSE_LIMIT
+    can_close = (
+        attempt_count >= ready_threshold
+        and date_count >= ready_threshold
+        and time_count >= ready_threshold
+    )
+    remaining = max(
+        0,
+        ready_threshold - attempt_count,
+        ready_threshold - date_count,
+        ready_threshold - time_count,
+    )
+    return {
+        "attempt_count": attempt_count,
+        "unique_date_count": date_count,
+        "unique_time_count": time_count,
+        "can_close": can_close,
+        "remaining": remaining,
+    }
 
 
 def _quality_tone(score):
@@ -6097,9 +6146,10 @@ def build_followup_payload():
         is_due_now = _is_callback_due(lead.callback_date, lead.callback_window, now=reference)
         is_overdue = bool(lead.callback_date and lead.callback_date < today)
         is_unscheduled = not is_scheduled
-        followup_attempt_count = _followup_no_answer_attempt_count(lead)
-        attempts_remaining = max(0, FOLLOWUP_NO_RESPONSE_LIMIT - followup_attempt_count)
-        can_close_as_no_response = followup_attempt_count >= FOLLOWUP_NO_RESPONSE_LIMIT
+        followup_progress = _followup_no_response_progress(lead)
+        followup_attempt_count = followup_progress["attempt_count"]
+        attempts_remaining = followup_progress["remaining"]
+        can_close_as_no_response = followup_progress["can_close"]
 
         if is_due_now:
             schedule_state_label = "Due now"
@@ -6157,6 +6207,8 @@ def build_followup_payload():
                 "followup_attempt_count": followup_attempt_count,
                 "attempts_remaining": attempts_remaining,
                 "can_close_as_no_response": can_close_as_no_response,
+                "followup_attempt_unique_dates": followup_progress["unique_date_count"],
+                "followup_attempt_unique_times": followup_progress["unique_time_count"],
             }
         )
 
@@ -6179,6 +6231,38 @@ def build_followup_payload():
 
     followup_rows.sort(key=_followup_sort_key)
 
+    closed_followup_rows = []
+    closed_candidates = (
+        Lead.objects.select_related("assigned_to")
+        .filter(status=Lead.Status.NO_ANSWER)
+        .order_by("-updated_at", "-last_contacted_at")[:200]
+    )
+    for lead in closed_candidates:
+        progress = _followup_no_response_progress(lead)
+        if progress["attempt_count"] < FOLLOWUP_NO_RESPONSE_LIMIT or not progress["can_close"]:
+            continue
+        if not lead.calls.filter(status=Call.Status.INTERESTED).exists():
+            continue
+        closed_followup_rows.append(
+            {
+                "id": str(lead.id),
+                "name": lead.name,
+                "phone": lead.phone,
+                "status_label": lead.get_status_display(),
+                "handover_status_label": lead.get_handover_status_display(),
+                "schedule_state_label": "Closed after 3 follow-up tries",
+                "schedule_state_tone": "muted",
+                "callback_schedule_label": _format_callback_schedule_label(
+                    lead.callback_date,
+                    lead.callback_window,
+                )
+                or "No time set",
+                "assigned_to": lead.assigned_to.name if lead.assigned_to else "Unassigned",
+                "updated_at": _format_datetime(lead.updated_at),
+                "updated_at_sort": lead.updated_at.isoformat() if lead.updated_at else "",
+            }
+        )
+
     return {
         "followup_rows": followup_rows,
         "followup_history_rows": [
@@ -6195,6 +6279,25 @@ def build_followup_payload():
                 "updated_at": row["updated_at"],
             }
             for row in sorted(followup_rows, key=lambda row: row["updated_at_sort"], reverse=True)[:12]
+        ]
+        + [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "phone": row["phone"],
+                "status_label": row["status_label"],
+                "handover_status_label": row["handover_status_label"],
+                "schedule_state_label": row["schedule_state_label"],
+                "schedule_state_tone": row["schedule_state_tone"],
+                "callback_schedule_label": row["callback_schedule_label"],
+                "assigned_to": row["assigned_to"],
+                "updated_at": row["updated_at"],
+            }
+            for row in sorted(
+                closed_followup_rows,
+                key=lambda row: row["updated_at_sort"],
+                reverse=True,
+            )[:12]
         ],
         "staff_options": [
             {"id": str(staff.id), "name": staff.name}
@@ -7128,7 +7231,8 @@ def build_staff_followups_payload(staff):
     )
     rows = []
     for lead in followups:
-        no_answer_attempt_count = _followup_no_answer_attempt_count(lead, staff=staff)
+        followup_progress = _followup_no_response_progress(lead, staff=staff)
+        no_answer_attempt_count = followup_progress["attempt_count"]
         is_scheduled_followup = _is_scheduled_followup(lead)
         is_due_now = _is_followup_highlighted(lead, now=now) if is_scheduled_followup else False
         rows.append(
@@ -7151,12 +7255,10 @@ def build_staff_followups_payload(staff):
                 "updated_at": lead.updated_at.isoformat(),
                 "is_due_now": is_due_now,
                 "followup_attempt_count": no_answer_attempt_count,
-                "followup_attempts_remaining": max(
-                    0,
-                    FOLLOWUP_NO_RESPONSE_LIMIT - no_answer_attempt_count,
-                ),
-                "can_mark_followup_no_response": no_answer_attempt_count
-                >= (FOLLOWUP_NO_RESPONSE_LIMIT - 1),
+                "followup_attempts_remaining": followup_progress["remaining"],
+                "can_mark_followup_no_response": followup_progress["can_close"],
+                "followup_attempt_unique_dates": followup_progress["unique_date_count"],
+                "followup_attempt_unique_times": followup_progress["unique_time_count"],
                 "is_scheduled_followup": is_scheduled_followup,
             }
         )
@@ -7620,17 +7722,14 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
     lead_status = status
     lead_callback_window = resolved_callback_window
     lead_callback_date = resolved_callback_date
-    if _is_followup_status(call.lead.status) and status in {
-        Call.Status.NO_ANSWER,
-        Call.Status.NOT_INTERESTED,
-    } and (not call.is_verified or int(call.duration_seconds or 0) <= 0):
-        previous_no_answer_attempts = _followup_no_answer_attempt_count(
+    if _is_followup_status(call.lead.status) and status == Call.Status.NO_ANSWER:
+        followup_progress = _followup_no_response_progress(
             call.lead,
             staff=call.staff,
             exclude_call_id=call.id,
+            include_attempt_at=call.end_time or now,
         )
-        total_no_answer_attempts = previous_no_answer_attempts + 1
-        if total_no_answer_attempts < FOLLOWUP_NO_RESPONSE_LIMIT:
+        if not followup_progress["can_close"]:
             lead_status = Lead.Status.INTERESTED
             lead_callback_window = call.lead.callback_window
             lead_callback_date = call.lead.callback_date
