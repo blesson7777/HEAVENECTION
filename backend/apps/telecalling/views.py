@@ -1938,9 +1938,9 @@ def live_monitoring_page(request):
         request,
         current_user,
         active_page="live-monitoring",
-        page_title="Live Monitoring",
-        page_heading="Live Monitoring",
-        page_subtitle="Watch live staff behaviour, current call activity, worktime movement, and attention signals without refreshing the page.",
+        page_title="Command Center",
+        page_heading="Command Center",
+        page_subtitle="Control live staff behaviour, call intelligence, queue pressure, and review signals from one futuristic dashboard.",
         extra_context={
             **payload,
             "live_monitoring_payload": payload,

@@ -5,6 +5,10 @@
     <i class="bi bi-shield-exclamation"></i>
     <span>Open Work Review</span>
 </a>
+<a href="{% url 'salary-page' %}" class="btn btn-outline-primary btn-sm">
+    <i class="bi bi-wallet2"></i>
+    <span>Salary Overview</span>
+</a>
 {% endblock %}
 
 {% block admin_content %}
@@ -15,8 +19,8 @@
         <div class="hc-live-hero-copy">
             <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
                 <div>
-                    <span class="hc-live-eyebrow">Live Monitoring Command Center</span>
-                    <h2 class="hc-live-title">Real-time staff movement without page refresh</h2>
+                    <span class="hc-live-eyebrow">Futuristic Command Center</span>
+                    <h2 class="hc-live-title">Run the whole telecalling system from one live dashboard</h2>
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
                     <span class="hc-sync-pill"><i class="bi bi-activity"></i> <span id="liveMonitoringGeneratedAt">{{ generated_at_label }}</span></span>
@@ -34,44 +38,17 @@
                 </div>
             </div>
             <p class="hc-live-subtitle">
-                Watch who is online, who is on a customer call, where queue pressure is building, and which staff members need quick review right now.
+                Track staff behaviour, current calling activity, risk signals, queue pressure, and payout movement in one real-time control room.
             </p>
             <div class="hc-live-sync-ribbon">
                 <span><i class="bi bi-broadcast-pin"></i> Next auto refresh: <strong id="liveMonitoringNextRefresh">5s</strong></span>
-                <span><i class="bi bi-lightning-charge"></i> Refreshes faster when this tab becomes active again.</span>
+                <span><i class="bi bi-lightning-charge"></i> Returns to instant sync when this tab becomes active.</span>
             </div>
-
-            <div class="hc-live-command-strip" id="liveMonitoringSummaryGrid">
-                <article class="hc-live-command-card">
-                    <span class="hc-live-command-label">Ready In App</span>
-                    <strong>{{ summary.online_now }}</strong>
-                    <small>{{ summary.active_accounts }} active accounts today</small>
-                </article>
-                <article class="hc-live-command-card">
-                    <span class="hc-live-command-label">On Live Calls</span>
-                    <strong>{{ summary.on_call_now }}</strong>
-                    <small>{{ summary.total_calls_today }} calls recorded today</small>
-                </article>
-                <article class="hc-live-command-card">
-                    <span class="hc-live-command-label">Queue Pressure</span>
-                    <strong>{{ summary.total_assigned }}</strong>
-                    <small>Assigned leads currently waiting</small>
-                </article>
-                <article class="hc-live-command-card">
-                    <span class="hc-live-command-label">Review Signals</span>
-                    <strong>{{ summary.review_needed_now }}</strong>
-                    <small>{{ summary.alert_now }} more alerts need attention</small>
-                </article>
-                <article class="hc-live-command-card">
-                    <span class="hc-live-command-label">Active Work</span>
-                    <strong>{{ summary.active_hours_label }}</strong>
-                    <small>{{ summary.total_converted_today }} successful leads today</small>
-                </article>
-                <article class="hc-live-command-card">
-                    <span class="hc-live-command-label">Away Or Offline</span>
-                    <strong>{{ summary.away_now|add:summary.offline_now }}</strong>
-                    <small>{{ summary.away_now }} away and {{ summary.offline_now }} offline</small>
-                </article>
+            <div class="hc-command-topline">
+                <span><i class="bi bi-people-fill"></i> Staff operations</span>
+                <span><i class="bi bi-telephone-forward-fill"></i> Call intelligence</span>
+                <span><i class="bi bi-cash-stack"></i> Salary controls</span>
+                <span><i class="bi bi-mortarboard-fill"></i> Training and compliance</span>
             </div>
         </div>
 
@@ -115,100 +92,224 @@
         </aside>
     </section>
 
+    <section class="hc-live-panel hc-command-deck animate-on-scroll">
+        <div class="mf-db2-panel-head mb-3">
+            <div>
+                <span class="mf-db2-kicker">System Command Deck</span>
+                <h5>Instant management shortcuts across the entire platform</h5>
+            </div>
+            <span class="hc-live-panel-hint">Use these controls to open operations, reviews, payroll, referrals, and release management without leaving this command center.</span>
+        </div>
+        <div class="hc-command-deck-grid">
+            <a href="{% url 'staff-page' %}" class="hc-command-link">
+                <i class="bi bi-people-fill"></i>
+                <strong>Staff Management</strong>
+                <small>Create, edit, and control staff access.</small>
+            </a>
+            <a href="{% url 'leads-page' %}" class="hc-command-link">
+                <i class="bi bi-person-lines-fill"></i>
+                <strong>Lead Management</strong>
+                <small>Import, assign, and clean lead queues.</small>
+            </a>
+            <a href="{% url 'followups-page' %}" class="hc-command-link">
+                <i class="bi bi-list-check"></i>
+                <strong>Follow-Up Queue</strong>
+                <small>Manage scheduled follow-up calls and retries.</small>
+            </a>
+            <a href="{% url 'interested-leads-page' %}" class="hc-command-link">
+                <i class="bi bi-journal-check"></i>
+                <strong>Interested Leads</strong>
+                <small>Confirm successful and unsuccessful interested leads.</small>
+            </a>
+            <a href="{% url 'recovery-leads-page' %}" class="hc-command-link">
+                <i class="bi bi-arrow-repeat"></i>
+                <strong>Recovery Queue</strong>
+                <small>Re-add and clean rejected or no-response leads.</small>
+            </a>
+            <a href="{% url 'calls-page' %}" class="hc-command-link">
+                <i class="bi bi-telephone-forward-fill"></i>
+                <strong>Call Details</strong>
+                <small>Audit full call logs and call outcomes.</small>
+            </a>
+            <a href="{% url 'working-hours-page' %}" class="hc-command-link">
+                <i class="bi bi-clock-history"></i>
+                <strong>Working Hours</strong>
+                <small>Review active time, gaps, and uncounted periods.</small>
+            </a>
+            <a href="{% url 'work-review-page' %}" class="hc-command-link">
+                <i class="bi bi-shield-exclamation"></i>
+                <strong>Work Review Center</strong>
+                <small>Investigate suspicious patterns and quality signals.</small>
+            </a>
+            <a href="{% url 'referral-monitoring-page' %}" class="hc-command-link">
+                <i class="bi bi-person-heart"></i>
+                <strong>Referral Monitoring</strong>
+                <small>Track referral stages and reward eligibility.</small>
+            </a>
+            <a href="{% url 'salary-page' %}" class="hc-command-link">
+                <i class="bi bi-wallet2"></i>
+                <strong>Salary Overview</strong>
+                <small>Pay due salary and view payment history.</small>
+            </a>
+            <a href="{% url 'salary-control-page' %}" class="hc-command-link">
+                <i class="bi bi-sliders2-vertical"></i>
+                <strong>Salary Control</strong>
+                <small>Configure payout, rewards, and bonus settings.</small>
+            </a>
+            <a href="{% url 'learning-page' %}" class="hc-command-link">
+                <i class="bi bi-mortarboard-fill"></i>
+                <strong>Learning Center</strong>
+                <small>Publish and update staff learning content.</small>
+            </a>
+            <a href="{% url 'settings-page' %}" class="hc-command-link">
+                <i class="bi bi-gear-fill"></i>
+                <strong>Admin Settings</strong>
+                <small>Update profile, company details, and logo.</small>
+            </a>
+            <a href="{% url 'developer-releases-page' %}" class="hc-command-link">
+                <i class="bi bi-code-square"></i>
+                <strong>Release Center</strong>
+                <small>Upload APK updates and release metadata.</small>
+            </a>
+        </div>
+    </section>
+
     <section class="hc-live-panel animate-on-scroll">
         <div class="mf-db2-panel-head mb-3">
             <div>
-                <span class="mf-db2-kicker">Live Activity Board</span>
-                <h5>What the currently working staff are doing right now</h5>
+                <span class="mf-db2-kicker">Mission Status</span>
+                <h5>Live operating metrics and queue pressure</h5>
             </div>
-            <span class="hc-live-panel-hint">Shows only staff who are active in the app or currently on a customer call.</span>
+            <span class="hc-live-panel-hint">Every card below is automatically refreshed and reflects current platform activity.</span>
         </div>
-        <div class="hc-live-activity-grid" id="liveMonitoringActiveGrid">
-            {% for row in staff_rows %}
-                {% if row.is_on_call or row.online_label == "Online" %}
-                <article class="hc-live-monitor-card hc-live-activity-card">
-                    <div class="d-flex align-items-start justify-content-between gap-3">
-                        <div class="hc-staff-persona">
-                            <span class="hc-staff-avatar">{{ row.name|slice:":1"|upper }}</span>
-                            <div class="hc-staff-persona-copy">
-                                <strong>{{ row.name }}</strong>
-                                <span>{{ row.phone }}</span>
-                                <small>{{ row.session_state_label }}</small>
+        <div class="hc-live-command-strip" id="liveMonitoringSummaryGrid">
+            <article class="hc-live-command-card">
+                <span class="hc-live-command-label">Ready In App</span>
+                <strong>{{ summary.online_now }}</strong>
+                <small>{{ summary.active_accounts }} active accounts today</small>
+            </article>
+            <article class="hc-live-command-card">
+                <span class="hc-live-command-label">On Live Calls</span>
+                <strong>{{ summary.on_call_now }}</strong>
+                <small>{{ summary.total_calls_today }} calls recorded today</small>
+            </article>
+            <article class="hc-live-command-card">
+                <span class="hc-live-command-label">Queue Pressure</span>
+                <strong>{{ summary.total_assigned }}</strong>
+                <small>Assigned leads currently waiting</small>
+            </article>
+            <article class="hc-live-command-card">
+                <span class="hc-live-command-label">Review Signals</span>
+                <strong>{{ summary.review_needed_now }}</strong>
+                <small>{{ summary.alert_now }} more alerts need attention</small>
+            </article>
+            <article class="hc-live-command-card">
+                <span class="hc-live-command-label">Active Work</span>
+                <strong>{{ summary.active_hours_label }}</strong>
+                <small>{{ summary.total_converted_today }} successful leads today</small>
+            </article>
+            <article class="hc-live-command-card">
+                <span class="hc-live-command-label">Away Or Offline</span>
+                <strong>{{ summary.away_now|add:summary.offline_now }}</strong>
+                <small>{{ summary.away_now }} away and {{ summary.offline_now }} offline</small>
+            </article>
+        </div>
+    </section>
+
+    <div class="hc-live-layout-grid">
+        <section class="hc-live-panel animate-on-scroll">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Active Stream</span>
+                    <h5>What active staff are doing right now</h5>
+                </div>
+            </div>
+            <div class="hc-live-activity-grid" id="liveMonitoringActiveGrid">
+                {% for row in staff_rows %}
+                    {% if row.is_on_call or row.online_label == "Online" %}
+                    <article class="hc-live-monitor-card hc-live-activity-card">
+                        <div class="d-flex align-items-start justify-content-between gap-3">
+                            <div class="hc-staff-persona">
+                                <span class="hc-staff-avatar">{{ row.name|slice:":1"|upper }}</span>
+                                <div class="hc-staff-persona-copy">
+                                    <strong>{{ row.name }}</strong>
+                                    <span>{{ row.phone }}</span>
+                                    <small>{{ row.session_state_label }}</small>
+                                </div>
                             </div>
+                            <span class="hc-status hc-status-{{ row.status_tone }}">{{ row.online_label }}</span>
                         </div>
-                        <span class="hc-status hc-status-{{ row.status_tone }}">{{ row.online_label }}</span>
-                    </div>
-                    <div class="hc-live-monitor-note mt-3">{{ row.status_note }}</div>
-                    <div class="hc-live-monitor-metrics mt-3">
-                        <span>{{ row.active_hours_today }} worked</span>
-                        <span>{{ row.calls_today }} calls</span>
-                        <span>{{ row.assigned_leads }} queue</span>
-                        <span>{{ row.last_seen }}</span>
-                    </div>
-                    {% if row.current_call %}
-                    <div class="hc-live-monitor-call mt-3">
-                        <strong>{{ row.current_call.lead_name }}</strong>
-                        <span>{{ row.current_call.lead_phone }}</span>
-                        <small>{{ row.current_call.duration_label }} live call</small>
-                    </div>
-                    {% else %}
-                    <div class="hc-live-staff-empty mt-3">Ready in the app and available for the next customer call.</div>
+                        <div class="hc-live-monitor-note mt-3">{{ row.status_note }}</div>
+                        <div class="hc-live-monitor-metrics mt-3">
+                            <span>{{ row.active_hours_today }} worked</span>
+                            <span>{{ row.calls_today }} calls</span>
+                            <span>{{ row.assigned_leads }} queue</span>
+                            <span>{{ row.last_seen }}</span>
+                        </div>
+                        {% if row.current_call %}
+                        <div class="hc-live-monitor-call mt-3">
+                            <strong>{{ row.current_call.lead_name }}</strong>
+                            <span>{{ row.current_call.lead_phone }}</span>
+                            <small>{{ row.current_call.duration_label }} live call</small>
+                        </div>
+                        {% else %}
+                        <div class="hc-live-staff-empty mt-3">Ready in the app and available for the next customer call.</div>
+                        {% endif %}
+                    </article>
                     {% endif %}
-                </article>
-                {% endif %}
-            {% empty %}
-            <div class="hc-work-review-empty-note">No active staff are visible right now.</div>
-            {% endfor %}
-        </div>
-    </section>
+                {% empty %}
+                <div class="hc-work-review-empty-note">No active staff are visible right now.</div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="hc-live-panel animate-on-scroll">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Alert Stream</span>
+                    <h5>Quality and behaviour alerts</h5>
+                </div>
+            </div>
+            <div class="hc-live-alert-grid" id="liveMonitoringAlertGrid">
+                {% for row in staff_rows %}
+                    {% if row.quality_label == "Review Needed" or row.quality_label == "Needs Attention" or row.online_label == "Away" or row.online_label == "Warning" %}
+                    <article class="hc-live-monitor-card hc-live-alert-card">
+                        <div class="d-flex align-items-start justify-content-between gap-3">
+                            <div class="hc-staff-persona">
+                                <span class="hc-staff-avatar">{{ row.name|slice:":1"|upper }}</span>
+                                <div class="hc-staff-persona-copy">
+                                    <strong>{{ row.name }}</strong>
+                                    <span>{{ row.phone }}</span>
+                                    <small>{{ row.compensation_type_label }}</small>
+                                </div>
+                            </div>
+                            <span class="hc-status hc-status-{{ row.quality_tone }}">{{ row.quality_label }}</span>
+                        </div>
+                        <div class="hc-live-monitor-note mt-3">{{ row.quality_note|default:row.status_note }}</div>
+                        <div class="hc-live-monitor-metrics mt-3">
+                            <span>{{ row.gap_count }} gaps</span>
+                            <span>{{ row.gap_uncounted_label }} uncounted</span>
+                            <span>{{ row.zero_only_block_count }} zero-talk blocks</span>
+                        </div>
+                        <div class="hc-live-caption mt-3">
+                            {{ row.attempt_review_label }}. {{ row.real_call_count }} real calls, {{ row.zero_second_attempt_count }} zero-second, {{ row.invalid_short_count }} invalid short.
+                        </div>
+                    </article>
+                    {% endif %}
+                {% empty %}
+                <div class="hc-work-review-empty-note">No live review alerts are visible right now.</div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
 
     <section class="hc-live-panel animate-on-scroll">
-        <div class="mf-db2-panel-head mb-3">
-            <div>
-                <span class="mf-db2-kicker">Attention Queue</span>
-                <h5>Staff who need review or quick follow-up</h5>
-            </div>
-            <span class="hc-live-panel-hint">Keeps review signals, away status, and risky behaviour visible without opening another page.</span>
-        </div>
-        <div class="hc-live-alert-grid" id="liveMonitoringAlertGrid">
-            {% for row in staff_rows %}
-                {% if row.quality_label == "Review Needed" or row.quality_label == "Needs Attention" or row.online_label == "Away" or row.online_label == "Warning" %}
-                <article class="hc-live-monitor-card hc-live-alert-card">
-                    <div class="d-flex align-items-start justify-content-between gap-3">
-                        <div class="hc-staff-persona">
-                            <span class="hc-staff-avatar">{{ row.name|slice:":1"|upper }}</span>
-                            <div class="hc-staff-persona-copy">
-                                <strong>{{ row.name }}</strong>
-                                <span>{{ row.phone }}</span>
-                                <small>{{ row.compensation_type_label }}</small>
-                            </div>
-                        </div>
-                        <span class="hc-status hc-status-{{ row.quality_tone }}">{{ row.quality_label }}</span>
-                    </div>
-                    <div class="hc-live-monitor-note mt-3">{{ row.quality_note|default:row.status_note }}</div>
-                    <div class="hc-live-monitor-metrics mt-3">
-                        <span>{{ row.gap_count }} gaps</span>
-                        <span>{{ row.gap_uncounted_label }} uncounted</span>
-                        <span>{{ row.zero_only_block_count }} zero-talk blocks</span>
-                    </div>
-                    <div class="hc-live-caption mt-3">
-                        {{ row.attempt_review_label }}. {{ row.real_call_count }} real calls, {{ row.zero_second_attempt_count }} zero-second, {{ row.invalid_short_count }} invalid short.
-                    </div>
-                </article>
-                {% endif %}
-            {% empty %}
-            <div class="hc-work-review-empty-note">No live review alerts are visible right now.</div>
-            {% endfor %}
-        </div>
-    </section>
-
-    <section class="hc-live-panel animate-on-scroll mt-4">
         <div class="mf-db2-panel-head mb-3">
             <div>
                 <span class="mf-db2-kicker">Priority Radar</span>
                 <h5>Staff who need attention first</h5>
             </div>
-            <span class="hc-sync-pill"><i class="bi bi-broadcast-pin"></i> Auto refresh every 15 seconds</span>
+            <span class="hc-live-panel-hint">Auto sorted with live calling first, then quality and queue pressure.</span>
         </div>
         <div class="hc-live-monitoring-grid" id="liveMonitoringSpotlightGrid">
             {% for row in spotlight_rows %}
@@ -244,13 +345,13 @@
         </div>
     </section>
 
-    <section class="hc-live-panel animate-on-scroll mt-4">
+    <section class="hc-live-panel animate-on-scroll">
         <div class="mf-db2-panel-head mb-3">
             <div>
-                <span class="mf-db2-kicker">Live Staff Matrix</span>
-                <h5>Detailed behaviour feed across the whole team</h5>
+                <span class="mf-db2-kicker">Team Matrix</span>
+                <h5>Full operational view with quality and gap signals</h5>
             </div>
-            <span class="hc-live-panel-hint">All cards refresh automatically and show the latest call, queue, review, and gap movement.</span>
+            <span class="hc-live-panel-hint">Detailed cards update in real time for every staff member.</span>
         </div>
         <div class="hc-live-staff-grid" id="liveMonitoringStaffGrid">
             {% for row in staff_rows %}
