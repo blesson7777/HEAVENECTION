@@ -16,97 +16,78 @@
 
 <div
     id="heavenectionLiveMonitoringPage"
-    class="hc-live-shell"
+    class="hc-cc-shell"
     data-api-url="{% url 'api-live-monitoring' %}"
     data-team-member-url-template="{% url 'api-team-member-detail' '00000000-0000-0000-0000-000000000000' %}"
     data-profile-url-template="{% url 'staff-profile-page' '00000000-0000-0000-0000-000000000000' %}"
     data-work-review-url="{% url 'work-review-page' %}"
     data-calls-url="{% url 'calls-page' %}"
 >
-    <section class="hc-live-hero animate-on-scroll">
-        <div class="hc-live-hero-copy">
-            <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
-                <div>
-                    <span class="hc-live-eyebrow">Futuristic Command Center</span>
-                    <h2 class="hc-live-title">Run the whole telecalling system from one live dashboard</h2>
-                </div>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <span class="hc-sync-pill"><i class="bi bi-activity"></i> <span id="liveMonitoringGeneratedAt">{{ generated_at_label }}</span></span>
-                    <div class="hc-live-sync-badge is-live" id="liveMonitoringSyncBadge">
-                        <span class="hc-live-sync-dot"></span>
-                        <div class="hc-live-sync-copy">
-                            <strong id="liveMonitoringSyncState">Live Sync Active</strong>
-                            <small id="liveMonitoringSyncDetail">Refreshing this dashboard automatically.</small>
-                        </div>
-                    </div>
+    <section class="hc-cc-hero animate-on-scroll">
+        <div class="hc-cc-hero-graphics" aria-hidden="true">
+            <span class="hc-cc-orb hc-cc-orb-a"></span>
+            <span class="hc-cc-orb hc-cc-orb-b"></span>
+            <span class="hc-cc-orb hc-cc-orb-c"></span>
+            <span class="hc-cc-grid"></span>
+        </div>
+
+        <div class="hc-cc-hero-main">
+            <span class="hc-cc-eyebrow">Live Command Center</span>
+            <h2 class="hc-cc-title">Monitor, control, and guide the full staff operation in one screen</h2>
+            <p class="hc-cc-subtitle">
+                Designed for fast supervision with visual signals, quick actions, and continuous live updates.
+            </p>
+            <div class="hc-cc-pill-row">
+                <span><i class="bi bi-people-fill"></i> Staff activity</span>
+                <span><i class="bi bi-telephone-fill"></i> Call intelligence</span>
+                <span><i class="bi bi-bar-chart-line-fill"></i> Risk and quality</span>
+                <span><i class="bi bi-lightning-charge-fill"></i> Supervisor controls</span>
+            </div>
+        </div>
+
+        <aside class="hc-cc-sync-card">
+            <div class="hc-cc-sync-top">
+                <span class="hc-sync-pill"><i class="bi bi-activity"></i> <span id="liveMonitoringGeneratedAt">{{ generated_at_label }}</span></span>
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-light btn-sm hc-live-fullscreen-button" id="liveMonitoringFullscreenButton">
+                        <i class="bi bi-arrows-fullscreen" id="liveMonitoringFullscreenIcon"></i>
+                        <span id="liveMonitoringFullscreenLabel">Enter Full Screen</span>
+                    </button>
                     <button type="button" class="btn btn-light btn-sm hc-live-refresh-button" id="liveMonitoringRefreshButton">
                         <i class="bi bi-arrow-clockwise"></i>
                         <span>Refresh Now</span>
                     </button>
                 </div>
             </div>
-            <p class="hc-live-subtitle">
-                Track staff behaviour, current calling activity, risk signals, queue pressure, and payout movement in one real-time control room.
-            </p>
-            <div class="hc-live-sync-ribbon">
+            <div class="hc-live-sync-badge is-live" id="liveMonitoringSyncBadge">
+                <span class="hc-live-sync-dot"></span>
+                <div class="hc-live-sync-copy">
+                    <strong id="liveMonitoringSyncState">Live Sync Active</strong>
+                    <small id="liveMonitoringSyncDetail">Refreshing this dashboard automatically.</small>
+                </div>
+            </div>
+            <div class="hc-cc-sync-footer">
                 <span><i class="bi bi-broadcast-pin"></i> Next auto refresh: <strong id="liveMonitoringNextRefresh">5s</strong></span>
-                <span><i class="bi bi-lightning-charge"></i> Returns to instant sync when this tab becomes active.</span>
-            </div>
-            <div class="hc-command-topline">
-                <span><i class="bi bi-people-fill"></i> Staff operations</span>
-                <span><i class="bi bi-telephone-forward-fill"></i> Call intelligence</span>
-                <span><i class="bi bi-cash-stack"></i> Salary controls</span>
-                <span><i class="bi bi-mortarboard-fill"></i> Training and compliance</span>
-            </div>
-        </div>
-
-        <aside class="hc-live-radar-panel">
-            <div class="hc-live-radar">
-                <div class="hc-live-radar-ring hc-live-radar-ring-one"></div>
-                <div class="hc-live-radar-ring hc-live-radar-ring-two"></div>
-                <div class="hc-live-radar-ring hc-live-radar-ring-three"></div>
-                <div class="hc-live-radar-core">
-                    <span>Live Staff</span>
-                    <strong>{{ summary.online_now|add:summary.on_call_now }}</strong>
-                    <small>{{ summary.total_staff }} tracked today</small>
-                </div>
-                <div class="hc-live-radar-node is-online">
-                    <strong>{{ summary.online_now }}</strong>
-                    <span>Ready</span>
-                </div>
-                <div class="hc-live-radar-node is-call">
-                    <strong>{{ summary.on_call_now }}</strong>
-                    <span>On Call</span>
-                </div>
-                <div class="hc-live-radar-node is-alert">
-                    <strong>{{ summary.review_needed_now }}</strong>
-                    <span>Review</span>
-                </div>
-            </div>
-            <div class="hc-live-radar-footer">
-                <div>
-                    <span class="hc-live-mini-label">Converted Today</span>
-                    <strong>{{ summary.total_converted_today }}</strong>
-                </div>
-                <div>
-                    <span class="hc-live-mini-label">Offline Now</span>
-                    <strong>{{ summary.offline_now }}</strong>
-                </div>
-                <div>
-                    <span class="hc-live-mini-label">Away Now</span>
-                    <strong>{{ summary.away_now }}</strong>
-                </div>
+                <span><i class="bi bi-clock-history"></i> Re-syncs instantly when this tab is active.</span>
             </div>
         </aside>
     </section>
 
-    <section class="hc-live-panel animate-on-scroll">
+    <nav class="hc-cc-dock animate-on-scroll" aria-label="Command sections">
+        <a href="#ccOverview"><i class="bi bi-speedometer2"></i><span>Overview</span></a>
+        <a href="#ccLiveLane"><i class="bi bi-radioactive"></i><span>Live Lane</span></a>
+        <a href="#ccIntelligence"><i class="bi bi-cpu-fill"></i><span>Intelligence</span></a>
+        <a href="#ccSupervisor"><i class="bi bi-person-badge-fill"></i><span>Supervisor</span></a>
+        <a href="#ccMatrix"><i class="bi bi-grid-3x3-gap-fill"></i><span>Team Matrix</span></a>
+    </nav>
+
+    <section id="ccOverview" class="hc-cc-panel animate-on-scroll">
         <div class="mf-db2-panel-head mb-3">
             <div>
-                <span class="mf-db2-kicker">Mission Status</span>
-                <h5>Live operating metrics and queue pressure</h5>
+                <span class="mf-db2-kicker">Overview</span>
+                <h5>Current mission metrics</h5>
             </div>
-            <span class="hc-live-panel-hint">Every card below is automatically refreshed and reflects current platform activity.</span>
+            <span class="hc-live-panel-hint">Large visual counters for quick decision making.</span>
         </div>
         <div class="hc-live-command-strip" id="liveMonitoringSummaryGrid">
             <article class="hc-live-command-card">
@@ -142,39 +123,99 @@
         </div>
     </section>
 
-    <section class="hc-live-panel animate-on-scroll">
+    <section id="ccLiveLane" class="hc-cc-panel animate-on-scroll">
         <div class="mf-db2-panel-head mb-3">
             <div>
-                <span class="mf-db2-kicker">Smart Alert Engine</span>
-                <h5>Prioritized action alerts generated from live behaviour</h5>
+                <span class="mf-db2-kicker">Live Lane</span>
+                <h5>What is happening right now</h5>
             </div>
-            <span class="hc-live-panel-hint">High-impact issues are listed first so supervisors can act immediately.</span>
+            <span class="hc-live-panel-hint">Instant operational feed with active staff and alert cards.</span>
         </div>
-        <div class="hc-live-smart-alert-grid" id="liveMonitoringSmartAlerts">
-            <div class="hc-work-review-empty-note">Live alert scoring will appear here.</div>
+        <div class="hc-live-layout-grid">
+            <div>
+                <h6 class="hc-cc-subhead">Active Stream</h6>
+                <div class="hc-live-activity-grid" id="liveMonitoringActiveGrid">
+                    {% for row in staff_rows %}
+                        {% if row.is_on_call or row.online_label == "Online" %}
+                        <article class="hc-live-monitor-card hc-live-activity-card">
+                            <div class="d-flex align-items-start justify-content-between gap-3">
+                                <div class="hc-staff-persona">
+                                    <span class="hc-staff-avatar">{{ row.name|slice:":1"|upper }}</span>
+                                    <div class="hc-staff-persona-copy">
+                                        <strong>{{ row.name }}</strong>
+                                        <span>{{ row.phone }}</span>
+                                        <small>{{ row.session_state_label }}</small>
+                                    </div>
+                                </div>
+                                <span class="hc-status hc-status-{{ row.status_tone }}">{{ row.online_label }}</span>
+                            </div>
+                            <div class="hc-live-monitor-note mt-3">{{ row.status_note }}</div>
+                        </article>
+                        {% endif %}
+                    {% empty %}
+                    <div class="hc-work-review-empty-note">No active staff are visible right now.</div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div>
+                <h6 class="hc-cc-subhead">Alert Stream</h6>
+                <div class="hc-live-alert-grid" id="liveMonitoringAlertGrid">
+                    {% for row in staff_rows %}
+                        {% if row.quality_label == "Review Needed" or row.quality_label == "Needs Attention" or row.online_label == "Away" or row.online_label == "Warning" %}
+                        <article class="hc-live-monitor-card hc-live-alert-card">
+                            <div class="d-flex align-items-start justify-content-between gap-3">
+                                <div class="hc-staff-persona">
+                                    <span class="hc-staff-avatar">{{ row.name|slice:":1"|upper }}</span>
+                                    <div class="hc-staff-persona-copy">
+                                        <strong>{{ row.name }}</strong>
+                                        <span>{{ row.phone }}</span>
+                                        <small>{{ row.compensation_type_label }}</small>
+                                    </div>
+                                </div>
+                                <span class="hc-status hc-status-{{ row.quality_tone }}">{{ row.quality_label }}</span>
+                            </div>
+                            <div class="hc-live-monitor-note mt-3">{{ row.quality_note|default:row.status_note }}</div>
+                        </article>
+                        {% endif %}
+                    {% empty %}
+                    <div class="hc-work-review-empty-note">No live review alerts are visible right now.</div>
+                    {% endfor %}
+                </div>
+            </div>
         </div>
     </section>
 
-    <section class="hc-live-panel animate-on-scroll">
+    <section id="ccIntelligence" class="hc-cc-panel animate-on-scroll">
         <div class="mf-db2-panel-head mb-3">
             <div>
-                <span class="mf-db2-kicker">Queue Health Heatmap</span>
-                <h5>Live queue pressure and risk map across all staff</h5>
+                <span class="mf-db2-kicker">Intelligence</span>
+                <h5>Smart alerts and queue heatmap</h5>
             </div>
-            <span class="hc-live-panel-hint">Shows who is overloaded, balanced, or at risk in one glance.</span>
+            <span class="hc-live-panel-hint">Auto-ranked risk intelligence generated from live behaviour.</span>
         </div>
-        <div class="hc-live-heatmap-grid" id="liveMonitoringQueueHeatmap">
-            <div class="hc-work-review-empty-note">Queue heatmap is loading.</div>
+        <div class="hc-cc-intel-grid">
+            <div>
+                <h6 class="hc-cc-subhead">Smart Alert Engine</h6>
+                <div class="hc-live-smart-alert-grid" id="liveMonitoringSmartAlerts">
+                    <div class="hc-work-review-empty-note">Live alert scoring will appear here.</div>
+                </div>
+            </div>
+            <div>
+                <h6 class="hc-cc-subhead">Queue Health Heatmap</h6>
+                <div class="hc-live-heatmap-grid" id="liveMonitoringQueueHeatmap">
+                    <div class="hc-work-review-empty-note">Queue heatmap is loading.</div>
+                </div>
+            </div>
         </div>
     </section>
 
-    <section class="hc-live-panel animate-on-scroll">
+    <section id="ccSupervisor" class="hc-cc-panel animate-on-scroll">
         <div class="mf-db2-panel-head mb-3">
             <div>
-                <span class="mf-db2-kicker">Supervisor Action Center</span>
-                <h5>Pick a staff member and run quick control actions</h5>
+                <span class="mf-db2-kicker">Supervisor</span>
+                <h5>Action Center</h5>
             </div>
-            <span class="hc-live-panel-hint">Open profile, jump to review pages, and activate or disable staff access instantly.</span>
+            <span class="hc-live-panel-hint">Choose a staff member and perform direct supervisory actions.</span>
         </div>
         <div class="hc-live-supervisor-grid">
             <div id="liveMonitoringSupervisorRoster" class="hc-live-supervisor-roster">
@@ -187,101 +228,15 @@
         <div id="liveMonitoringSupervisorFeedback" class="hc-live-supervisor-feedback d-none"></div>
     </section>
 
-    <div class="hc-live-layout-grid">
-        <section class="hc-live-panel animate-on-scroll">
-            <div class="mf-db2-panel-head mb-3">
-                <div>
-                    <span class="mf-db2-kicker">Active Stream</span>
-                    <h5>What active staff are doing right now</h5>
-                </div>
-            </div>
-            <div class="hc-live-activity-grid" id="liveMonitoringActiveGrid">
-                {% for row in staff_rows %}
-                    {% if row.is_on_call or row.online_label == "Online" %}
-                    <article class="hc-live-monitor-card hc-live-activity-card">
-                        <div class="d-flex align-items-start justify-content-between gap-3">
-                            <div class="hc-staff-persona">
-                                <span class="hc-staff-avatar">{{ row.name|slice:":1"|upper }}</span>
-                                <div class="hc-staff-persona-copy">
-                                    <strong>{{ row.name }}</strong>
-                                    <span>{{ row.phone }}</span>
-                                    <small>{{ row.session_state_label }}</small>
-                                </div>
-                            </div>
-                            <span class="hc-status hc-status-{{ row.status_tone }}">{{ row.online_label }}</span>
-                        </div>
-                        <div class="hc-live-monitor-note mt-3">{{ row.status_note }}</div>
-                        <div class="hc-live-monitor-metrics mt-3">
-                            <span>{{ row.active_hours_today }} worked</span>
-                            <span>{{ row.calls_today }} calls</span>
-                            <span>{{ row.assigned_leads }} queue</span>
-                            <span>{{ row.last_seen }}</span>
-                        </div>
-                        {% if row.current_call %}
-                        <div class="hc-live-monitor-call mt-3">
-                            <strong>{{ row.current_call.lead_name }}</strong>
-                            <span>{{ row.current_call.lead_phone }}</span>
-                            <small>{{ row.current_call.duration_label }} live call</small>
-                        </div>
-                        {% else %}
-                        <div class="hc-live-staff-empty mt-3">Ready in the app and available for the next customer call.</div>
-                        {% endif %}
-                    </article>
-                    {% endif %}
-                {% empty %}
-                <div class="hc-work-review-empty-note">No active staff are visible right now.</div>
-                {% endfor %}
-            </div>
-        </section>
-
-        <section class="hc-live-panel animate-on-scroll">
-            <div class="mf-db2-panel-head mb-3">
-                <div>
-                    <span class="mf-db2-kicker">Alert Stream</span>
-                    <h5>Quality and behaviour alerts</h5>
-                </div>
-            </div>
-            <div class="hc-live-alert-grid" id="liveMonitoringAlertGrid">
-                {% for row in staff_rows %}
-                    {% if row.quality_label == "Review Needed" or row.quality_label == "Needs Attention" or row.online_label == "Away" or row.online_label == "Warning" %}
-                    <article class="hc-live-monitor-card hc-live-alert-card">
-                        <div class="d-flex align-items-start justify-content-between gap-3">
-                            <div class="hc-staff-persona">
-                                <span class="hc-staff-avatar">{{ row.name|slice:":1"|upper }}</span>
-                                <div class="hc-staff-persona-copy">
-                                    <strong>{{ row.name }}</strong>
-                                    <span>{{ row.phone }}</span>
-                                    <small>{{ row.compensation_type_label }}</small>
-                                </div>
-                            </div>
-                            <span class="hc-status hc-status-{{ row.quality_tone }}">{{ row.quality_label }}</span>
-                        </div>
-                        <div class="hc-live-monitor-note mt-3">{{ row.quality_note|default:row.status_note }}</div>
-                        <div class="hc-live-monitor-metrics mt-3">
-                            <span>{{ row.gap_count }} gaps</span>
-                            <span>{{ row.gap_uncounted_label }} uncounted</span>
-                            <span>{{ row.zero_only_block_count }} zero-talk blocks</span>
-                        </div>
-                        <div class="hc-live-caption mt-3">
-                            {{ row.attempt_review_label }}. {{ row.real_call_count }} real calls, {{ row.zero_second_attempt_count }} zero-second, {{ row.invalid_short_count }} invalid short.
-                        </div>
-                    </article>
-                    {% endif %}
-                {% empty %}
-                <div class="hc-work-review-empty-note">No live review alerts are visible right now.</div>
-                {% endfor %}
-            </div>
-        </section>
-    </div>
-
-    <section class="hc-live-panel animate-on-scroll">
+    <section id="ccMatrix" class="hc-cc-panel animate-on-scroll">
         <div class="mf-db2-panel-head mb-3">
             <div>
-                <span class="mf-db2-kicker">Priority Radar</span>
-                <h5>Staff who need attention first</h5>
+                <span class="mf-db2-kicker">Team Matrix</span>
+                <h5>Priority radar and full staff matrix</h5>
             </div>
-            <span class="hc-live-panel-hint">Auto sorted with live calling first, then quality and queue pressure.</span>
+            <span class="hc-live-panel-hint">Every staff card is updated live with calling, queue, and risk signals.</span>
         </div>
+        <h6 class="hc-cc-subhead">Priority Radar</h6>
         <div class="hc-live-monitoring-grid" id="liveMonitoringSpotlightGrid">
             {% for row in spotlight_rows %}
             <article class="hc-live-monitor-card">
@@ -291,39 +246,18 @@
                         <div class="hc-staff-persona-copy">
                             <strong>{{ row.name }}</strong>
                             <span>{{ row.phone }}</span>
-                            <small>{{ row.compensation_type_label }}</small>
                         </div>
                     </div>
                     <span class="hc-status hc-status-{{ row.status_tone }}">{{ row.online_label }}</span>
                 </div>
                 <div class="hc-live-monitor-note mt-3">{{ row.status_note }}</div>
-                <div class="hc-live-monitor-metrics mt-3">
-                    <span>{{ row.active_hours_today }} worked</span>
-                    <span>{{ row.calls_today }} calls</span>
-                    <span>{{ row.assigned_leads }} queue</span>
-                </div>
-                {% if row.current_call %}
-                <div class="hc-live-monitor-call mt-3">
-                    <strong>{{ row.current_call.lead_name }}</strong>
-                    <span>{{ row.current_call.lead_phone }}</span>
-                    <small>{{ row.current_call.duration_label }} live call</small>
-                </div>
-                {% endif %}
             </article>
             {% empty %}
             <div class="hc-work-review-empty-note">No live staff activity is available right now.</div>
             {% endfor %}
         </div>
-    </section>
 
-    <section class="hc-live-panel animate-on-scroll">
-        <div class="mf-db2-panel-head mb-3">
-            <div>
-                <span class="mf-db2-kicker">Team Matrix</span>
-                <h5>Full operational view with quality and gap signals</h5>
-            </div>
-            <span class="hc-live-panel-hint">Detailed cards update in real time for every staff member.</span>
-        </div>
+        <h6 class="hc-cc-subhead mt-4">Full Team Matrix</h6>
         <div class="hc-live-staff-grid" id="liveMonitoringStaffGrid">
             {% for row in staff_rows %}
             <article class="hc-live-staff-card">
@@ -333,69 +267,11 @@
                         <div class="hc-staff-persona-copy">
                             <strong>{{ row.name }}</strong>
                             <span>{{ row.phone }}</span>
-                            <small>{{ row.compensation_type_label }}</small>
                         </div>
                     </div>
                     <span class="hc-status hc-status-{{ row.status_tone }}">{{ row.online_label }}</span>
                 </div>
-
-                <div class="hc-live-staff-meta">
-                    <div>
-                        <span class="hc-live-mini-label">Session</span>
-                        <strong>{{ row.session_state_label }}</strong>
-                    </div>
-                    <div>
-                        <span class="hc-live-mini-label">Last Seen</span>
-                        <strong>{{ row.last_seen }}</strong>
-                    </div>
-                </div>
-
                 <p class="hc-live-staff-note">{{ row.status_note }}</p>
-
-                {% if row.current_call %}
-                <div class="hc-live-monitor-call">
-                    <strong>{{ row.current_call.lead_name }}</strong>
-                    <span>{{ row.current_call.lead_phone }}</span>
-                    <small>{{ row.current_call.duration_label }} live</small>
-                </div>
-                {% else %}
-                <div class="hc-live-staff-empty">No live customer call right now.</div>
-                {% endif %}
-
-                <div class="hc-live-staff-columns">
-                    <div class="hc-live-data-stack">
-                        <span class="hc-live-mini-label">Today</span>
-                        <div class="hc-live-pill-row">
-                            <span class="hc-live-pill">{{ row.active_hours_today }}</span>
-                            <span class="hc-live-pill">{{ row.calls_today }} calls</span>
-                            <span class="hc-live-pill">{{ row.converted_today }} success</span>
-                            <span class="hc-live-pill">{{ row.assigned_leads }} queue</span>
-                            <span class="hc-live-pill">{{ row.call_time_label }} call time</span>
-                        </div>
-                    </div>
-                    <div class="hc-live-data-stack">
-                        <span class="hc-live-mini-label">Review</span>
-                        <div class="hc-quality-card-head">
-                            <strong>{{ row.quality_score }}</strong>
-                            <span class="hc-status hc-status-{{ row.quality_tone }}">{{ row.quality_label }}</span>
-                        </div>
-                        <div class="hc-live-caption">{{ row.attempt_review_label }}</div>
-                        <div class="hc-live-caption">
-                            {{ row.real_call_count }} real &middot; {{ row.zero_second_attempt_count }} zero-second &middot; {{ row.invalid_short_count }} invalid short
-                        </div>
-                    </div>
-                    <div class="hc-live-data-stack">
-                        <span class="hc-live-mini-label">Gaps And Review Blocks</span>
-                        <div class="hc-live-pill-row">
-                            <span class="hc-live-pill">{{ row.gap_count }} gaps</span>
-                            <span class="hc-live-pill">{{ row.gap_uncounted_label }} uncounted</span>
-                            <span class="hc-live-pill">{{ row.away_review_label }}</span>
-                        </div>
-                        <div class="hc-live-caption">
-                            {{ row.suspicious_block_count }} review block(s) &middot; {{ row.zero_only_block_count }} zero-talk block(s)
-                        </div>
-                    </div>
-                </div>
             </article>
             {% empty %}
             <div class="hc-work-review-empty-note">No live monitoring details are available right now.</div>

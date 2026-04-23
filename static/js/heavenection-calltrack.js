@@ -1424,6 +1424,9 @@
         const syncDetailNode = document.getElementById("liveMonitoringSyncDetail");
         const nextRefreshNode = document.getElementById("liveMonitoringNextRefresh");
         const refreshButton = document.getElementById("liveMonitoringRefreshButton");
+        const fullscreenButton = document.getElementById("liveMonitoringFullscreenButton");
+        const fullscreenLabel = document.getElementById("liveMonitoringFullscreenLabel");
+        const fullscreenIcon = document.getElementById("liveMonitoringFullscreenIcon");
         const liveRefreshMs = 5000;
         let refreshInFlight = false;
         let refreshTimer = null;
@@ -1435,6 +1438,46 @@
         function asNumber(value) {
             const number = Number(value || 0);
             return Number.isFinite(number) ? number : 0;
+        }
+
+        function isFullscreenSupported() {
+            return Boolean(root?.requestFullscreen && document?.exitFullscreen);
+        }
+
+        function isRootFullscreen() {
+            return document.fullscreenElement === root;
+        }
+
+        function syncFullscreenUi() {
+            if (!fullscreenButton) {
+                return;
+            }
+            const active = isRootFullscreen();
+            root.classList.toggle("is-fullscreen", active);
+            if (fullscreenLabel) {
+                fullscreenLabel.textContent = active ? "Exit Full Screen" : "Enter Full Screen";
+            }
+            if (fullscreenIcon) {
+                fullscreenIcon.className = active ? "bi bi-fullscreen-exit" : "bi bi-arrows-fullscreen";
+            }
+            fullscreenButton.setAttribute("aria-pressed", active ? "true" : "false");
+        }
+
+        async function toggleFullscreenMode() {
+            if (!isFullscreenSupported()) {
+                return;
+            }
+            try {
+                if (isRootFullscreen()) {
+                    await document.exitFullscreen();
+                } else {
+                    await root.requestFullscreen();
+                }
+            } catch (error) {
+                // Ignore browser-level fullscreen restrictions and keep UI stable.
+            } finally {
+                syncFullscreenUi();
+            }
         }
 
         function withTemplateId(urlTemplate, staffId) {
@@ -2172,6 +2215,22 @@
         ensureCountdown();
         scheduleRefresh(liveRefreshMs);
         refreshButton?.addEventListener("click", () => refreshPayload({ silent: false }));
+        if (fullscreenButton) {
+            if (!isFullscreenSupported()) {
+                fullscreenButton.disabled = true;
+                if (fullscreenLabel) {
+                    fullscreenLabel.textContent = "Full Screen Unavailable";
+                }
+            } else {
+                syncFullscreenUi();
+                fullscreenButton.addEventListener("click", () => {
+                    toggleFullscreenMode();
+                });
+                document.addEventListener("fullscreenchange", () => {
+                    syncFullscreenUi();
+                });
+            }
+        }
         document.addEventListener("visibilitychange", () => {
             if (document.hidden) {
                 clearScheduledRefresh();
