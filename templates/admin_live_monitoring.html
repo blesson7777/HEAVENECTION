@@ -217,6 +217,52 @@
             </div>
             <span class="hc-live-panel-hint">Choose a staff member and perform direct supervisory actions.</span>
         </div>
+        <div class="hc-live-command-toolbar">
+            <label class="hc-live-command-field">
+                <span>Search Staff</span>
+                <input
+                    type="search"
+                    id="liveMonitoringStaffSearch"
+                    class="form-control form-control-sm"
+                    placeholder="Search by name or phone"
+                    autocomplete="off"
+                >
+            </label>
+            <label class="hc-live-command-field">
+                <span>Status</span>
+                <select id="liveMonitoringStaffStatus" class="form-select form-select-sm">
+                    <option value="all">All Staff</option>
+                    <option value="on_call">On Call</option>
+                    <option value="online">Online</option>
+                    <option value="away">Away or Warning</option>
+                    <option value="review">Needs Review</option>
+                    <option value="offline">Offline</option>
+                </select>
+            </label>
+            <label class="hc-live-command-field">
+                <span>Sort By</span>
+                <select id="liveMonitoringStaffSort" class="form-select form-select-sm">
+                    <option value="priority">Priority</option>
+                    <option value="calls">Calls Today</option>
+                    <option value="queue">Queue Size</option>
+                    <option value="quality">Quality Score</option>
+                    <option value="name">Name</option>
+                </select>
+            </label>
+            <div class="hc-live-command-actions">
+                <button type="button" class="btn btn-outline-primary btn-sm" id="liveMonitoringSelectAllButton">
+                    <i class="bi bi-check2-square"></i>
+                    <span>Select All Visible</span>
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="liveMonitoringClearSelectionButton">
+                    <i class="bi bi-x-square"></i>
+                    <span>Clear Selection</span>
+                </button>
+            </div>
+        </div>
+        <div id="liveMonitoringSelectionSummary" class="hc-live-selection-summary">
+            <div class="hc-work-review-empty-note">Select staff to see combined performance snapshot.</div>
+        </div>
         <div class="hc-live-supervisor-grid">
             <div id="liveMonitoringSupervisorRoster" class="hc-live-supervisor-roster">
                 <div class="hc-work-review-empty-note">Staff roster is loading.</div>

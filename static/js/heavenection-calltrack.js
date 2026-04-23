@@ -1427,6 +1427,12 @@
         const fullscreenButton = document.getElementById("liveMonitoringFullscreenButton");
         const fullscreenLabel = document.getElementById("liveMonitoringFullscreenLabel");
         const fullscreenIcon = document.getElementById("liveMonitoringFullscreenIcon");
+        const supervisorSearchInput = document.getElementById("liveMonitoringStaffSearch");
+        const supervisorStatusSelect = document.getElementById("liveMonitoringStaffStatus");
+        const supervisorSortSelect = document.getElementById("liveMonitoringStaffSort");
+        const selectAllVisibleButton = document.getElementById("liveMonitoringSelectAllButton");
+        const clearSelectionButton = document.getElementById("liveMonitoringClearSelectionButton");
+        const selectionSummaryNode = document.getElementById("liveMonitoringSelectionSummary");
         const liveRefreshMs = 5000;
         let refreshInFlight = false;
         let refreshTimer = null;
@@ -1434,11 +1440,18 @@
         let nextRefreshAt = null;
         let latestStaffRows = [];
         let selectedStaffId = "";
+        const selectedStaffIds = new Set();
+        let supervisorSearchTerm = "";
+        let supervisorStatusFilter = "all";
+        let supervisorSortMode = "priority";
 
         function asNumber(value) {
             const number = Number(value || 0);
             return Number.isFinite(number) ? number : 0;
         }
+
+        const focusModeClass = "hc-live-monitoring-focus";
+        let fallbackFocusMode = false;
 
         function isFullscreenSupported() {
             return Boolean(root?.requestFullscreen && document?.exitFullscreen);
@@ -1448,14 +1461,28 @@
             return document.fullscreenElement === root;
         }
 
+        function applyFocusMode(active) {
+            root.classList.toggle("is-fullscreen", active);
+            document.body.classList.toggle(focusModeClass, active);
+            document.documentElement.classList.toggle(focusModeClass, active);
+        }
+
+        function isFocusModeActive() {
+            return isRootFullscreen() || fallbackFocusMode;
+        }
+
         function syncFullscreenUi() {
             if (!fullscreenButton) {
                 return;
             }
-            const active = isRootFullscreen();
-            root.classList.toggle("is-fullscreen", active);
+            const active = isFocusModeActive();
+            applyFocusMode(active);
             if (fullscreenLabel) {
-                fullscreenLabel.textContent = active ? "Exit Full Screen" : "Enter Full Screen";
+                if (isFullscreenSupported()) {
+                    fullscreenLabel.textContent = active ? "Exit Full Screen" : "Enter Full Screen";
+                } else {
+                    fullscreenLabel.textContent = active ? "Exit Focus Mode" : "Focus Mode";
+                }
             }
             if (fullscreenIcon) {
                 fullscreenIcon.className = active ? "bi bi-fullscreen-exit" : "bi bi-arrows-fullscreen";
@@ -1464,17 +1491,27 @@
         }
 
         async function toggleFullscreenMode() {
+            const targetState = !isFocusModeActive();
+
             if (!isFullscreenSupported()) {
+                fallbackFocusMode = targetState;
+                syncFullscreenUi();
                 return;
             }
+
             try {
-                if (isRootFullscreen()) {
-                    await document.exitFullscreen();
+                if (!targetState) {
+                    fallbackFocusMode = false;
+                    if (isRootFullscreen()) {
+                        await document.exitFullscreen();
+                    }
                 } else {
+                    fallbackFocusMode = false;
                     await root.requestFullscreen();
                 }
             } catch (error) {
-                // Ignore browser-level fullscreen restrictions and keep UI stable.
+                // If browser fullscreen is blocked, keep focus mode available as a fallback.
+                fallbackFocusMode = targetState;
             } finally {
                 syncFullscreenUi();
             }
@@ -1511,6 +1548,158 @@
                 return fromTemplate;
             }
             return `/staff/${staffId}/`;
+        }
+
+        function resolveStaffId(row) {
+            const directId = String(row?.id || "").trim();
+            if (directId) {
+                return directId;
+            }
+            const rowPhone = String(row?.phone || "").trim();
+            if (!rowPhone) {
+                return "";
+            }
+            const match = latestStaffRows.find((staffRow) => String(staffRow?.phone || "").trim() === rowPhone);
+            return String(match?.id || "").trim();
+        }
+
+        function resolveProfileUrlForRow(row) {
+            return resolveProfileUrl(resolveStaffId(row));
+        }
+
+        function normalizeStaffText(value) {
+            return String(value || "").trim().toLowerCase();
+        }
+
+        function matchesSupervisorStatus(row, filterValue) {
+            switch (filterValue) {
+            case "on_call":
+                return Boolean(row?.is_on_call);
+            case "online":
+                return row?.online_label === "Online";
+            case "away":
+                return row?.online_label === "Away" || row?.online_label === "Warning";
+            case "review":
+                return row?.quality_label === "Review Needed" || row?.quality_label === "Needs Attention";
+            case "offline":
+                return row?.online_label === "Offline";
+            default:
+                return true;
+            }
+        }
+
+        function getSupervisorRosterRows(rows) {
+            const query = normalizeStaffText(supervisorSearchTerm);
+            const filtered = (Array.isArray(rows) ? rows : []).filter((row) => {
+                if (!matchesSupervisorStatus(row, supervisorStatusFilter)) {
+                    return false;
+                }
+                if (!query) {
+                    return true;
+                }
+                const haystack = [
+                    normalizeStaffText(row?.name),
+                    normalizeStaffText(row?.phone),
+                ].join(" ");
+                return haystack.includes(query);
+            });
+
+            return filtered.slice().sort((left, right) => {
+                if (supervisorSortMode === "name") {
+                    return String(left?.name || "").localeCompare(String(right?.name || ""));
+                }
+                if (supervisorSortMode === "calls") {
+                    return asNumber(right?.calls_today) - asNumber(left?.calls_today)
+                        || String(left?.name || "").localeCompare(String(right?.name || ""));
+                }
+                if (supervisorSortMode === "queue") {
+                    return asNumber(right?.assigned_leads) - asNumber(left?.assigned_leads)
+                        || String(left?.name || "").localeCompare(String(right?.name || ""));
+                }
+                if (supervisorSortMode === "quality") {
+                    return asNumber(left?.quality_score) - asNumber(right?.quality_score)
+                        || String(left?.name || "").localeCompare(String(right?.name || ""));
+                }
+
+                const leftReview = left?.quality_label === "Review Needed" || left?.quality_label === "Needs Attention" ? 1 : 0;
+                const rightReview = right?.quality_label === "Review Needed" || right?.quality_label === "Needs Attention" ? 1 : 0;
+                return (right?.is_on_call ? 1 : 0) - (left?.is_on_call ? 1 : 0)
+                    || rightReview - leftReview
+                    || riskScore(right) - riskScore(left)
+                    || asNumber(right?.assigned_leads) - asNumber(left?.assigned_leads)
+                    || String(left?.name || "").localeCompare(String(right?.name || ""));
+            });
+        }
+
+        function renderSelectionSummary(filteredRows) {
+            if (!selectionSummaryNode) {
+                return;
+            }
+
+            const selectedRows = filteredRows.filter((row) => selectedStaffIds.has(resolveStaffId(row)));
+            const scopeRows = selectedRows.length ? selectedRows : filteredRows;
+            if (!scopeRows.length) {
+                selectionSummaryNode.innerHTML = "<div class=\"hc-work-review-empty-note\">No staff match this filter.</div>";
+                return;
+            }
+
+            const totalCalls = scopeRows.reduce((sum, row) => sum + asNumber(row.calls_today), 0);
+            const totalQueue = scopeRows.reduce((sum, row) => sum + asNumber(row.assigned_leads), 0);
+            const totalConverted = scopeRows.reduce((sum, row) => sum + asNumber(row.converted_today), 0);
+            const onCallCount = scopeRows.filter((row) => row?.is_on_call).length;
+            const reviewCount = scopeRows.filter((row) => (
+                row?.quality_label === "Review Needed" || row?.quality_label === "Needs Attention"
+            )).length;
+            const averageQuality = Math.round(scopeRows.reduce((sum, row) => sum + asNumber(row.quality_score), 0) / scopeRows.length);
+
+            selectionSummaryNode.innerHTML = `
+                <div class="hc-live-selection-head">
+                    <strong>${selectedRows.length ? `${selectedRows.length} selected staff` : `${filteredRows.length} visible staff`}</strong>
+                    <small>${selectedRows.length ? "Performance snapshot from selected staff." : "Performance snapshot from current filtered view."}</small>
+                </div>
+                <div class="hc-live-selection-metrics">
+                    <span><strong>${scopeRows.length}</strong> team members</span>
+                    <span><strong>${onCallCount}</strong> on call now</span>
+                    <span><strong>${totalCalls}</strong> calls today</span>
+                    <span><strong>${totalConverted}</strong> success today</span>
+                    <span><strong>${totalQueue}</strong> queued leads</span>
+                    <span><strong>${averageQuality}</strong> avg quality</span>
+                    <span><strong>${reviewCount}</strong> need review</span>
+                </div>
+                <div class="hc-live-selection-links">
+                    ${scopeRows.slice(0, 12).map((row) => `
+                        <a href="${escapeHtml(resolveProfileUrlForRow(row))}" class="hc-live-selection-link">
+                            ${escapeHtml(row?.name || "Staff")}
+                        </a>
+                    `).join("")}
+                    ${scopeRows.length > 12 ? `<span class="hc-live-selection-more">+${scopeRows.length - 12} more</span>` : ""}
+                </div>
+            `;
+        }
+
+        function bindProfileCardNavigation(container) {
+            if (!container) {
+                return;
+            }
+            container.querySelectorAll(".js-live-profile-card").forEach((card) => {
+                const profileUrl = card.dataset.profileUrl || "";
+                if (!profileUrl || profileUrl === "#") {
+                    return;
+                }
+                card.addEventListener("click", (event) => {
+                    const interactiveTarget = event.target.closest("a, button, input, select, textarea, label");
+                    if (interactiveTarget) {
+                        return;
+                    }
+                    window.location.href = profileUrl;
+                });
+                card.addEventListener("keydown", (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        window.location.href = profileUrl;
+                    }
+                });
+            });
         }
 
         function clearSupervisorFeedback() {
@@ -1651,7 +1840,7 @@
                         <span>${asNumber(alert.row.zero_only_block_count)} zero blocks</span>
                         <span>${asNumber(alert.row.gap_count)} gaps</span>
                     </div>
-                    <button type="button" class="btn btn-outline-light btn-sm mt-3 js-live-open-supervisor" data-staff-id="${escapeHtml(alert.row.id || "")}">
+                    <button type="button" class="btn btn-outline-light btn-sm mt-3 js-live-open-supervisor" data-staff-id="${escapeHtml(resolveStaffId(alert.row))}">
                         Open In Action Center
                     </button>
                 </article>
@@ -1663,7 +1852,7 @@
                         return;
                     }
                     selectedStaffId = staffId;
-                    renderSupervisorCenter(latestStaffRows);
+                    renderSupervisorCenterEnhanced(latestStaffRows);
                     supervisorDetail?.scrollIntoView({ behavior: "smooth", block: "start" });
                 });
             });
@@ -1743,23 +1932,28 @@
         }
 
         function renderSupervisorCenter(rows) {
+            return renderSupervisorCenterEnhanced(rows);
             if (!supervisorRoster || !supervisorDetail) {
                 return;
             }
             const rosterRows = Array.isArray(rows) ? rows : [];
-            if (!rosterRows.length) {
-                supervisorRoster.innerHTML = '<div class="hc-work-review-empty-note">No staff records are available.</div>';
+            const knownStaffIds = new Set(rosterRows.map((row) => resolveStaffId(row)).filter(Boolean));
+            selectedStaffIds.forEach((staffId) => {
+                if (!knownStaffIds.has(staffId)) {
+                    selectedStaffIds.delete(staffId);
+                }
+            });
+
+            const orderedRows = getSupervisorRosterRows(rosterRows);
+            renderSelectionSummary(orderedRows);
+            if (!orderedRows.length) {
+                supervisorRoster.innerHTML = '<div class="hc-work-review-empty-note">No staff records match this filter.</div>';
                 supervisorDetail.innerHTML = '<div class="hc-work-review-empty-note">No staff member selected.</div>';
                 return;
             }
 
-            const orderedRows = rosterRows.slice().sort((left, right) => (
-                (right.is_on_call ? 1 : 0) - (left.is_on_call ? 1 : 0)
-                || asNumber(right.assigned_leads) - asNumber(left.assigned_leads)
-                || left.name.localeCompare(right.name)
-            ));
-            if (!selectedStaffId || !orderedRows.some((row) => row.id === selectedStaffId)) {
-                selectedStaffId = orderedRows[0].id;
+            if (!selectedStaffId || !orderedRows.some((row) => resolveStaffId(row) === selectedStaffId)) {
+                selectedStaffId = resolveStaffId(orderedRows[0]);
             }
 
             supervisorRoster.innerHTML = orderedRows.map((row) => `
@@ -1830,6 +2024,178 @@
                     </button>
                 </div>
             `;
+            supervisorDetail.querySelectorAll(".js-live-toggle-staff").forEach((button) => {
+                button.addEventListener("click", async () => {
+                    const staffId = button.dataset.staffId || "";
+                    const staffName = button.dataset.staffName || "Staff";
+                    const nextActive = button.dataset.nextActive === "true";
+                    const detailUrl = resolveTeamMemberUrl(staffId);
+                    if (!detailUrl) {
+                        showSupervisorFeedback("Staff control URL is not available right now.", true);
+                        return;
+                    }
+                    button.disabled = true;
+                    clearSupervisorFeedback();
+                    try {
+                        await requestJson(detailUrl, {
+                            method: "PATCH",
+                            body: JSON.stringify({ is_active: nextActive }),
+                        });
+                        showSupervisorFeedback(`${staffName} is now ${nextActive ? "active" : "disabled"}.`, false);
+                        refreshPayload({ silent: false });
+                    } catch (error) {
+                        showSupervisorFeedback(error.message || "Unable to update staff access right now.", true);
+                    } finally {
+                        button.disabled = false;
+                    }
+                });
+            });
+        }
+
+        function renderSupervisorCenterEnhanced(rows) {
+            if (!supervisorRoster || !supervisorDetail) {
+                return;
+            }
+            const rosterRows = Array.isArray(rows) ? rows : [];
+            const knownStaffIds = new Set(rosterRows.map((row) => resolveStaffId(row)).filter(Boolean));
+            selectedStaffIds.forEach((staffId) => {
+                if (!knownStaffIds.has(staffId)) {
+                    selectedStaffIds.delete(staffId);
+                }
+            });
+
+            const orderedRows = getSupervisorRosterRows(rosterRows);
+            renderSelectionSummary(orderedRows);
+            if (!orderedRows.length) {
+                supervisorRoster.innerHTML = '<div class="hc-work-review-empty-note">No staff records match this filter.</div>';
+                supervisorDetail.innerHTML = '<div class="hc-work-review-empty-note">No staff member selected.</div>';
+                return;
+            }
+
+            if (!selectedStaffId || !orderedRows.some((row) => resolveStaffId(row) === selectedStaffId)) {
+                selectedStaffId = resolveStaffId(orderedRows[0]);
+            }
+
+            supervisorRoster.innerHTML = orderedRows.map((row) => {
+                const rowId = resolveStaffId(row);
+                const isMarked = selectedStaffIds.has(rowId);
+                const profileUrl = resolveProfileUrl(rowId);
+                return `
+                    <div class="hc-live-supervisor-item ${rowId === selectedStaffId ? "is-selected" : ""}">
+                        <button type="button" class="hc-live-supervisor-main js-live-open-staff" data-staff-id="${escapeHtml(rowId)}">
+                            <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
+                            <span class="hc-live-supervisor-copy">
+                                <strong>${escapeHtml(row.name || "Staff")}</strong>
+                                <small>${escapeHtml(row.online_label || "Offline")} · ${asNumber(row.assigned_leads)} queue</small>
+                            </span>
+                            <span class="hc-status hc-status-${escapeHtml(row.quality_tone || "muted")}">${escapeHtml(row.quality_label || "No Recent Activity")}</span>
+                        </button>
+                        <div class="hc-live-supervisor-tools">
+                            <a href="${escapeHtml(profileUrl)}" class="btn btn-outline-light btn-sm hc-live-supervisor-link" title="Open profile">
+                                <i class="bi bi-box-arrow-up-right"></i>
+                            </a>
+                            <button type="button" class="btn btn-sm ${isMarked ? "btn-primary" : "btn-outline-light"} js-live-select-staff" data-staff-id="${escapeHtml(rowId)}">
+                                ${isMarked ? "Selected" : "Select"}
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+            supervisorRoster.querySelectorAll(".js-live-open-staff").forEach((button) => {
+                button.addEventListener("click", () => {
+                    selectedStaffId = button.dataset.staffId || "";
+                    clearSupervisorFeedback();
+                    renderSupervisorCenterEnhanced(latestStaffRows);
+                });
+            });
+            supervisorRoster.querySelectorAll(".js-live-select-staff").forEach((button) => {
+                button.addEventListener("click", () => {
+                    const staffId = button.dataset.staffId || "";
+                    if (!staffId) {
+                        return;
+                    }
+                    if (selectedStaffIds.has(staffId)) {
+                        selectedStaffIds.delete(staffId);
+                    } else {
+                        selectedStaffIds.add(staffId);
+                    }
+                    renderSupervisorCenterEnhanced(latestStaffRows);
+                });
+            });
+
+            const selectedRow = orderedRows.find((row) => resolveStaffId(row) === selectedStaffId);
+            if (!selectedRow) {
+                supervisorDetail.innerHTML = '<div class="hc-work-review-empty-note">No staff member selected.</div>';
+                return;
+            }
+
+            const selectedRowId = resolveStaffId(selectedRow);
+            const profileUrl = resolveProfileUrl(selectedRowId);
+            const openCallsUrl = `${callsUrl}${callsUrl.includes("?") ? "&" : "?"}staff=${encodeURIComponent(selectedRowId)}`;
+            const reviewUrl = `${workReviewUrl}${workReviewUrl.includes("?") ? "&" : "?"}staff=${encodeURIComponent(selectedRowId)}`;
+            const isActive = selectedRow.is_active !== false;
+            const selectedInScope = selectedStaffIds.has(selectedRowId);
+
+            supervisorDetail.innerHTML = `
+                <div class="hc-live-supervisor-head">
+                    <div class="hc-staff-persona">
+                        <span class="hc-staff-avatar">${escapeHtml((selectedRow.name || "S").slice(0, 1).toUpperCase())}</span>
+                        <div class="hc-staff-persona-copy">
+                            <strong>${escapeHtml(selectedRow.name || "Staff")}</strong>
+                            <span>${escapeHtml(selectedRow.phone || "--")}</span>
+                            <small>${escapeHtml(selectedRow.session_state_label || "--")}</small>
+                        </div>
+                    </div>
+                    <span class="hc-status hc-status-${escapeHtml(selectedRow.status_tone || "muted")}">${escapeHtml(selectedRow.online_label || "Offline")}</span>
+                </div>
+                <div class="hc-live-supervisor-metrics">
+                    <span>${escapeHtml(selectedRow.active_hours_today || "0.0h")} worked</span>
+                    <span>${asNumber(selectedRow.calls_today)} calls</span>
+                    <span>${asNumber(selectedRow.assigned_leads)} queue</span>
+                    <span>${asNumber(selectedRow.zero_only_block_count)} zero blocks</span>
+                    <span>${asNumber(selectedRow.gap_count)} gaps</span>
+                    <span>${asNumber(selectedRow.quality_score)} quality score</span>
+                </div>
+                <p class="hc-live-caption">${escapeHtml(selectedRow.quality_note || selectedRow.status_note || "")}</p>
+                <div class="hc-live-supervisor-actions">
+                    <a href="${escapeHtml(profileUrl)}" class="btn btn-outline-light btn-sm">
+                        <i class="bi bi-person-vcard"></i>
+                        <span>Open Profile</span>
+                    </a>
+                    <a href="${escapeHtml(openCallsUrl)}" class="btn btn-outline-light btn-sm">
+                        <i class="bi bi-telephone-forward-fill"></i>
+                        <span>Open Calls</span>
+                    </a>
+                    <a href="${escapeHtml(reviewUrl)}" class="btn btn-outline-light btn-sm">
+                        <i class="bi bi-shield-exclamation"></i>
+                        <span>Open Review</span>
+                    </a>
+                    <button type="button" class="btn btn-sm ${selectedInScope ? "btn-primary" : "btn-outline-light"} js-live-toggle-selection" data-staff-id="${escapeHtml(selectedRowId)}">
+                        <i class="bi ${selectedInScope ? "bi-check2-square" : "bi-square"}"></i>
+                        <span>${selectedInScope ? "Selected" : "Select Staff"}</span>
+                    </button>
+                    <button type="button" class="btn btn-sm ${isActive ? "btn-outline-warning" : "btn-outline-success"} js-live-toggle-staff" data-staff-id="${escapeHtml(selectedRowId)}" data-next-active="${isActive ? "false" : "true"}" data-staff-name="${escapeHtml(selectedRow.name || "Staff")}">
+                        <i class="bi ${isActive ? "bi-person-dash" : "bi-person-check"}"></i>
+                        <span>${isActive ? "Disable Access" : "Activate Access"}</span>
+                    </button>
+                </div>
+            `;
+
+            supervisorDetail.querySelectorAll(".js-live-toggle-selection").forEach((button) => {
+                button.addEventListener("click", () => {
+                    const staffId = button.dataset.staffId || "";
+                    if (!staffId) {
+                        return;
+                    }
+                    if (selectedStaffIds.has(staffId)) {
+                        selectedStaffIds.delete(staffId);
+                    } else {
+                        selectedStaffIds.add(staffId);
+                    }
+                    renderSupervisorCenterEnhanced(latestStaffRows);
+                });
+            });
+
             supervisorDetail.querySelectorAll(".js-live-toggle-staff").forEach((button) => {
                 button.addEventListener("click", async () => {
                     const staffId = button.dataset.staffId || "";
@@ -1975,7 +2341,7 @@
                 return;
             }
             activeGrid.innerHTML = activeRows.map((row) => `
-                <article class="hc-live-monitor-card hc-live-activity-card">
+                <article class="hc-live-monitor-card hc-live-activity-card js-live-profile-card" data-profile-url="${escapeHtml(resolveProfileUrlForRow(row))}" role="button" tabindex="0">
                     <div class="d-flex align-items-start justify-content-between gap-3">
                         <div class="hc-staff-persona">
                             <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
@@ -2001,8 +2367,15 @@
                             <small>${escapeHtml(row.current_call.duration_label || "--")} live call</small>
                         </div>
                     ` : '<div class="hc-live-staff-empty mt-3">Ready in the app and available for the next customer call.</div>'}
+                    <div class="hc-live-card-actions mt-3">
+                        <a href="${escapeHtml(resolveProfileUrlForRow(row))}" class="btn btn-outline-light btn-sm">
+                            <i class="bi bi-person-vcard"></i>
+                            <span>Open Profile</span>
+                        </a>
+                    </div>
                 </article>
             `).join("");
+            bindProfileCardNavigation(activeGrid);
         }
 
         function renderAlertGrid(rows) {
@@ -2020,7 +2393,7 @@
                 return;
             }
             alertGrid.innerHTML = alertRows.map((row) => `
-                <article class="hc-live-monitor-card hc-live-alert-card">
+                <article class="hc-live-monitor-card hc-live-alert-card js-live-profile-card" data-profile-url="${escapeHtml(resolveProfileUrlForRow(row))}" role="button" tabindex="0">
                     <div class="d-flex align-items-start justify-content-between gap-3">
                         <div class="hc-staff-persona">
                             <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
@@ -2041,8 +2414,15 @@
                     <div class="hc-live-caption mt-3">
                         ${escapeHtml(row.attempt_review_label || "--")}. ${asNumber(row.real_call_count)} real calls, ${asNumber(row.zero_second_attempt_count)} zero-second, ${asNumber(row.invalid_short_count)} invalid short.
                     </div>
+                    <div class="hc-live-card-actions mt-3">
+                        <a href="${escapeHtml(resolveProfileUrlForRow(row))}" class="btn btn-outline-light btn-sm">
+                            <i class="bi bi-person-vcard"></i>
+                            <span>Open Profile</span>
+                        </a>
+                    </div>
                 </article>
             `).join("");
+            bindProfileCardNavigation(alertGrid);
         }
 
         function renderSpotlight(rows) {
@@ -2055,7 +2435,7 @@
             }
 
             spotlightGrid.innerHTML = rows.map((row) => `
-                <article class="hc-live-monitor-card">
+                <article class="hc-live-monitor-card js-live-profile-card" data-profile-url="${escapeHtml(resolveProfileUrlForRow(row))}" role="button" tabindex="0">
                     <div class="d-flex align-items-start justify-content-between gap-3">
                         <div class="hc-staff-persona">
                             <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
@@ -2080,8 +2460,15 @@
                             <small>${escapeHtml(row.current_call.duration_label || "--")} live call</small>
                         </div>
                     ` : ""}
+                    <div class="hc-live-card-actions mt-3">
+                        <a href="${escapeHtml(resolveProfileUrlForRow(row))}" class="btn btn-outline-light btn-sm">
+                            <i class="bi bi-person-vcard"></i>
+                            <span>Open Profile</span>
+                        </a>
+                    </div>
                 </article>
             `).join("");
+            bindProfileCardNavigation(spotlightGrid);
         }
 
         function renderStaffGrid(rows) {
@@ -2094,7 +2481,7 @@
             }
 
             staffGrid.innerHTML = rows.map((row) => `
-                <article class="hc-live-staff-card">
+                <article class="hc-live-staff-card js-live-profile-card" data-profile-url="${escapeHtml(resolveProfileUrlForRow(row))}" role="button" tabindex="0">
                     <div class="d-flex align-items-start justify-content-between gap-3">
                         <div class="hc-staff-persona">
                             <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
@@ -2162,8 +2549,15 @@
                             </div>
                         </div>
                     </div>
+                    <div class="hc-live-card-actions">
+                        <a href="${escapeHtml(resolveProfileUrlForRow(row))}" class="btn btn-outline-light btn-sm">
+                            <i class="bi bi-person-vcard"></i>
+                            <span>Open Profile</span>
+                        </a>
+                    </div>
                 </article>
             `).join("");
+            bindProfileCardNavigation(staffGrid);
         }
 
         function renderPayload(payload) {
@@ -2174,7 +2568,7 @@
             renderSummary(payload.summary || {});
             renderSmartAlerts(latestStaffRows);
             renderQueueHeatmap(latestStaffRows);
-            renderSupervisorCenter(latestStaffRows);
+            renderSupervisorCenterEnhanced(latestStaffRows);
             renderActiveGrid(latestStaffRows);
             renderAlertGrid(latestStaffRows);
             renderSpotlight(payload.spotlight_rows || []);
@@ -2215,21 +2609,49 @@
         ensureCountdown();
         scheduleRefresh(liveRefreshMs);
         refreshButton?.addEventListener("click", () => refreshPayload({ silent: false }));
-        if (fullscreenButton) {
-            if (!isFullscreenSupported()) {
-                fullscreenButton.disabled = true;
-                if (fullscreenLabel) {
-                    fullscreenLabel.textContent = "Full Screen Unavailable";
+        supervisorSearchInput?.addEventListener("input", () => {
+            supervisorSearchTerm = supervisorSearchInput.value || "";
+            renderSupervisorCenterEnhanced(latestStaffRows);
+        });
+        supervisorStatusSelect?.addEventListener("change", () => {
+            supervisorStatusFilter = supervisorStatusSelect.value || "all";
+            renderSupervisorCenterEnhanced(latestStaffRows);
+        });
+        supervisorSortSelect?.addEventListener("change", () => {
+            supervisorSortMode = supervisorSortSelect.value || "priority";
+            renderSupervisorCenterEnhanced(latestStaffRows);
+        });
+        selectAllVisibleButton?.addEventListener("click", () => {
+            const visibleRows = getSupervisorRosterRows(latestStaffRows);
+            visibleRows.forEach((row) => {
+                const staffId = resolveStaffId(row);
+                if (staffId) {
+                    selectedStaffIds.add(staffId);
                 }
-            } else {
+            });
+            renderSupervisorCenterEnhanced(latestStaffRows);
+        });
+        clearSelectionButton?.addEventListener("click", () => {
+            selectedStaffIds.clear();
+            renderSupervisorCenterEnhanced(latestStaffRows);
+        });
+        if (fullscreenButton) {
+            syncFullscreenUi();
+            fullscreenButton.addEventListener("click", () => {
+                toggleFullscreenMode();
+            });
+            document.addEventListener("fullscreenchange", () => {
+                if (!isRootFullscreen()) {
+                    fallbackFocusMode = false;
+                }
                 syncFullscreenUi();
-                fullscreenButton.addEventListener("click", () => {
-                    toggleFullscreenMode();
-                });
-                document.addEventListener("fullscreenchange", () => {
+            });
+            document.addEventListener("keydown", (event) => {
+                if (event.key === "Escape" && fallbackFocusMode && !isRootFullscreen()) {
+                    fallbackFocusMode = false;
                     syncFullscreenUi();
-                });
-            }
+                }
+            });
         }
         document.addEventListener("visibilitychange", () => {
             if (document.hidden) {
