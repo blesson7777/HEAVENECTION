@@ -1412,6 +1412,13 @@
         const supervisorFeedback = document.getElementById("liveMonitoringSupervisorFeedback");
         const activeGrid = document.getElementById("liveMonitoringActiveGrid");
         const alertGrid = document.getElementById("liveMonitoringAlertGrid");
+        const liveBoardSection = document.getElementById("ccLiveBoard");
+        const liveBoardStats = document.getElementById("liveMonitoringBoardStats");
+        const liveBoardPulse = document.getElementById("liveMonitoringBoardPulse");
+        const liveBoardPerformanceGraph = document.getElementById("liveMonitoringPerformanceGraph");
+        const liveBoardFullscreenButton = document.getElementById("liveBoardFullscreenButton");
+        const liveBoardFullscreenLabel = document.getElementById("liveBoardFullscreenLabel");
+        const liveBoardFullscreenIcon = document.getElementById("liveBoardFullscreenIcon");
         const spotlightGrid = document.getElementById("liveMonitoringSpotlightGrid");
         const staffGrid = document.getElementById("liveMonitoringStaffGrid");
         const teamMemberUrlTemplate = root.dataset.teamMemberUrlTemplate || "";
@@ -1451,7 +1458,9 @@
         }
 
         const focusModeClass = "hc-live-monitoring-focus";
+        const liveBoardFocusClass = "hc-liveboard-focus";
         let fallbackFocusMode = false;
+        let fallbackBoardFocusMode = false;
 
         function isFullscreenSupported() {
             return Boolean(root?.requestFullscreen && document?.exitFullscreen);
@@ -1461,14 +1470,31 @@
             return document.fullscreenElement === root;
         }
 
+        function isLiveBoardFullscreen() {
+            return document.fullscreenElement === liveBoardSection;
+        }
+
         function applyFocusMode(active) {
             root.classList.toggle("is-fullscreen", active);
             document.body.classList.toggle(focusModeClass, active);
             document.documentElement.classList.toggle(focusModeClass, active);
         }
 
+        function applyLiveBoardFocusMode(active) {
+            if (!liveBoardSection) {
+                return;
+            }
+            liveBoardSection.classList.toggle("is-board-fullscreen", active);
+            document.body.classList.toggle(liveBoardFocusClass, active);
+            document.documentElement.classList.toggle(liveBoardFocusClass, active);
+        }
+
         function isFocusModeActive() {
             return isRootFullscreen() || fallbackFocusMode;
+        }
+
+        function isLiveBoardFocusModeActive() {
+            return isLiveBoardFullscreen() || fallbackBoardFocusMode;
         }
 
         function syncFullscreenUi() {
@@ -1488,6 +1514,21 @@
                 fullscreenIcon.className = active ? "bi bi-fullscreen-exit" : "bi bi-arrows-fullscreen";
             }
             fullscreenButton.setAttribute("aria-pressed", active ? "true" : "false");
+        }
+
+        function syncLiveBoardFullscreenUi() {
+            if (!liveBoardFullscreenButton) {
+                return;
+            }
+            const active = isLiveBoardFocusModeActive();
+            applyLiveBoardFocusMode(active);
+            if (liveBoardFullscreenLabel) {
+                liveBoardFullscreenLabel.textContent = active ? "Exit Live Board Full Screen" : "Open Live Board Full Screen";
+            }
+            if (liveBoardFullscreenIcon) {
+                liveBoardFullscreenIcon.className = active ? "bi bi-fullscreen-exit" : "bi bi-bounding-box-circles";
+            }
+            liveBoardFullscreenButton.setAttribute("aria-pressed", active ? "true" : "false");
         }
 
         async function toggleFullscreenMode() {
@@ -1514,6 +1555,35 @@
                 fallbackFocusMode = targetState;
             } finally {
                 syncFullscreenUi();
+            }
+        }
+
+        async function toggleLiveBoardFullscreenMode() {
+            if (!liveBoardSection) {
+                return;
+            }
+            const targetState = !isLiveBoardFocusModeActive();
+
+            if (!isFullscreenSupported()) {
+                fallbackBoardFocusMode = targetState;
+                syncLiveBoardFullscreenUi();
+                return;
+            }
+
+            try {
+                if (!targetState) {
+                    fallbackBoardFocusMode = false;
+                    if (isLiveBoardFullscreen()) {
+                        await document.exitFullscreen();
+                    }
+                } else {
+                    fallbackBoardFocusMode = false;
+                    await liveBoardSection.requestFullscreen();
+                }
+            } catch (error) {
+                fallbackBoardFocusMode = targetState;
+            } finally {
+                syncLiveBoardFullscreenUi();
             }
         }
 
@@ -2292,6 +2362,178 @@
             return `${apiUrl}${separator}_live=${Date.now()}`;
         }
 
+        function averageValue(values) {
+            if (!Array.isArray(values) || !values.length) {
+                return 0;
+            }
+            const total = values.reduce((sum, value) => sum + asNumber(value), 0);
+            return total / values.length;
+        }
+
+        function isLiveActiveRow(row) {
+            return Boolean(row?.is_on_call || row?.online_label === "Online");
+        }
+
+        function boardPerformanceScore(row) {
+            return (
+                (asNumber(row.quality_score) * 0.55)
+                + (Math.min(asNumber(row.calls_today), 60) * 0.65)
+                + (Math.min(asNumber(row.real_call_count), 45) * 0.45)
+                - (Math.min(asNumber(row.gap_count), 10) * 2)
+                - (Math.min(asNumber(row.zero_only_block_count), 6) * 4)
+            );
+        }
+
+        function renderLiveBoardStats(rows) {
+            if (!liveBoardStats) {
+                return;
+            }
+            const roster = Array.isArray(rows) ? rows : [];
+            const activeRows = roster.filter((row) => isLiveActiveRow(row));
+            const onCallRows = roster.filter((row) => row?.is_on_call);
+            const reviewRows = roster.filter((row) => (
+                row?.quality_label === "Review Needed"
+                || row?.quality_label === "Needs Attention"
+                || row?.online_label === "Away"
+                || row?.online_label === "Warning"
+            ));
+            const avgQuality = Math.round(averageValue(activeRows.map((row) => row.quality_score)));
+            const activeCalls = activeRows.reduce((sum, row) => sum + asNumber(row.calls_today), 0);
+            const activeQueue = activeRows.reduce((sum, row) => sum + asNumber(row.assigned_leads), 0);
+            liveBoardStats.innerHTML = `
+                <article class="hc-liveboard-stat-card is-aqua">
+                    <span>Live in the floor</span>
+                    <strong>${activeRows.length}</strong>
+                    <small>${onCallRows.length} staff are currently on a live customer call.</small>
+                </article>
+                <article class="hc-liveboard-stat-card is-violet">
+                    <span>Average quality</span>
+                    <strong>${avgQuality || 0}</strong>
+                    <small>Current active-staff quality score average.</small>
+                </article>
+                <article class="hc-liveboard-stat-card is-amber">
+                    <span>Calls in motion</span>
+                    <strong>${activeCalls}</strong>
+                    <small>Total calls logged today by staff who are active right now.</small>
+                </article>
+                <article class="hc-liveboard-stat-card is-rose">
+                    <span>Queue pressure</span>
+                    <strong>${activeQueue}</strong>
+                    <small>${reviewRows.length} staff need attention or review.</small>
+                </article>
+            `;
+        }
+
+        function renderLiveBoardPulse(rows) {
+            if (!liveBoardPulse) {
+                return;
+            }
+            const orderedRows = (Array.isArray(rows) ? rows : [])
+                .filter((row) => isLiveActiveRow(row))
+                .sort((left, right) => (
+                    Number(Boolean(right.is_on_call)) - Number(Boolean(left.is_on_call))
+                    || asNumber(right.calls_today) - asNumber(left.calls_today)
+                    || asNumber(right.quality_score) - asNumber(left.quality_score)
+                ))
+                .slice(0, 6);
+            if (!orderedRows.length) {
+                liveBoardPulse.innerHTML = '<div class="hc-work-review-empty-note">No active staff pulse is available right now.</div>';
+                return;
+            }
+            liveBoardPulse.innerHTML = orderedRows.map((row) => {
+                const statusLabel = row.is_on_call ? "Speaking with customer" : "Ready for next customer";
+                const currentLead = row.current_call?.lead_name || "Next lead ready";
+                const currentPhone = row.current_call?.lead_phone || row.phone || "--";
+                const durationLabel = row.current_call?.duration_label || row.active_hours_today || "0.0h";
+                return `
+                    <article class="hc-liveboard-pulse-card ${row.is_on_call ? "is-oncall" : "is-ready"} js-live-profile-card" data-profile-url="${escapeHtml(resolveProfileUrlForRow(row))}" role="button" tabindex="0">
+                        <div class="hc-liveboard-pulse-head">
+                            <div class="hc-staff-persona">
+                                <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
+                                <div class="hc-staff-persona-copy">
+                                    <strong>${escapeHtml(row.name || "Staff")}</strong>
+                                    <span>${escapeHtml(statusLabel)}</span>
+                                </div>
+                            </div>
+                            <span class="hc-status hc-status-${escapeHtml(row.status_tone || "muted")}">${escapeHtml(row.online_label || "Offline")}</span>
+                        </div>
+                        <div class="hc-liveboard-call-lane">
+                            <div class="hc-liveboard-waveform" aria-hidden="true">
+                                <span></span><span></span><span></span><span></span><span></span>
+                            </div>
+                            <div class="hc-liveboard-call-copy">
+                                <strong>${escapeHtml(currentLead)}</strong>
+                                <span>${escapeHtml(currentPhone)}</span>
+                            </div>
+                            <div class="hc-liveboard-call-time">${escapeHtml(durationLabel)}</div>
+                        </div>
+                    </article>
+                `;
+            }).join("");
+            bindProfileCardNavigation(liveBoardPulse);
+        }
+
+        function renderLiveBoardPerformance(rows) {
+            if (!liveBoardPerformanceGraph) {
+                return;
+            }
+            const orderedRows = (Array.isArray(rows) ? rows : [])
+                .slice()
+                .sort((left, right) => (
+                    boardPerformanceScore(right) - boardPerformanceScore(left)
+                    || asNumber(right.calls_today) - asNumber(left.calls_today)
+                ))
+                .slice(0, 8);
+            if (!orderedRows.length) {
+                liveBoardPerformanceGraph.innerHTML = '<div class="hc-work-review-empty-note">No performance graph data is available right now.</div>';
+                return;
+            }
+            const maxCalls = Math.max(1, ...orderedRows.map((row) => asNumber(row.calls_today)));
+            const maxHours = Math.max(1, ...orderedRows.map((row) => asNumber(String(row.active_hours_today || "0").replace(/[^\d.]/g, ""))));
+            const maxQueue = Math.max(1, ...orderedRows.map((row) => asNumber(row.assigned_leads)));
+            liveBoardPerformanceGraph.innerHTML = orderedRows.map((row) => {
+                const callsPercent = Math.min(100, Math.round((asNumber(row.calls_today) / maxCalls) * 100));
+                const qualityPercent = Math.min(100, Math.round(asNumber(row.quality_score)));
+                const queuePercent = Math.min(100, Math.round((asNumber(row.assigned_leads) / maxQueue) * 100));
+                const hoursValue = asNumber(String(row.active_hours_today || "0").replace(/[^\d.]/g, ""));
+                const hoursPercent = Math.min(100, Math.round((hoursValue / maxHours) * 100));
+                return `
+                    <article class="hc-liveboard-graph-row js-live-profile-card" data-profile-url="${escapeHtml(resolveProfileUrlForRow(row))}" role="button" tabindex="0">
+                        <div class="hc-liveboard-graph-head">
+                            <div>
+                                <strong>${escapeHtml(row.name || "Staff")}</strong>
+                                <span>${escapeHtml(row.online_label || "Offline")} · ${escapeHtml(row.session_state_label || "--")}</span>
+                            </div>
+                            <span class="hc-liveboard-graph-score">${Math.max(0, Math.round(boardPerformanceScore(row)))}</span>
+                        </div>
+                        <div class="hc-liveboard-graph-bars">
+                            <div class="hc-liveboard-graph-metric">
+                                <label>Calls</label>
+                                <div class="hc-liveboard-graph-track"><span class="is-calls" style="width:${callsPercent}%;"></span></div>
+                                <strong>${asNumber(row.calls_today)}</strong>
+                            </div>
+                            <div class="hc-liveboard-graph-metric">
+                                <label>Work</label>
+                                <div class="hc-liveboard-graph-track"><span class="is-hours" style="width:${hoursPercent}%;"></span></div>
+                                <strong>${escapeHtml(row.active_hours_today || "0.0h")}</strong>
+                            </div>
+                            <div class="hc-liveboard-graph-metric">
+                                <label>Quality</label>
+                                <div class="hc-liveboard-graph-track"><span class="is-quality" style="width:${qualityPercent}%;"></span></div>
+                                <strong>${asNumber(row.quality_score)}</strong>
+                            </div>
+                            <div class="hc-liveboard-graph-metric">
+                                <label>Queue</label>
+                                <div class="hc-liveboard-graph-track"><span class="is-queue" style="width:${queuePercent}%;"></span></div>
+                                <strong>${asNumber(row.assigned_leads)}</strong>
+                            </div>
+                        </div>
+                    </article>
+                `;
+            }).join("");
+            bindProfileCardNavigation(liveBoardPerformanceGraph);
+        }
+
         function renderSummary(summary) {
             if (!summaryGrid || !summary) {
                 return;
@@ -2341,8 +2583,8 @@
                 return;
             }
             activeGrid.innerHTML = activeRows.map((row) => `
-                <article class="hc-live-monitor-card hc-live-activity-card js-live-profile-card" data-profile-url="${escapeHtml(resolveProfileUrlForRow(row))}" role="button" tabindex="0">
-                    <div class="d-flex align-items-start justify-content-between gap-3">
+                <article class="hc-liveboard-staff-card ${row.is_on_call ? "is-oncall" : "is-online"} js-live-profile-card" data-profile-url="${escapeHtml(resolveProfileUrlForRow(row))}" role="button" tabindex="0">
+                    <div class="hc-liveboard-card-head">
                         <div class="hc-staff-persona">
                             <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
                             <div class="hc-staff-persona-copy">
@@ -2353,21 +2595,42 @@
                         </div>
                         <span class="hc-status hc-status-${escapeHtml(row.status_tone || "muted")}">${escapeHtml(row.online_label || "Offline")}</span>
                     </div>
-                    <div class="hc-live-monitor-note mt-3">${escapeHtml(row.status_note || "")}</div>
-                    <div class="hc-live-monitor-metrics mt-3">
+                    <div class="hc-liveboard-card-note">${escapeHtml(row.status_note || "")}</div>
+                    <div class="hc-liveboard-call-strip">
+                        <div class="hc-liveboard-waveform" aria-hidden="true">
+                            <span></span><span></span><span></span><span></span><span></span>
+                        </div>
+                        ${row.current_call ? `
+                            <div class="hc-liveboard-call-copy">
+                                <strong>${escapeHtml(row.current_call.lead_name || "Lead")}</strong>
+                                <span>${escapeHtml(row.current_call.lead_phone || "--")}</span>
+                            </div>
+                            <div class="hc-liveboard-call-time">${escapeHtml(row.current_call.duration_label || "--")}</div>
+                        ` : `
+                            <div class="hc-liveboard-call-copy">
+                                <strong>Ready for next customer</strong>
+                                <span>${escapeHtml(row.last_seen || "--")}</span>
+                            </div>
+                            <div class="hc-liveboard-call-time">Standby</div>
+                        `}
+                    </div>
+                    <div class="hc-liveboard-mini-metrics">
                         <span>${escapeHtml(row.active_hours_today || "0.0h")} worked</span>
                         <span>${asNumber(row.calls_today)} calls</span>
                         <span>${asNumber(row.assigned_leads)} queue</span>
-                        <span>${escapeHtml(row.last_seen || "--")}</span>
+                        <span>${asNumber(row.quality_score)} quality</span>
                     </div>
-                    ${row.current_call ? `
-                        <div class="hc-live-monitor-call mt-3">
-                            <strong>${escapeHtml(row.current_call.lead_name || "Lead")}</strong>
-                            <span>${escapeHtml(row.current_call.lead_phone || "--")}</span>
-                            <small>${escapeHtml(row.current_call.duration_label || "--")} live call</small>
+                    <div class="hc-liveboard-progress-block">
+                        <div class="hc-liveboard-progress-row">
+                            <label>Quality</label>
+                            <div class="hc-liveboard-progress-track"><span class="is-quality" style="width:${Math.min(100, Math.round(asNumber(row.quality_score)))}%;"></span></div>
                         </div>
-                    ` : '<div class="hc-live-staff-empty mt-3">Ready in the app and available for the next customer call.</div>'}
-                    <div class="hc-live-card-actions mt-3">
+                        <div class="hc-liveboard-progress-row">
+                            <label>Queue load</label>
+                            <div class="hc-liveboard-progress-track"><span class="is-queue" style="width:${Math.min(100, Math.round((asNumber(row.assigned_leads) / 60) * 100))}%;"></span></div>
+                        </div>
+                    </div>
+                    <div class="hc-live-card-actions">
                         <a href="${escapeHtml(resolveProfileUrlForRow(row))}" class="btn btn-outline-light btn-sm">
                             <i class="bi bi-person-vcard"></i>
                             <span>Open Profile</span>
@@ -2393,8 +2656,8 @@
                 return;
             }
             alertGrid.innerHTML = alertRows.map((row) => `
-                <article class="hc-live-monitor-card hc-live-alert-card js-live-profile-card" data-profile-url="${escapeHtml(resolveProfileUrlForRow(row))}" role="button" tabindex="0">
-                    <div class="d-flex align-items-start justify-content-between gap-3">
+                <article class="hc-liveboard-alert-card js-live-profile-card" data-profile-url="${escapeHtml(resolveProfileUrlForRow(row))}" role="button" tabindex="0">
+                    <div class="hc-liveboard-card-head">
                         <div class="hc-staff-persona">
                             <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
                             <div class="hc-staff-persona-copy">
@@ -2405,16 +2668,19 @@
                         </div>
                         <span class="hc-status hc-status-${escapeHtml(row.quality_tone || "muted")}">${escapeHtml(row.quality_label || "Attention")}</span>
                     </div>
-                    <div class="hc-live-monitor-note mt-3">${escapeHtml(row.quality_note || row.status_note || "")}</div>
-                    <div class="hc-live-monitor-metrics mt-3">
-                        <span>${asNumber(row.gap_count)} gaps</span>
-                        <span>${escapeHtml(row.gap_uncounted_label || "0s")} uncounted</span>
-                        <span>${asNumber(row.zero_only_block_count)} zero-talk blocks</span>
+                    <div class="hc-liveboard-alert-body">
+                        <p>${escapeHtml(row.quality_note || row.status_note || "")}</p>
+                        <div class="hc-liveboard-alert-pills">
+                            <span>${asNumber(row.gap_count)} gaps</span>
+                            <span>${escapeHtml(row.gap_uncounted_label || "0s")} uncounted</span>
+                            <span>${asNumber(row.zero_only_block_count)} zero-talk</span>
+                            <span>${asNumber(row.invalid_short_count)} invalid short</span>
+                        </div>
+                        <div class="hc-liveboard-alert-caption">
+                            ${escapeHtml(row.attempt_review_label || "--")}. ${asNumber(row.real_call_count)} real calls and ${asNumber(row.zero_second_attempt_count)} zero-second attempts.
+                        </div>
                     </div>
-                    <div class="hc-live-caption mt-3">
-                        ${escapeHtml(row.attempt_review_label || "--")}. ${asNumber(row.real_call_count)} real calls, ${asNumber(row.zero_second_attempt_count)} zero-second, ${asNumber(row.invalid_short_count)} invalid short.
-                    </div>
-                    <div class="hc-live-card-actions mt-3">
+                    <div class="hc-live-card-actions">
                         <a href="${escapeHtml(resolveProfileUrlForRow(row))}" class="btn btn-outline-light btn-sm">
                             <i class="bi bi-person-vcard"></i>
                             <span>Open Profile</span>
@@ -2566,6 +2832,9 @@
             }
             latestStaffRows = Array.isArray(payload.staff_rows) ? payload.staff_rows : [];
             renderSummary(payload.summary || {});
+            renderLiveBoardStats(latestStaffRows);
+            renderLiveBoardPulse(latestStaffRows);
+            renderLiveBoardPerformance(latestStaffRows);
             renderSmartAlerts(latestStaffRows);
             renderQueueHeatmap(latestStaffRows);
             renderSupervisorCenterEnhanced(latestStaffRows);
@@ -2640,19 +2909,36 @@
             fullscreenButton.addEventListener("click", () => {
                 toggleFullscreenMode();
             });
-            document.addEventListener("fullscreenchange", () => {
-                if (!isRootFullscreen()) {
-                    fallbackFocusMode = false;
-                }
-                syncFullscreenUi();
-            });
-            document.addEventListener("keydown", (event) => {
-                if (event.key === "Escape" && fallbackFocusMode && !isRootFullscreen()) {
-                    fallbackFocusMode = false;
-                    syncFullscreenUi();
-                }
+        }
+        if (liveBoardFullscreenButton) {
+            syncLiveBoardFullscreenUi();
+            liveBoardFullscreenButton.addEventListener("click", () => {
+                toggleLiveBoardFullscreenMode();
             });
         }
+        document.addEventListener("fullscreenchange", () => {
+            if (!isRootFullscreen()) {
+                fallbackFocusMode = false;
+            }
+            if (!isLiveBoardFullscreen()) {
+                fallbackBoardFocusMode = false;
+            }
+            syncFullscreenUi();
+            syncLiveBoardFullscreenUi();
+        });
+        document.addEventListener("keydown", (event) => {
+            if (event.key !== "Escape") {
+                return;
+            }
+            if (fallbackFocusMode && !isRootFullscreen()) {
+                fallbackFocusMode = false;
+                syncFullscreenUi();
+            }
+            if (fallbackBoardFocusMode && !isLiveBoardFullscreen()) {
+                fallbackBoardFocusMode = false;
+                syncLiveBoardFullscreenUi();
+            }
+        });
         document.addEventListener("visibilitychange", () => {
             if (document.hidden) {
                 clearScheduledRefresh();
