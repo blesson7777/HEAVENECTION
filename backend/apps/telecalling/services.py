@@ -6138,11 +6138,47 @@ def build_followup_payload():
     today = timezone.localdate()
     reference = timezone.now()
     followups = list(
-        _follow_up_queryset().select_related("assigned_to").order_by("-updated_at", "-last_contacted_at")
+        _follow_up_queryset()
+        .select_related("assigned_to", "interested_detail__staff")
+        .order_by("-updated_at", "-last_contacted_at")
     )
+    closed_candidates = list(
+        Lead.objects.select_related("assigned_to", "interested_detail__staff")
+        .filter(status=Lead.Status.NO_ANSWER)
+        .order_by("-updated_at", "-last_contacted_at")[:200]
+    )
+
+    owner_lookup_ids = [lead.id for lead in followups]
+    owner_lookup_ids.extend(lead.id for lead in closed_candidates)
+    latest_call_owner_map = {}
+    if owner_lookup_ids:
+        owner_statuses = (
+            Call.Status.INTERESTED,
+            Call.Status.CALL_BACK,
+            Call.Status.NO_ANSWER,
+            Call.Status.NOT_INTERESTED,
+            Call.Status.CONVERTED,
+        )
+        latest_owner_calls = (
+            Call.objects.filter(lead_id__in=owner_lookup_ids, status__in=owner_statuses)
+            .select_related("staff")
+            .order_by("lead_id", "-start_time", "-created_at", "-id")
+        )
+        for call in latest_owner_calls:
+            latest_call_owner_map.setdefault(call.lead_id, call.staff)
+
+    def _followup_owner(lead):
+        assigned_staff = getattr(lead, "assigned_to", None)
+        if assigned_staff:
+            return assigned_staff
+        interested_detail = getattr(lead, "interested_detail", None)
+        if interested_detail and interested_detail.staff_id:
+            return interested_detail.staff
+        return latest_call_owner_map.get(lead.id)
 
     followup_rows = []
     for lead in followups:
+        owner_staff = _followup_owner(lead)
         is_scheduled = _is_scheduled_followup(lead)
         is_due_today = bool(lead.callback_date and lead.callback_date == today)
         is_due_now = _is_callback_due(lead.callback_date, lead.callback_window, now=reference)
@@ -6191,9 +6227,9 @@ def build_followup_payload():
                     lead.callback_date,
                     lead.callback_window,
                 ),
-                "assigned_to_id": str(lead.assigned_to_id) if lead.assigned_to_id else "",
-                "assigned_to": lead.assigned_to.name if lead.assigned_to else "Unassigned",
-                "assigned_to_phone": lead.assigned_to.phone if lead.assigned_to else "",
+                "assigned_to_id": str(owner_staff.id) if owner_staff else "",
+                "assigned_to": owner_staff.name if owner_staff else "Unassigned",
+                "assigned_to_phone": owner_staff.phone if owner_staff else "",
                 "notes": lead.notes,
                 "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
                 "updated_at": _format_datetime(lead.updated_at),
@@ -6234,12 +6270,8 @@ def build_followup_payload():
     followup_rows.sort(key=_followup_sort_key)
 
     closed_followup_rows = []
-    closed_candidates = (
-        Lead.objects.select_related("assigned_to")
-        .filter(status=Lead.Status.NO_ANSWER)
-        .order_by("-updated_at", "-last_contacted_at")[:200]
-    )
     for lead in closed_candidates:
+        owner_staff = _followup_owner(lead)
         progress = _followup_no_response_progress(lead)
         if progress["attempt_count"] < FOLLOWUP_NO_RESPONSE_LIMIT or not progress["can_close"]:
             continue
@@ -6259,7 +6291,7 @@ def build_followup_payload():
                     lead.callback_window,
                 )
                 or "No time set",
-                "assigned_to": lead.assigned_to.name if lead.assigned_to else "Unassigned",
+                "assigned_to": owner_staff.name if owner_staff else "Unassigned",
                 "updated_at": _format_datetime(lead.updated_at),
                 "updated_at_sort": lead.updated_at.isoformat() if lead.updated_at else "",
             }
