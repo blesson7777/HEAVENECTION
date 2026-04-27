@@ -1062,7 +1062,7 @@ def calculate_staff_payout(
     company_profile = company_profile or get_company_profile()
     active_hours = _decimal_hours(active_seconds)
     call_minutes = _decimal_minutes(call_seconds)
-    call_earnings = _money(call_minutes * staff.call_rate)
+    call_earnings = Decimal("0.00")
     conversion_bonus = _money(Decimal(str(converted_leads or 0)) * staff.bonus_per_conversion)
     hourly_call_bonus = hourly_call_bonus_summary or _calculate_hourly_call_bonus(
         company_profile=company_profile,
@@ -1071,7 +1071,7 @@ def calculate_staff_payout(
     )
     bonus_earnings = _money(conversion_bonus + hourly_call_bonus["bonus_amount"])
     base_pay = _calculate_base_pay(staff, active_hours)
-    total_pay = _money(base_pay + call_earnings + bonus_earnings)
+    total_pay = _money(base_pay + bonus_earnings)
     return {
         "active_seconds": int(active_seconds or 0),
         "active_hours": active_hours,
@@ -2007,7 +2007,7 @@ def record_staff_salary_payment(
             "base_pay": _money(breakdown["base_pay"]),
             "call_earnings": _money(breakdown["call_earnings"]),
             "bonus_earnings": _money(breakdown["bonus_earnings"]),
-            "incentives": _money(breakdown["call_earnings"] + breakdown["bonus_earnings"]),
+            "incentives": _money(breakdown["bonus_earnings"]),
             "final_salary": recommended_amount,
             "paid_amount": Decimal("0.00"),
             "is_paid": False,
@@ -6348,6 +6348,70 @@ def build_followup_payload():
             "unassigned_count": sum(1 for row in followup_rows if not row["assigned_to_id"]),
             "with_notes_count": sum(1 for row in followup_rows if row["notes"]),
         },
+    }
+
+def reassign_unassigned_followup_owners():
+    followups = list(
+        Lead.objects.select_related("assigned_to", "interested_detail__staff")
+        .filter(
+            assigned_to__isnull=True,
+            status__in=(Lead.Status.INTERESTED, Lead.Status.CALL_BACK),
+        )
+        .order_by("-updated_at", "-last_contacted_at")
+    )
+    if not followups:
+        return {
+            "scanned_count": 0,
+            "reassigned_count": 0,
+            "still_unassigned_count": 0,
+        }
+
+    lead_ids = [lead.id for lead in followups]
+    owner_statuses = (
+        Call.Status.INTERESTED,
+        Call.Status.CALL_BACK,
+        Call.Status.NO_ANSWER,
+        Call.Status.NOT_INTERESTED,
+        Call.Status.CONVERTED,
+    )
+    latest_call_owner_map = {}
+    latest_owner_calls = (
+        Call.objects.filter(lead_id__in=lead_ids, status__in=owner_statuses)
+        .select_related("staff")
+        .order_by("lead_id", "-start_time", "-created_at", "-id")
+    )
+    for call in latest_owner_calls:
+        latest_call_owner_map.setdefault(call.lead_id, call.staff)
+
+    reassigned_leads = []
+    for lead in followups:
+        interested_detail = getattr(lead, "interested_detail", None)
+        resolved_owner = None
+        if (
+            interested_detail
+            and interested_detail.staff_id
+            and interested_detail.staff
+            and interested_detail.staff.role == Staff.Role.STAFF
+            and interested_detail.staff.is_active
+        ):
+            resolved_owner = interested_detail.staff
+        else:
+            latest_owner = latest_call_owner_map.get(lead.id)
+            if latest_owner and latest_owner.role == Staff.Role.STAFF and latest_owner.is_active:
+                resolved_owner = latest_owner
+        if not resolved_owner:
+            continue
+        lead.assigned_to = resolved_owner
+        reassigned_leads.append(lead)
+
+    if reassigned_leads:
+        with transaction.atomic():
+            Lead.objects.bulk_update(reassigned_leads, ["assigned_to", "updated_at"])
+
+    return {
+        "scanned_count": len(followups),
+        "reassigned_count": len(reassigned_leads),
+        "still_unassigned_count": len(followups) - len(reassigned_leads),
     }
 
 

@@ -123,10 +123,6 @@
                     <strong>{{ due_snapshot.base_pay_label }}</strong>
                 </div>
                 <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Call Earnings</span>
-                    <strong>{{ due_snapshot.call_earnings_label }}</strong>
-                </div>
-                <div class="hc-profile-meta-card">
                     <span class="hc-profile-meta-label">Bonus Earnings</span>
                     <strong>{{ due_snapshot.bonus_earnings_label }}</strong>
                 </div>
@@ -244,7 +240,7 @@
                 <div class="hc-profile-meta-card">
                     <span class="hc-profile-meta-label">Base / Calls / Bonus</span>
                     <strong>{{ running_snapshot.base_pay_label }}</strong>
-                    <small>{{ running_snapshot.call_earnings_label }} calls | {{ running_snapshot.bonus_earnings_label }} bonus</small>
+                    <small>{{ running_snapshot.bonus_earnings_label }} bonus</small>
                 </div>
             </div>
             <div class="mt-3">
@@ -354,7 +350,7 @@
                 <div class="hc-profile-meta-card">
                     <span class="hc-profile-meta-label">Base / Calls / Bonus</span>
                     <strong>{{ previous_month_snapshot.base_pay_label }}</strong>
-                    <small>{{ previous_month_snapshot.call_earnings_label }} calls | {{ previous_month_snapshot.bonus_earnings_label }} bonus</small>
+                    <small>{{ previous_month_snapshot.bonus_earnings_label }} bonus</small>
                 </div>
             </div>
             <div class="mt-3">

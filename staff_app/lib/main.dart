@@ -9192,10 +9192,6 @@ class _SalaryDetailCard extends StatelessWidget {
           const Divider(height: 28),
           _SalaryMetricRow(label: 'Hourly earnings', value: block.basePayLabel),
           _SalaryMetricRow(
-            label: 'Call earnings',
-            value: block.callEarningsLabel,
-          ),
-          _SalaryMetricRow(
             label: 'Successful lead rewards',
             value: block.conversionRewardLabel,
           ),
@@ -9761,23 +9757,39 @@ class BrandWordmark extends StatelessWidget {
                 ? CrossAxisAlignment.center
                 : CrossAxisAlignment.start,
             children: [
-              Text(
-                kBrandName,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: titleColor,
-                  fontSize: titleSize,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.6,
+              Align(
+                alignment: centered ? Alignment.center : Alignment.centerLeft,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: centered ? Alignment.center : Alignment.centerLeft,
+                  child: Text(
+                    kBrandName,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: TextStyle(
+                      color: titleColor,
+                      fontSize: titleSize,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
                 ),
               ),
-              Text(
-                subtitle,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: subtitleColor,
-                  fontSize: subtitleSize,
-                  fontWeight: FontWeight.w700,
+              Align(
+                alignment: centered ? Alignment.center : Alignment.centerLeft,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: centered ? Alignment.center : Alignment.centerLeft,
+                  child: Text(
+                    subtitle,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: TextStyle(
+                      color: subtitleColor,
+                      fontSize: subtitleSize,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ),
             ],
