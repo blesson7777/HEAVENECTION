@@ -9,8 +9,8 @@
 <section class="hc-surface-card animate-on-scroll">
     <div class="mf-db2-panel-head mb-3">
         <div>
-            <span class="mf-db2-kicker">Interested Capture</span>
-            <h5>Interested customer details from staff</h5>
+            <span class="mf-db2-kicker">Interested Outcome Tracker</span>
+            <h5>Interested customer details and final outcomes</h5>
         </div>
     </div>
 
@@ -45,17 +45,118 @@
         </div>
         <div class="col-xl-3 col-md-6">
             <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Successful</span>
+                <span class="mf-db2-kicker">Converted</span>
                 <h3 class="mb-1">{{ interested_lead_summary.converted_count }}</h3>
-                <p class="mb-0 text-muted">{{ interested_lead_summary.open_count }} still need an admin decision.</p>
+                <p class="mb-0 text-muted">Interested leads that became successful.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Rejected</span>
+                <h3 class="mb-1">{{ interested_lead_summary.rejected_count }}</h3>
+                <p class="mb-0 text-muted">Interested leads that later declined.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">No Response</span>
+                <h3 class="mb-1">{{ interested_lead_summary.no_response_count }}</h3>
+                <p class="mb-0 text-muted">Interested leads that did not move forward.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Still Open</span>
+                <h3 class="mb-1">{{ interested_lead_summary.open_count }}</h3>
+                <p class="mb-0 text-muted">{{ interested_lead_summary.staff_count }} staff are holding these outcomes.</p>
             </div>
         </div>
     </div>
 
-    <form method="get" class="hc-search-box mb-4">
-        <i class="bi bi-search"></i>
-        <input type="search" name="q" value="{{ interested_search_query }}" placeholder="Search customer, number, product, note, or staff">
+    <form method="get" class="row g-3 align-items-end mb-4">
+        <div class="col-xl-3 col-md-6">
+            <label class="form-label fw-semibold" for="interestedTrackerSearch">Search</label>
+            <div class="hc-search-box">
+                <i class="bi bi-search"></i>
+                <input type="search" id="interestedTrackerSearch" name="q" value="{{ interested_search_query }}" placeholder="Customer, number, product, note, or staff">
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-6">
+            <label class="form-label fw-semibold" for="interestedTrackerFrom">From date</label>
+            <input type="date" class="form-control" id="interestedTrackerFrom" name="date_from" value="{{ interested_filter_date_from }}">
+        </div>
+        <div class="col-xl-2 col-md-6">
+            <label class="form-label fw-semibold" for="interestedTrackerTo">To date</label>
+            <input type="date" class="form-control" id="interestedTrackerTo" name="date_to" value="{{ interested_filter_date_to }}">
+        </div>
+        <div class="col-xl-2 col-md-6">
+            <label class="form-label fw-semibold" for="interestedTrackerStaff">Staff</label>
+            <select class="form-select" id="interestedTrackerStaff" name="staff_id">
+                <option value="">All Staff</option>
+                {% for option in interested_staff_options %}
+                <option value="{{ option.id }}"{% if interested_filter_staff_id == option.id %} selected{% endif %}>{{ option.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-xl-2 col-md-6">
+            <label class="form-label fw-semibold" for="interestedTrackerOutcome">Outcome</label>
+            <select class="form-select" id="interestedTrackerOutcome" name="outcome">
+                <option value="all"{% if interested_filter_outcome == "all" %} selected{% endif %}>All Outcomes</option>
+                <option value="open"{% if interested_filter_outcome == "open" %} selected{% endif %}>Still Open</option>
+                <option value="converted"{% if interested_filter_outcome == "converted" %} selected{% endif %}>Converted</option>
+                <option value="rejected"{% if interested_filter_outcome == "rejected" %} selected{% endif %}>Rejected</option>
+                <option value="no_response"{% if interested_filter_outcome == "no_response" %} selected{% endif %}>No Response</option>
+            </select>
+        </div>
+        <div class="col-xl-1 col-md-6 d-grid">
+            <button type="submit" class="btn btn-primary">Apply</button>
+        </div>
+        <div class="col-12 d-flex flex-wrap gap-2">
+            <a href="{% url 'interested-leads-page' %}" class="btn btn-outline-primary btn-sm">Reset</a>
+            <a href="?q={{ interested_search_query|urlencode }}&date_from={{ interested_filter_date_from|urlencode }}&date_to={{ interested_filter_date_to|urlencode }}&staff_id={{ interested_filter_staff_id|urlencode }}&outcome={{ interested_filter_outcome|urlencode }}&download=csv" class="btn btn-outline-primary btn-sm">Download CSV</a>
+            <a href="?q={{ interested_search_query|urlencode }}&date_from={{ interested_filter_date_from|urlencode }}&date_to={{ interested_filter_date_to|urlencode }}&staff_id={{ interested_filter_staff_id|urlencode }}&outcome={{ interested_filter_outcome|urlencode }}&download=xlsx" class="btn btn-outline-primary btn-sm">Download Excel</a>
+        </div>
     </form>
+
+    <div class="hc-surface-card border mb-4">
+        <div class="mf-db2-panel-head mb-3">
+            <div>
+                <span class="mf-db2-kicker">Staff-Wise Breakdown</span>
+                <h6 class="mb-0">Track outcomes by staff member</h6>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table hc-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Staff</th>
+                        <th>Total Interested</th>
+                        <th>Converted</th>
+                        <th>Rejected</th>
+                        <th>No Response</th>
+                        <th>Still Open</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in interested_staff_breakdown_rows %}
+                    <tr>
+                        <td>
+                            <strong>{{ row.staff_name }}</strong>
+                            <div class="small text-muted">{{ row.staff_phone }}</div>
+                        </td>
+                        <td>{{ row.total_count }}</td>
+                        <td><span class="hc-status hc-status-success">{{ row.converted_count }}</span></td>
+                        <td><span class="hc-status hc-status-danger">{{ row.rejected_count }}</span></td>
+                        <td><span class="hc-status hc-status-primary">{{ row.no_response_count }}</span></td>
+                        <td><span class="hc-status hc-status-warning">{{ row.open_count }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center py-4">No staff outcome data matches the current filter.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <div class="table-responsive">
         <table class="table hc-table align-middle mb-0">
@@ -66,7 +167,7 @@
                     <th>Preferred Call Time</th>
                     <th>Notes</th>
                     <th>Staff</th>
-                    <th>Lead Status</th>
+                    <th>Outcome</th>
                     <th>Updated</th>
                     <th>Actions</th>
                 </tr>
@@ -77,7 +178,7 @@
                     <td>
                         <strong>{{ row.customer_name }}</strong>
                         <div class="small text-muted">{{ row.customer_phone }}</div>
-                        <div class="small text-muted">Lead Status: {{ row.lead_status_label }}</div>
+                        <div class="small text-muted">Tracked from {{ row.created_at }}</div>
                     </td>
                     <td>{{ row.product_enquired }}</td>
                     <td>{{ row.preferred_call_time|default:"Not set" }}</td>
@@ -91,7 +192,7 @@
                     </td>
                     <td>
                         <div>{{ row.updated_at }}</div>
-                        <div class="small text-muted">Created {{ row.created_at }}</div>
+                        <div class="small text-muted">Lead {{ row.lead_id }}</div>
                     </td>
                     <td>
                         <div class="d-flex gap-2 flex-wrap">
@@ -115,9 +216,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr>
-                    <td colspan="8" class="text-center py-4">No interested customer details have been submitted yet.</td>
-                </tr>
+                <tr><td colspan="8" class="text-center py-4">No interested outcome rows match the current filter.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -183,4 +282,158 @@
         </div>
     </div>
 </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 {% endblock %}

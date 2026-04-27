@@ -180,6 +180,25 @@
     </div>
 </section>
 
+<section class="row g-4 mt-1">
+    <div class="col-12">
+        <div class="hc-surface-card">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Follow Up Repair</span>
+                    <h5>Restore unassigned follow up owners</h5>
+                </div>
+            </div>
+            <p class="text-muted mb-3">Run this only when old follow up leads are showing as unassigned. It restores the staff owner from saved follow up details and recent call history, and it changes nothing until you click the button.</p>
+            <form method="post" action="{% url 'developer-releases-page' %}" class="d-flex flex-wrap gap-2" data-confirm-title="Repair follow up owners" data-confirm-message="Reassign unassigned follow up leads to their most likely real staff owner?" data-confirm-ok="Repair now" data-confirm-class="btn-primary">
+                {% csrf_token %}
+                <input type="hidden" name="release_action" value="reassign_followup_owners">
+                <button type="submit" class="btn btn-outline-primary">Repair Unassigned Follow Ups</button>
+            </form>
+        </div>
+    </div>
+</section>
+
 <section class="hc-surface-card mt-4">
     <div class="mf-db2-panel-head mb-3">
         <div>

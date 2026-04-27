@@ -466,11 +466,18 @@ class CreateStaffReferralSubmissionSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         request = self.context["request"]
+        company_profile = CompanyProfile.objects.filter(pk=1).first()
         return ReferralSubmission.objects.create(
             referrer=request.user,
             referred_name=validated_data["referred_name"],
             referred_phone=validated_data["referred_phone"],
-            program_enabled_at_submit=CompanyProfile.objects.filter(pk=1, referral_program_enabled=True).exists(),
+            program_enabled_at_submit=bool(company_profile and company_profile.referral_program_enabled),
+            required_hours_at_submit=(
+                company_profile.referral_required_hours if company_profile else 0
+            ),
+            reward_amount_at_submit=(
+                company_profile.referral_reward_amount if company_profile else 0
+            ),
         )
 
 

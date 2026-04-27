@@ -495,6 +495,8 @@ class ReferralSubmission(models.Model):
         related_name="referral_submission_matches",
     )
     program_enabled_at_submit = models.BooleanField(default=True)
+    required_hours_at_submit = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    reward_amount_at_submit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     updated_at = models.DateTimeField(auto_now=True)
 

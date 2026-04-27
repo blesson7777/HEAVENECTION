@@ -85,6 +85,8 @@ from backend.apps.telecalling.services import (
     build_followup_csv_response,
     build_followup_excel_response,
     build_followup_payload,
+    build_interested_lead_csv_response,
+    build_interested_lead_excel_response,
     build_interested_lead_payload,
     build_learning_management_payload,
     build_lead_management_payload,
@@ -121,6 +123,7 @@ from backend.apps.telecalling.services import (
     get_company_profile,
     publish_app_release,
     queue_salary_payment_acknowledgement,
+    reassign_unassigned_followup_owners,
     record_referral_reward_payment,
     save_interested_lead_detail,
     import_leads_from_upload,
@@ -791,6 +794,26 @@ def developer_releases_page(request):
                 else:
                     messages.success(request, f"{release_name} was removed from stored updates.")
                     return redirect("developer-releases-page")
+        elif release_action == "reassign_followup_owners":
+            repair_summary = reassign_unassigned_followup_owners()
+            if repair_summary["scanned_count"] == 0:
+                messages.info(request, "No unassigned follow-up leads were found to repair.")
+            elif repair_summary["reassigned_count"] == 0:
+                messages.warning(
+                    request,
+                    f"Checked {repair_summary['scanned_count']} unassigned follow-up lead(s), but none had a clear active staff owner to restore.",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"Follow-up owner repair completed. Reassigned {repair_summary['reassigned_count']} of {repair_summary['scanned_count']} unassigned follow-up lead(s)."
+                    + (
+                        f" {repair_summary['still_unassigned_count']} still need manual review."
+                        if repair_summary["still_unassigned_count"] > 0
+                        else ""
+                    ),
+                )
+            return redirect("developer-releases-page")
         else:
             release_form_data = {
                 "version_name": request.POST.get("version_name", "").strip(),
@@ -1755,14 +1778,49 @@ def interested_leads_page(request):
         return redirect("web-login")
 
     search_query = request.GET.get("q", "").strip()
+    date_from = request.GET.get("date_from", "").strip()
+    date_to = request.GET.get("date_to", "").strip()
+    staff_id = request.GET.get("staff_id", "").strip()
+    outcome = request.GET.get("outcome", "all").strip()
+    if request.GET.get("download") == "csv":
+        csv_content = build_interested_lead_csv_response(
+            query=search_query,
+            date_from=date_from,
+            date_to=date_to,
+            staff_id=staff_id,
+            outcome=outcome,
+        )
+        response = HttpResponse(csv_content, content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="heavenection-interested-outcomes.csv"'
+        return response
+    if request.GET.get("download") == "xlsx":
+        excel_content = build_interested_lead_excel_response(
+            query=search_query,
+            date_from=date_from,
+            date_to=date_to,
+            staff_id=staff_id,
+            outcome=outcome,
+        )
+        response = HttpResponse(
+            excel_content,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = 'attachment; filename="heavenection-interested-outcomes.xlsx"'
+        return response
     context = _admin_web_context(
         request,
         current_user,
         active_page="interested-leads",
         page_title="Interested Leads",
         page_heading="Interested Leads",
-        page_subtitle="Review interested customer details, then mark each lead as successful or unsuccessful.",
-        extra_context=build_interested_lead_payload(query=search_query),
+        page_subtitle="Track interested outcomes, review staff follow-up quality, and mark each lead as successful or unsuccessful.",
+        extra_context=build_interested_lead_payload(
+            query=search_query,
+            date_from=date_from,
+            date_to=date_to,
+            staff_id=staff_id,
+            outcome=outcome,
+        ),
     )
     return render(request, "admin_interested_leads.html", context)
 

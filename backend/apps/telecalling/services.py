@@ -1254,8 +1254,6 @@ def _staff_active_hours_map(staff_ids):
 
 def _build_referral_tracking_payload(staff, *, company_profile=None):
     company_profile = company_profile or get_company_profile()
-    required_hours = _quantized_decimal(company_profile.referral_required_hours or 0)
-    reward_amount = _money(company_profile.referral_reward_amount or 0)
     submissions = list(
         ReferralSubmission.objects.filter(referrer=staff)
         .select_related("joined_staff")
@@ -1290,6 +1288,8 @@ def _build_referral_tracking_payload(staff, *, company_profile=None):
     pending_total = Decimal("0.00")
 
     for submission in submissions:
+        required_hours = _submission_required_hours(submission, company_profile=company_profile)
+        reward_amount = _submission_reward_amount(submission, company_profile=company_profile)
         joined_staff = submission.joined_staff
         active_hours = active_hours_map.get(joined_staff.id, Decimal("0.00")) if joined_staff else Decimal("0.00")
         reward = rewards.get(joined_staff.id) if joined_staff else None
@@ -1378,6 +1378,33 @@ def _is_grandfathered_referral(staff):
     ).exists()
 
 
+def _referral_submission_for_staff(staff):
+    if not staff or not staff.referred_by_id:
+        return None
+    return (
+        ReferralSubmission.objects.filter(
+            joined_staff=staff,
+            referrer=staff.referred_by,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def _submission_required_hours(submission, *, company_profile=None):
+    if submission is not None:
+        return _quantized_decimal(submission.required_hours_at_submit or 0)
+    company_profile = company_profile or get_company_profile()
+    return _quantized_decimal(company_profile.referral_required_hours or 0)
+
+
+def _submission_reward_amount(submission, *, company_profile=None):
+    if submission is not None:
+        return _money(submission.reward_amount_at_submit or 0)
+    company_profile = company_profile or get_company_profile()
+    return _money(company_profile.referral_reward_amount or 0)
+
+
 def _sync_referral_reward_for_staff(staff, *, company_profile=None):
     company_profile = company_profile or get_company_profile()
     existing_reward = (
@@ -1388,23 +1415,26 @@ def _sync_referral_reward_for_staff(staff, *, company_profile=None):
     if existing_reward:
         return existing_reward
 
+    submission = _referral_submission_for_staff(staff)
+    required_hours = _submission_required_hours(submission, company_profile=company_profile)
+    reward_amount = _submission_reward_amount(submission, company_profile=company_profile)
+
     if (
         (not company_profile.referral_program_enabled and not _is_grandfathered_referral(staff))
         or not staff.referred_by_id
-        or Decimal(company_profile.referral_required_hours or 0) <= Decimal("0")
-        or Decimal(company_profile.referral_reward_amount or 0) <= Decimal("0")
+        or required_hours <= Decimal("0")
+        or reward_amount <= Decimal("0")
     ):
         return None
 
     total_hours = _staff_total_active_hours(staff)
-    required_hours = _quantized_decimal(company_profile.referral_required_hours or 0)
     if total_hours < required_hours:
         return None
 
     reward_defaults = {
         "referrer": staff.referred_by,
         "required_hours": required_hours,
-        "reward_amount": _money(company_profile.referral_reward_amount or 0),
+        "reward_amount": reward_amount,
         "qualified_at": timezone.now(),
     }
     try:
@@ -5194,6 +5224,8 @@ def build_referral_monitoring_payload(*, search_query="", stage_filter="all", re
     rows = []
 
     for submission in submissions:
+        required_hours = _submission_required_hours(submission, company_profile=company_profile)
+        reward_amount = _submission_reward_amount(submission, company_profile=company_profile)
         referrer = submission.referrer
         joined_staff = submission.joined_staff
         active_hours = active_hours_map.get(joined_staff.id, Decimal("0.00")) if joined_staff else Decimal("0.00")
@@ -7399,9 +7431,29 @@ def save_interested_lead_detail(
     return detail
 
 
-def build_interested_lead_payload(*, query=""):
+def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_id="", outcome="all"):
     queryset = InterestedLeadDetail.objects.select_related("lead", "staff", "call")
     trimmed_query = (query or "").strip()
+    normalized_staff_id = (staff_id or "").strip()
+    normalized_outcome = (outcome or "all").strip().lower() or "all"
+    if normalized_outcome not in {"all", "converted", "rejected", "no_response", "open"}:
+        normalized_outcome = "all"
+
+    from_value = (date_from or "").strip()
+    to_value = (date_to or "").strip()
+    parsed_from = None
+    parsed_to = None
+    try:
+        parsed_from = date.fromisoformat(from_value) if from_value else None
+    except ValueError:
+        parsed_from = None
+        from_value = ""
+    try:
+        parsed_to = date.fromisoformat(to_value) if to_value else None
+    except ValueError:
+        parsed_to = None
+        to_value = ""
+
     if trimmed_query:
         queryset = queryset.filter(
             Q(customer_name__icontains=trimmed_query)
@@ -7409,10 +7461,37 @@ def build_interested_lead_payload(*, query=""):
             | Q(product_enquired__icontains=trimmed_query)
             | Q(enquiry_notes__icontains=trimmed_query)
             | Q(staff__name__icontains=trimmed_query)
+            | Q(lead__name__icontains=trimmed_query)
+            | Q(lead__phone__icontains=trimmed_query)
         )
+    if normalized_staff_id:
+        queryset = queryset.filter(staff_id=normalized_staff_id)
+    if parsed_from:
+        queryset = queryset.filter(created_at__date__gte=parsed_from)
+    if parsed_to:
+        queryset = queryset.filter(created_at__date__lte=parsed_to)
+    if normalized_outcome == "converted":
+        queryset = queryset.filter(lead__status=Lead.Status.CONVERTED)
+    elif normalized_outcome == "rejected":
+        queryset = queryset.filter(lead__status=Lead.Status.NOT_INTERESTED)
+    elif normalized_outcome == "no_response":
+        queryset = queryset.filter(lead__status=Lead.Status.NO_ANSWER)
+    elif normalized_outcome == "open":
+        queryset = queryset.filter(lead__status=Lead.Status.INTERESTED)
 
     rows = []
-    for detail in queryset.order_by("-updated_at"):
+    staff_breakdown = defaultdict(
+        lambda: {
+            "staff_name": "",
+            "staff_phone": "",
+            "total_count": 0,
+            "converted_count": 0,
+            "rejected_count": 0,
+            "no_response_count": 0,
+            "open_count": 0,
+        }
+    )
+    for detail in queryset.order_by("-updated_at", "-created_at"):
         lead_status = detail.lead.status
         status_tone = {
             Lead.Status.CONVERTED: "success",
@@ -7421,6 +7500,12 @@ def build_interested_lead_payload(*, query=""):
             Lead.Status.NO_ANSWER: "primary",
             Lead.Status.NEW: "muted",
         }.get(lead_status, "muted")
+        outcome_key = {
+            Lead.Status.CONVERTED: "converted",
+            Lead.Status.NOT_INTERESTED: "rejected",
+            Lead.Status.NO_ANSWER: "no_response",
+            Lead.Status.INTERESTED: "open",
+        }.get(lead_status, "other")
         rows.append(
             {
                 "id": str(detail.id),
@@ -7434,12 +7519,40 @@ def build_interested_lead_payload(*, query=""):
                 "staff_phone": detail.staff.phone,
                 "updated_at": _format_datetime(detail.updated_at),
                 "created_at": _format_datetime(detail.created_at),
+                "created_at_date": detail.created_at.date().isoformat(),
                 "lead_status": lead_status,
                 "lead_status_label": detail.lead.get_status_display(),
                 "lead_status_tone": status_tone,
                 "is_converted": lead_status == Lead.Status.CONVERTED,
+                "outcome_key": outcome_key,
             }
         )
+        breakdown = staff_breakdown[detail.staff_id]
+        breakdown["staff_name"] = detail.staff.name
+        breakdown["staff_phone"] = detail.staff.phone
+        breakdown["total_count"] += 1
+        if lead_status == Lead.Status.CONVERTED:
+            breakdown["converted_count"] += 1
+        elif lead_status == Lead.Status.NOT_INTERESTED:
+            breakdown["rejected_count"] += 1
+        elif lead_status == Lead.Status.NO_ANSWER:
+            breakdown["no_response_count"] += 1
+        elif lead_status == Lead.Status.INTERESTED:
+            breakdown["open_count"] += 1
+
+    staff_breakdown_rows = sorted(
+        staff_breakdown.values(),
+        key=lambda row: (
+            -row["converted_count"],
+            -row["open_count"],
+            -row["total_count"],
+            row["staff_name"].lower(),
+        ),
+    )
+    staff_options = [
+        {"id": str(staff.id), "name": staff.name}
+        for staff in Staff.objects.filter(role=Staff.Role.STAFF, is_active=True).order_by("name")
+    ]
 
     return {
         "interested_lead_rows": rows,
@@ -7453,10 +7566,115 @@ def build_interested_lead_payload(*, query=""):
             "with_notes_count": sum(1 for row in rows if row["enquiry_notes"]),
             "scheduled_count": sum(1 for row in rows if row["preferred_call_time"]),
             "converted_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.CONVERTED),
-            "open_count": sum(1 for row in rows if row["lead_status"] != Lead.Status.CONVERTED),
+            "rejected_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.NOT_INTERESTED),
+            "no_response_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.NO_ANSWER),
+            "open_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.INTERESTED),
+            "staff_count": len(staff_breakdown_rows),
         },
+        "interested_staff_breakdown_rows": staff_breakdown_rows,
+        "interested_staff_options": staff_options,
         "interested_search_query": trimmed_query,
+        "interested_filter_date_from": from_value,
+        "interested_filter_date_to": to_value,
+        "interested_filter_staff_id": normalized_staff_id,
+        "interested_filter_outcome": normalized_outcome,
     }
+
+
+def build_interested_lead_csv_response(*, query="", date_from="", date_to="", staff_id="", outcome="all"):
+    payload = build_interested_lead_payload(
+        query=query,
+        date_from=date_from,
+        date_to=date_to,
+        staff_id=staff_id,
+        outcome=outcome,
+    )
+    response = io.StringIO()
+    writer = csv.writer(response)
+    writer.writerow(
+        [
+            "Lead ID",
+            "Customer Name",
+            "Customer Phone",
+            "Product",
+            "Notes",
+            "Preferred Call Time",
+            "Staff",
+            "Staff Phone",
+            "Outcome",
+            "Created At",
+            "Updated At",
+        ]
+    )
+    for row in payload["interested_lead_rows"]:
+        writer.writerow(
+            [
+                row["lead_id"],
+                row["customer_name"],
+                row["customer_phone"],
+                row["product_enquired"],
+                row["enquiry_notes"],
+                row["preferred_call_time"],
+                row["staff_name"],
+                row["staff_phone"],
+                row["lead_status_label"],
+                row["created_at"],
+                row["updated_at"],
+            ]
+        )
+    return response.getvalue()
+
+
+def build_interested_lead_excel_response(*, query="", date_from="", date_to="", staff_id="", outcome="all"):
+    if Workbook is None:
+        raise ValueError("Excel export is not available right now.")
+
+    payload = build_interested_lead_payload(
+        query=query,
+        date_from=date_from,
+        date_to=date_to,
+        staff_id=staff_id,
+        outcome=outcome,
+    )
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Interested Outcomes"
+    worksheet.append(
+        [
+            "Lead ID",
+            "Customer Name",
+            "Customer Phone",
+            "Product",
+            "Notes",
+            "Preferred Call Time",
+            "Staff",
+            "Staff Phone",
+            "Outcome",
+            "Created At",
+            "Updated At",
+        ]
+    )
+    for row in payload["interested_lead_rows"]:
+        worksheet.append(
+            [
+                row["lead_id"],
+                row["customer_name"],
+                row["customer_phone"],
+                row["product_enquired"],
+                row["enquiry_notes"],
+                row["preferred_call_time"],
+                row["staff_name"],
+                row["staff_phone"],
+                row["lead_status_label"],
+                row["created_at"],
+                row["updated_at"],
+            ]
+        )
+
+    output = io.BytesIO()
+    workbook.save(output)
+    output.seek(0)
+    return output.getvalue()
 
 
 def get_assigned_leads(staff):
