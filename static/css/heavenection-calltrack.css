@@ -144,27 +144,96 @@
 .hc-admin-web .mf-sidebar {
     background:
         radial-gradient(circle at 14% 14%, rgba(255, 255, 255, 0.16) 0, rgba(255, 255, 255, 0) 28%),
-        linear-gradient(180deg, #212a4a 0%, #344170 100%);
+        radial-gradient(circle at 88% 8%, rgba(92, 226, 255, 0.12) 0, rgba(92, 226, 255, 0) 24%),
+        linear-gradient(180deg, #1c2542 0%, #2a365f 46%, #344170 100%);
+}
+
+.hc-sidebar-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 7rem);
+}
+
+.hc-sidebar-overview-card {
+    position: relative;
+    padding: 1rem 1.05rem;
+    margin-bottom: 1rem;
+    border-radius: 22px;
+    border: 1px solid rgba(208, 220, 255, 0.12);
+    background:
+        radial-gradient(circle at top right, rgba(110, 226, 255, 0.18), rgba(110, 226, 255, 0) 34%),
+        linear-gradient(150deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+}
+
+.hc-sidebar-overview-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.28rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(236, 243, 255, 0.82);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.hc-sidebar-overview-copy {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.hc-sidebar-overview-copy strong {
+    color: #ffffff;
+    font-size: 1rem;
+    line-height: 1.3;
+}
+
+.hc-sidebar-overview-copy small {
+    color: rgba(228, 235, 255, 0.74);
+    line-height: 1.45;
+}
+
+.hc-sidebar-overview-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: 0.85rem;
+}
+
+.hc-sidebar-overview-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.34rem 0.62rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(237, 244, 255, 0.82);
+    font-size: 0.73rem;
 }
 
 .hc-sidebar-nav {
     display: flex;
     flex-direction: column;
-    gap: 0.7rem;
+    gap: 0.8rem;
 }
 
 .hc-sidebar-section {
     border: 1px solid rgba(199, 211, 255, 0.08);
-    border-radius: 20px;
-    background: rgba(255, 255, 255, 0.035);
+    border-radius: 22px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03));
     overflow: hidden;
-    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .hc-sidebar-section.is-expanded {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(199, 211, 255, 0.14);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.05));
+    border-color: rgba(199, 211, 255, 0.16);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 26px rgba(11, 19, 38, 0.12);
+    transform: translateY(-1px);
 }
 
 .hc-sidebar-toggle {
@@ -173,7 +242,7 @@
     grid-template-columns: 42px minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 0.8rem;
-    padding: 0.95rem 1rem;
+    padding: 1rem 1rem;
     border: 0;
     background: transparent;
     color: #f3f6ff;
@@ -181,7 +250,7 @@
 }
 
 .hc-sidebar-toggle:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.07);
 }
 
 .hc-sidebar-toggle-icon {
@@ -191,7 +260,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 14px;
-    background: rgba(255, 255, 255, 0.08);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.08));
     color: #e7edff;
     font-size: 1rem;
 }
@@ -205,7 +274,7 @@
 .hc-sidebar-toggle-copy strong {
     color: #f4f7ff;
     font-size: 0.95rem;
-    font-weight: 700;
+    font-weight: 800;
     line-height: 1.2;
 }
 
@@ -218,9 +287,9 @@
 
 .hc-sidebar-toggle-badge {
     min-width: 28px;
-    padding: 0.22rem 0.48rem;
+    padding: 0.24rem 0.5rem;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.12);
     color: #f4f7ff;
     font-size: 0.74rem;
     font-weight: 700;
@@ -240,15 +309,15 @@
 .hc-sidebar-links {
     display: flex;
     flex-direction: column;
-    gap: 0.35rem;
-    padding: 0 0.8rem 0.85rem;
+    gap: 0.42rem;
+    padding: 0 0.82rem 0.95rem;
 }
 
 .hc-sidebar-link {
     display: flex;
     align-items: center;
     gap: 0.8rem;
-    padding: 0.82rem 0.95rem;
+    padding: 0.86rem 0.98rem;
     border: 1px solid transparent;
     border-radius: 16px;
     color: rgba(240, 245, 255, 0.88);
@@ -263,15 +332,45 @@
 
 .hc-sidebar-link:hover {
     border-color: rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.08);
     color: #ffffff;
     transform: translateX(2px);
 }
 
 .hc-sidebar-link.active {
-    background: linear-gradient(135deg, #4d5c90, #6f80ba);
-    box-shadow: 0 10px 20px rgba(77, 92, 144, 0.32);
+    background: linear-gradient(135deg, #4d5c90, #6b7eba);
+    box-shadow: 0 12px 22px rgba(77, 92, 144, 0.32);
     color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.hc-sidebar-footer-card {
+    margin-top: auto;
+    padding: 1rem;
+    border-radius: 22px;
+    border: 1px solid rgba(208, 220, 255, 0.12);
+    background:
+        radial-gradient(circle at 100% 0%, rgba(106, 225, 255, 0.14), rgba(106, 225, 255, 0) 38%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.05));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.hc-sidebar-footer-kicker {
+    display: inline-block;
+    margin-bottom: 0.45rem;
+    color: rgba(228, 235, 255, 0.72);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.hc-sidebar-footer-card h6 {
+    color: #ffffff;
+}
+
+.hc-sidebar-footer-card p {
+    color: rgba(228, 235, 255, 0.76);
+    line-height: 1.5;
 }
 
 .hc-admin-web .btn-primary {
