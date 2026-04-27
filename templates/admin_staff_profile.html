@@ -198,13 +198,6 @@
                 </div>
                 <div class="col-6">
                     <div class="hc-summary-card h-100 hc-staff-snapshot-card">
-                        <span class="mf-db2-kicker">Call Rate</span>
-                        <h3 class="mb-1">{{ summary.call_rate }}</h3>
-                        <p class="mb-0 text-muted">Extra amount added for call-based pay.</p>
-                    </div>
-                </div>
-                <div class="col-6">
-                    <div class="hc-summary-card h-100 hc-staff-snapshot-card">
                         <span class="mf-db2-kicker">No Response Today</span>
                         <h3 class="mb-1">{{ summary.no_answer_today }}</h3>
                         <p class="mb-0 text-muted">Calls that did not connect today.</p>
@@ -538,20 +531,10 @@
                         <h6>Compensation details and payout account</h6>
                     </div>
                     <div class="row g-3">
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <label class="form-label fw-semibold" for="staffProfileHourlyRate">Hourly Rate</label>
                             <input type="number" step="0.01" class="form-control{% if staff_errors.hourly_rate %} is-invalid{% endif %}" id="staffProfileHourlyRate" name="hourly_rate" value="{{ staff_form_data.hourly_rate }}">
                             {% if staff_errors.hourly_rate %}<div class="invalid-feedback">{{ staff_errors.hourly_rate }}</div>{% endif %}
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold" for="staffProfileCallRate">Call Rate</label>
-                            <input type="number" step="0.01" class="form-control{% if staff_errors.call_rate %} is-invalid{% endif %}" id="staffProfileCallRate" name="call_rate" value="{{ staff_form_data.call_rate }}">
-                            {% if staff_errors.call_rate %}<div class="invalid-feedback">{{ staff_errors.call_rate }}</div>{% endif %}
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label fw-semibold" for="staffProfileBonus">Bonus</label>
-                            <input type="number" step="0.01" class="form-control{% if staff_errors.bonus_per_conversion %} is-invalid{% endif %}" id="staffProfileBonus" name="bonus_per_conversion" value="{{ staff_form_data.bonus_per_conversion }}">
-                            {% if staff_errors.bonus_per_conversion %}<div class="invalid-feedback">{{ staff_errors.bonus_per_conversion }}</div>{% endif %}
                         </div>
                         <div class="col-md-6">
                             <label class="form-label fw-semibold" for="staffProfileBankAccountName">Account Holder Name</label>
