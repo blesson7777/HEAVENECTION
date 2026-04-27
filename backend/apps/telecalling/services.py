@@ -6121,7 +6121,9 @@ def build_lead_management_payload():
         "staff_options": staff_options,
         "queue_summary": {
             "active_queue_total": active_queue.count(),
-            "unassigned_total": active_queue.filter(assigned_to=None).count(),
+            "unassigned_total": _staff_call_queue_queryset(
+                active_queue.filter(assigned_to=None)
+            ).count(),
             "staff_active_count": _staff_queryset().filter(is_active=True).count(),
             "queue_limit": queue_limit,
         },
