@@ -190,6 +190,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _isSessionBusy = false;
   bool _isTrainingPromptVisible = false;
   bool _isNetworkErrorVisible = false;
+  bool _isRecoveringFromNetworkError = false;
   int _tab = 0;
   int _lastLoadedTab = 0;
   int _leadIndex = 0;
@@ -1304,14 +1305,18 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     setState(() {
       _networkErrorMessage = message;
       _isNetworkErrorVisible = true;
+      _isRecoveringFromNetworkError = false;
       _lastLoadedTab = _tab;
     });
   }
 
   Future<void> _recoverFromNetworkError() async {
+    if (_isRecoveringFromNetworkError) {
+      return;
+    }
     try {
       if (mounted) {
-        setState(() => _isNetworkErrorVisible = false);
+        setState(() => _isRecoveringFromNetworkError = true);
       }
       if (_user == null) {
         await _apiClient.loadStoredSession();
@@ -1349,16 +1354,26 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 : (_lastLoadedTab > 3 ? 3 : _lastLoadedTab));
       setState(() {
         _isNetworkErrorVisible = false;
+        _isRecoveringFromNetworkError = false;
         _tab = preferredTab;
         _lastLoadedTab = preferredTab;
       });
     } on ApiException catch (error) {
+      if (mounted) {
+        setState(() => _isRecoveringFromNetworkError = false);
+      }
       if (error.code != 'network_error') {
         _showMessage(error.message, isError: true);
       } else {
         _showNetworkError(
           'Still unable to reconnect. Check your internet connection and try again.',
         );
+      }
+    } finally {
+      if (mounted &&
+          _isRecoveringFromNetworkError &&
+          !_isNetworkErrorVisible) {
+        setState(() => _isRecoveringFromNetworkError = false);
       }
     }
   }
@@ -4710,6 +4725,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         body: NetworkErrorView(
           message: _networkErrorMessage,
           onRetry: _recoverFromNetworkError,
+          isRetrying: _isRecoveringFromNetworkError,
         ),
       );
     } else if (_user == null) {
@@ -4770,13 +4786,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             ],
           ),
           body: SafeArea(
-            child: _isNetworkErrorVisible
-                ? NetworkErrorView(
-                    message: _networkErrorMessage,
-                    onRetry: _recoverFromNetworkError,
-                  )
-                : pages[_tab],
-          ),
+              child: _isNetworkErrorVisible
+                  ? NetworkErrorView(
+                      message: _networkErrorMessage,
+                      onRetry: _recoverFromNetworkError,
+                      isRetrying: _isRecoveringFromNetworkError,
+                    )
+                  : pages[_tab],
+            ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _tab,
             onDestinationSelected: (value) {
@@ -7403,10 +7420,12 @@ class NetworkErrorView extends StatelessWidget {
     super.key,
     required this.message,
     required this.onRetry,
+    this.isRetrying = false,
   });
 
   final String message;
   final Future<void> Function() onRetry;
+  final bool isRetrying;
 
   @override
   Widget build(BuildContext context) {
@@ -7516,9 +7535,18 @@ class NetworkErrorView extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
                   ElevatedButton.icon(
-                    onPressed: onRetry,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Try Again'),
+                    onPressed: isRetrying ? null : onRetry,
+                    icon: isRetrying
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.refresh),
+                    label: Text(isRetrying ? 'Reconnecting...' : 'Try Again'),
                   ),
                 ],
               ),
