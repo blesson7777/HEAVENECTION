@@ -26,9 +26,11 @@ const List<String> kMalayalamFontFallback = [
 const TextStyle kMalayalamFallbackStyle = TextStyle(
   fontFamilyFallback: kMalayalamFontFallback,
 );
+const String kLegacyApiBaseUrl =
+    'https://heavenection-production.up.railway.app';
 const String kApiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'https://heavenection-production.up.railway.app',
+  defaultValue: 'https://api.heavenection.com',
 );
 
 const Color kPrimary = Color(0xFF4D5C90);
@@ -163,7 +165,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final ImagePicker _imagePicker = ImagePicker();
-  final ApiClient _apiClient = ApiClient(baseUrl: kApiBaseUrl);
+  final ApiClient _apiClient = ApiClient(
+    baseUrl: kApiBaseUrl,
+    fallbackBaseUrls: const [kLegacyApiBaseUrl],
+  );
   static const MethodChannel _updaterChannel = MethodChannel(
     'heavenection/updater',
   );

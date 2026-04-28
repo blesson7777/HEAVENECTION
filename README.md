@@ -155,7 +155,7 @@ flutter run
 4. Build a release APK:
 
 ```bash
-flutter build apk --release --dart-define=API_BASE_URL=https://heavenection-production.up.railway.app
+flutter build apk --release --dart-define=API_BASE_URL=https://api.heavenection.com
 ```
 
 APK output:

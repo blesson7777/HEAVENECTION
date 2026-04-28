@@ -69,12 +69,12 @@ The staff app already supports a production API base URL using a Flutter dart de
 Build the production APK with:
 
 ```powershell
-flutter build apk --release --dart-define=API_BASE_URL=https://heavenection-production.up.railway.app
+flutter build apk --release --dart-define=API_BASE_URL=https://api.heavenection.com
 ```
 
 If you want your live users to receive that build through the in-app updater:
 
-1. Build the APK with the Railway URL.
+1. Build the APK with `https://api.heavenection.com` as the primary URL.
 2. Open `https://heavenection-production.up.railway.app/developer/login/`.
 3. Upload the APK on `/developer/releases/`.
 4. Mark that release active.
@@ -82,8 +82,8 @@ If you want your live users to receive that build through the in-app updater:
 ## Custom domain
 
 Current live-safe setup:
-- backend web can use `https://heavenection-production.up.railway.app`
-- recommended app endpoint is `https://api.heavenection.com`
+- primary app endpoint is `https://api.heavenection.com`
+- legacy Railway fallback can stay on `https://heavenection-production.up.railway.app`
 - website/admin can use:
   - `https://heavenection.com`
   - `https://www.heavenection.com`

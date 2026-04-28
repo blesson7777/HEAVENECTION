@@ -13,10 +13,19 @@ String _dateOnlyString(DateTime value) {
 }
 
 class ApiClient {
-  ApiClient({required this.baseUrl, http.Client? client})
-    : _client = client ?? http.Client();
+  ApiClient({
+    required this.baseUrl,
+    List<String> fallbackBaseUrls = const [],
+    http.Client? client,
+  }) : fallbackBaseUrls =
+           fallbackBaseUrls
+               .map((item) => item.trim())
+               .where((item) => item.isNotEmpty)
+               .toList(growable: false),
+       _client = client ?? http.Client();
 
   final String baseUrl;
+  final List<String> fallbackBaseUrls;
   final http.Client _client;
   final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: true),
@@ -466,7 +475,84 @@ class ApiClient {
     bool requiresAuth = true,
     bool retryOnAuthFailure = true,
   }) async {
-    final uri = Uri.parse('$baseUrl$path');
+    ApiException? lastNetworkError;
+    for (final candidateBaseUrl in _candidateBaseUrls) {
+      try {
+        return await _sendToBaseUrl(
+          candidateBaseUrl,
+          method,
+          path,
+          body: body,
+          requiresAuth: requiresAuth,
+          retryOnAuthFailure: retryOnAuthFailure,
+        );
+      } on ApiException catch (error) {
+        if (error.code != 'network_error') {
+          rethrow;
+        }
+        lastNetworkError = error;
+      }
+    }
+    throw lastNetworkError ??
+        const ApiException(
+          'Network connection lost.',
+          statusCode: 0,
+          code: 'network_error',
+        );
+  }
+
+  Future<http.Response> _sendMultipart(
+    String method,
+    String path, {
+    required Map<String, String> fields,
+    Map<String, String>? filePaths,
+    bool requiresAuth = true,
+    bool retryOnAuthFailure = true,
+  }) async {
+    ApiException? lastNetworkError;
+    for (final candidateBaseUrl in _candidateBaseUrls) {
+      try {
+        return await _sendMultipartToBaseUrl(
+          candidateBaseUrl,
+          method,
+          path,
+          fields: fields,
+          filePaths: filePaths,
+          requiresAuth: requiresAuth,
+          retryOnAuthFailure: retryOnAuthFailure,
+        );
+      } on ApiException catch (error) {
+        if (error.code != 'network_error') {
+          rethrow;
+        }
+        lastNetworkError = error;
+      }
+    }
+    throw lastNetworkError ??
+        const ApiException(
+          'Network connection lost.',
+          statusCode: 0,
+          code: 'network_error',
+        );
+  }
+
+  List<String> get _candidateBaseUrls {
+    final seen = <String>{};
+    return [baseUrl, ...fallbackBaseUrls]
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty && seen.add(item))
+        .toList(growable: false);
+  }
+
+  Future<http.Response> _sendToBaseUrl(
+    String candidateBaseUrl,
+    String method,
+    String path, {
+    Map<String, dynamic>? body,
+    required bool requiresAuth,
+    required bool retryOnAuthFailure,
+  }) async {
+    final uri = Uri.parse('$candidateBaseUrl$path');
     final headers = <String, String>{
       'Accept': 'application/json',
       'Content-Type': 'application/json',
@@ -533,15 +619,16 @@ class ApiClient {
     return response;
   }
 
-  Future<http.Response> _sendMultipart(
+  Future<http.Response> _sendMultipartToBaseUrl(
+    String candidateBaseUrl,
     String method,
     String path, {
     required Map<String, String> fields,
     Map<String, String>? filePaths,
-    bool requiresAuth = true,
-    bool retryOnAuthFailure = true,
+    required bool requiresAuth,
+    required bool retryOnAuthFailure,
   }) async {
-    final uri = Uri.parse('$baseUrl$path');
+    final uri = Uri.parse('$candidateBaseUrl$path');
     final request = http.MultipartRequest(method, uri);
     request.headers['Accept'] = 'application/json';
     if (requiresAuth && _accessToken != null) {
