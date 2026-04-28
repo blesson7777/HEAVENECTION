@@ -230,6 +230,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _hasCheckedAppUpdate = false;
   bool _hasConnection = true;
   bool _trustThisDevice = true;
+  bool _isLoginPasswordVisible = false;
   Timer? _networkErrorTimer;
   String? _pendingNetworkErrorMessage;
   AppUpdateInfo? _pendingAppUpdate;
@@ -2882,6 +2883,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final confirmPasswordController = TextEditingController();
     String? errorText;
     var isSubmitting = false;
+    var isCurrentPasswordVisible = false;
+    var isNewPasswordVisible = false;
+    var isConfirmPasswordVisible = false;
 
     await showDialog<void>(
       context: context,
@@ -2967,28 +2971,66 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     const SizedBox(height: 16),
                     TextField(
                       controller: currentPasswordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
+                      obscureText: !isCurrentPasswordVisible,
+                      decoration: InputDecoration(
                         labelText: 'Current Password',
-                        prefixIcon: Icon(Icons.lock_outline),
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          onPressed: () {
+                            setDialogState(() {
+                              isCurrentPasswordVisible =
+                                  !isCurrentPasswordVisible;
+                            });
+                          },
+                          icon: Icon(
+                            isCurrentPasswordVisible
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: newPasswordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
+                      obscureText: !isNewPasswordVisible,
+                      decoration: InputDecoration(
                         labelText: 'New Password',
-                        prefixIcon: Icon(Icons.lock_reset_outlined),
+                        prefixIcon: const Icon(Icons.lock_reset_outlined),
+                        suffixIcon: IconButton(
+                          onPressed: () {
+                            setDialogState(() {
+                              isNewPasswordVisible = !isNewPasswordVisible;
+                            });
+                          },
+                          icon: Icon(
+                            isNewPasswordVisible
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: confirmPasswordController,
-                      obscureText: true,
-                      decoration: const InputDecoration(
+                      obscureText: !isConfirmPasswordVisible,
+                      decoration: InputDecoration(
                         labelText: 'Confirm New Password',
-                        prefixIcon: Icon(Icons.verified_outlined),
+                        prefixIcon: const Icon(Icons.verified_outlined),
+                        suffixIcon: IconButton(
+                          onPressed: () {
+                            setDialogState(() {
+                              isConfirmPasswordVisible =
+                                  !isConfirmPasswordVisible;
+                            });
+                          },
+                          icon: Icon(
+                            isConfirmPasswordVisible
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                          ),
+                        ),
                       ),
                     ),
                     if (errorText != null) ...[
@@ -5327,10 +5369,25 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   const SizedBox(height: 14),
                   TextField(
                     controller: password,
-                    obscureText: true,
-                    decoration: const InputDecoration(
+                    obscureText: !_isLoginPasswordVisible,
+                    decoration: InputDecoration(
                       labelText: 'Password',
-                      prefixIcon: Icon(Icons.lock),
+                      prefixIcon: const Icon(Icons.lock),
+                      suffixIcon: IconButton(
+                        onPressed: _isLoggingIn
+                            ? null
+                            : () {
+                                setState(() {
+                                  _isLoginPasswordVisible =
+                                      !_isLoginPasswordVisible;
+                                });
+                              },
+                        icon: Icon(
+                          _isLoginPasswordVisible
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 12),
