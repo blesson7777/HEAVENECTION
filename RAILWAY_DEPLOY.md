@@ -24,8 +24,8 @@ Set these on the web service:
 
 - `DJANGO_SECRET_KEY`
 - `DJANGO_DEBUG=false`
-- `DJANGO_ALLOWED_HOSTS=api.heavenection.com,heavenection-production.up.railway.app,heavenection.com,www.heavenection.com,healthcheck.railway.app`
-- `DJANGO_CSRF_TRUSTED_ORIGINS=https://api.heavenection.com,https://heavenection-production.up.railway.app,https://heavenection.com,https://www.heavenection.com`
+- `DJANGO_ALLOWED_HOSTS=api.heavenection.com,admin.heavenection.com,heavenection-production.up.railway.app,heavenection.com,www.heavenection.com,healthcheck.railway.app`
+- `DJANGO_CSRF_TRUSTED_ORIGINS=https://api.heavenection.com,https://admin.heavenection.com,https://heavenection-production.up.railway.app,https://heavenection.com,https://www.heavenection.com`
 - `DJANGO_MEDIA_ROOT=/data/media`
 - `DATABASE_URL=${{Postgres.DATABASE_URL}}`
 - `POSTGRES_CONN_MAX_AGE=60`
@@ -85,6 +85,7 @@ Current live-safe setup:
 - primary app endpoint is `https://api.heavenection.com`
 - legacy Railway fallback can stay on `https://heavenection-production.up.railway.app`
 - website/admin can use:
+  - `https://admin.heavenection.com`
   - `https://heavenection.com`
   - `https://www.heavenection.com`
 
