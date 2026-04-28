@@ -229,6 +229,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _isDownloadingUpdate = false;
   bool _hasCheckedAppUpdate = false;
   bool _hasConnection = true;
+  bool _trustThisDevice = true;
   Timer? _networkErrorTimer;
   String? _pendingNetworkErrorMessage;
   AppUpdateInfo? _pendingAppUpdate;
@@ -1410,6 +1411,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   Future<void> _bootstrap() async {
     try {
+      _trustThisDevice = await _apiClient.isTrustedDevice();
       await _apiClient.loadStoredSession();
       final restoredUser = await _apiClient.restoreSession();
       if (restoredUser != null) {
@@ -2197,6 +2199,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       final user = await _apiClient.login(
         identifier: phone.text.trim(),
         password: password.text,
+        trustDevice: _trustThisDevice,
       );
       if (user.role != 'staff') {
         await _apiClient.clearSession();
@@ -5328,6 +5331,42 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     decoration: const InputDecoration(
                       labelText: 'Password',
                       prefixIcon: Icon(Icons.lock),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.82),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: kPrimary.withValues(alpha: 0.12)),
+                    ),
+                    child: CheckboxListTile(
+                      value: _trustThisDevice,
+                      onChanged: _isLoggingIn
+                          ? null
+                          : (value) {
+                              if (value == null) {
+                                return;
+                              }
+                              setState(() => _trustThisDevice = value);
+                            },
+                      controlAffinity: ListTileControlAffinity.leading,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 6),
+                      title: const Text(
+                        'Trust this device',
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Keep this phone signed in after closing the app.',
+                        style: TextStyle(fontSize: 13.5, color: Colors.black54),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 18),

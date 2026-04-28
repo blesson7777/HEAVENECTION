@@ -37,14 +37,40 @@ class ApiClient {
 
   static const _accessKey = 'heavenection_access_token';
   static const _refreshKey = 'heavenection_refresh_token';
+  static const _trustedDeviceKey = 'heavenection_trusted_device';
 
   Future<void> loadStoredSession() async {
     _preferences ??= await SharedPreferences.getInstance();
+    if (!await isTrustedDevice()) {
+      _accessToken = null;
+      _refreshToken = null;
+      return;
+    }
     _accessToken = await _secureStorage.read(key: _accessKey);
     _refreshToken = await _secureStorage.read(key: _refreshKey);
     if (_accessToken == null || _refreshToken == null) {
       await _migrateLegacyStoredSession();
     }
+  }
+
+  Future<bool> isTrustedDevice() async {
+    _preferences ??= await SharedPreferences.getInstance();
+    final trustedFlag = _preferences!.getBool(_trustedDeviceKey);
+    if (trustedFlag != null) {
+      return trustedFlag;
+    }
+    final legacyAccessToken = await _secureStorage.read(key: _accessKey);
+    final legacyRefreshToken = await _secureStorage.read(key: _refreshKey);
+    final hasLegacyStoredSession =
+        legacyAccessToken != null &&
+        legacyAccessToken.isNotEmpty &&
+        legacyRefreshToken != null &&
+        legacyRefreshToken.isNotEmpty;
+    if (hasLegacyStoredSession) {
+      await _preferences!.setBool(_trustedDeviceKey, true);
+      return true;
+    }
+    return false;
   }
 
   Future<StaffUser?> restoreSession() async {
@@ -66,6 +92,7 @@ class ApiClient {
   Future<StaffUser> login({
     required String identifier,
     required String password,
+    bool trustDevice = false,
   }) async {
     final response = await _send(
       'POST',
@@ -76,7 +103,12 @@ class ApiClient {
     final payload = _decodeMap(response.body);
     _accessToken = payload['access']?.toString();
     _refreshToken = payload['refresh']?.toString();
-    await _persistTokens();
+    await _setTrustedDevice(trustDevice);
+    if (trustDevice) {
+      await _persistTokens();
+    } else {
+      await _clearPersistedTokens();
+    }
     final user = payload['user'];
     return StaffUser.fromJson(user is Map<String, dynamic> ? user : const {});
   }
@@ -93,6 +125,12 @@ class ApiClient {
     _preferences ??= await SharedPreferences.getInstance();
     _accessToken = null;
     _refreshToken = null;
+    await _preferences!.remove(_trustedDeviceKey);
+    await _clearPersistedTokens();
+  }
+
+  Future<void> _clearPersistedTokens() async {
+    _preferences ??= await SharedPreferences.getInstance();
     await _secureStorage.delete(key: _accessKey);
     await _secureStorage.delete(key: _refreshKey);
     await _preferences!.remove(_accessKey);
@@ -435,6 +473,11 @@ class ApiClient {
       await _secureStorage.write(key: _refreshKey, value: _refreshToken!);
       await _preferences!.remove(_refreshKey);
     }
+  }
+
+  Future<void> _setTrustedDevice(bool value) async {
+    _preferences ??= await SharedPreferences.getInstance();
+    await _preferences!.setBool(_trustedDeviceKey, value);
   }
 
   Future<void> _migrateLegacyStoredSession() async {
