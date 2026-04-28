@@ -1378,6 +1378,36 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
+  Future<void> _runDeferredStartupWarmup({
+    bool promptTrainingGate = true,
+  }) async {
+    if (_user == null) {
+      return;
+    }
+
+    await _refreshRequiredPermissionState(showDialogIfMissing: true);
+    if (_user == null) {
+      return;
+    }
+
+    await _maybeAutoSyncEndedCall(showMissingMessage: false);
+    if (_user == null) {
+      return;
+    }
+
+    if (_profile == null || _tab == 3) {
+      await _loadProfile(showLoader: false);
+    }
+
+    if (_user == null || !promptTrainingGate) {
+      return;
+    }
+
+    if (_requiredPermissionsGranted == true) {
+      await _handleEntryPrompts();
+    }
+  }
+
   Future<void> _bootstrap() async {
     try {
       await _apiClient.loadStoredSession();
@@ -1386,10 +1416,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _user = restoredUser;
         _markRequiredPermissionsPending();
         _updatePreferredOrientations();
-        await _loadDashboardData(showLoader: false, promptTrainingGate: true);
-        await _maybeAutoSyncEndedCall(showMissingMessage: false);
-        await _loadProfile(showLoader: false);
-        await _refreshRequiredPermissionState(showDialogIfMissing: true);
+        await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+        unawaited(_runDeferredStartupWarmup(promptTrainingGate: true));
       }
     } on ApiException catch (error) {
       if (error.code == 'network_error') {
@@ -2181,9 +2209,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _user = user;
       _markRequiredPermissionsPending();
       _updatePreferredOrientations();
-      await _loadDashboardData(showLoader: false, promptTrainingGate: true);
-      await _loadProfile(showLoader: false);
-      await _refreshRequiredPermissionState(showDialogIfMissing: true);
+      await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+      unawaited(_runDeferredStartupWarmup(promptTrainingGate: true));
     } on ApiException catch (error) {
       if (error.code == 'network_error') {
         _showNetworkError(
