@@ -4743,10 +4743,17 @@ def build_live_monitoring_payload():
 
     for row in team_rows:
         staff_id = uuid.UUID(str(row["id"]))
+        is_active_account = bool(row.get("is_active", True))
         gap_summary = gap_summary_map.get(staff_id, {})
         session = open_sessions.get(staff_id)
         current_call = current_open_calls.get(staff_id)
         online_label = row.get("online_label", "Offline")
+        active_seconds_today = int(row.get("active_seconds_today") or 0)
+        calls_today = int(row.get("calls_today") or 0)
+        quality_label = row.get("quality_label", "No Recent Activity")
+        needs_review = quality_label in {"Review Needed", "Needs Attention"}
+        has_worked_today = active_seconds_today > 0 or calls_today > 0
+        is_live_now = bool(current_call) or online_label in {"Online", "Away", "Warning"}
         if current_call:
             on_call_now += 1
         elif online_label == "Online":
@@ -4756,12 +4763,12 @@ def build_live_monitoring_payload():
         else:
             offline_now += 1
 
-        if row.get("quality_label") == "Review Needed":
+        if quality_label == "Review Needed":
             review_needed_now += 1
-        elif row.get("quality_label") == "Needs Attention":
+        elif quality_label == "Needs Attention":
             alert_now += 1
 
-        active_hours_seconds += int(row.get("active_seconds_today") or 0)
+        active_hours_seconds += active_seconds_today
         status_note = row.get("quality_note") or "Live staff activity is being monitored."
         if current_call:
             status_note = f"Talking with {current_call['lead_name']} for {current_call['duration_label']}."
@@ -4769,8 +4776,10 @@ def build_live_monitoring_payload():
             status_note = "Ready in the app and available for live calling."
         elif online_label in {"Away", "Warning"}:
             status_note = "Session is open, but the staff member is away from the app right now."
+        elif has_worked_today:
+            status_note = "Worked today and is currently offline from the app."
 
-        if bool(row.get("is_active", True)) and (current_call or online_label in {"Online", "Away", "Warning"}):
+        if is_active_account and (has_worked_today or is_live_now or needs_review):
             live_rows.append(
                 {
                     "id": row["id"],
@@ -4783,11 +4792,11 @@ def build_live_monitoring_payload():
                     "session_state": row.get("session_state", "stopped"),
                     "session_state_label": _session_status_label(session),
                     "active_hours_today": row.get("active_hours_today", "0.0h"),
-                    "calls_today": int(row.get("calls_today") or 0),
+                    "calls_today": calls_today,
                     "converted_today": int(row.get("converted_today") or 0),
                     "assigned_leads": int(row.get("assigned_leads") or 0),
                     "quality_score": int(row.get("quality_score") or 0),
-                    "quality_label": row.get("quality_label", "No Recent Activity"),
+                    "quality_label": quality_label,
                     "quality_tone": row.get("quality_tone", "muted"),
                     "quality_note": row.get("quality_note", "Build more recent call activity for a fuller review."),
                     "attempt_review_label": row.get("attempt_review_label", "--"),
@@ -4807,6 +4816,8 @@ def build_live_monitoring_payload():
                     "last_seen": row.get("last_seen", "--"),
                     "status_note": status_note,
                     "is_on_call": bool(current_call),
+                    "worked_today": has_worked_today,
+                    "needs_review": needs_review,
                     "current_call": current_call,
                 }
             )
@@ -4815,6 +4826,8 @@ def build_live_monitoring_payload():
         key=lambda row: (
             0 if row["is_on_call"] else 1,
             0 if row["online_label"] == "Online" else 1,
+            0 if row["worked_today"] else 1,
+            0 if row["needs_review"] else 1,
             -row["calls_today"],
             -row["quality_score"],
             row["name"].lower(),
