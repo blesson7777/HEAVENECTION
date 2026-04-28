@@ -70,96 +70,57 @@
                 <span><i class="bi bi-shield-check"></i> Managed access</span>
             </div>
         </div>
-        <div class="mf-nav-group">Primary Navigation</div>
+        <div class="mf-nav-group">Workspace Navigation</div>
         <nav class="hc-sidebar-nav" id="hcSidebarNav" aria-label="Sidebar Navigation">
-            <div class="hc-sidebar-section{% if active_page == 'calls' or active_page == 'hours' or active_page == 'work-review' or active_page == 'referrals' or active_page == 'live-monitoring' %} is-expanded{% endif %}">
-                <button
-                    type="button"
-                    class="hc-sidebar-toggle"
-                    data-bs-toggle="collapse"
-                    data-bs-target="#hcSidebarCommand"
-                    aria-expanded="{% if active_page == 'calls' or active_page == 'hours' or active_page == 'work-review' or active_page == 'referrals' or active_page == 'live-monitoring' %}true{% else %}false{% endif %}"
-                    aria-controls="hcSidebarCommand"
-                >
-                    <span class="hc-sidebar-toggle-icon"><i class="bi bi-broadcast-pin"></i></span>
-                    <span class="hc-sidebar-toggle-copy">
-                        <strong>Command Deck</strong>
-                        <small>Live operations and real-time review</small>
-                    </span>
-                    <span class="hc-sidebar-toggle-badge">5</span>
-                    <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
-                </button>
-                <div class="collapse{% if active_page == 'calls' or active_page == 'hours' or active_page == 'work-review' or active_page == 'referrals' or active_page == 'live-monitoring' %} show{% endif %}" id="hcSidebarCommand" data-bs-parent="#hcSidebarNav">
-                    <div class="hc-sidebar-links">
-                        <a href="{% url 'live-monitoring-page' %}" class="hc-sidebar-link{% if active_page == 'live-monitoring' %} active{% endif %}">
-                            <i class="bi bi-activity"></i>
-                            <span>Command Center</span>
-                        </a>
-                        <a href="{% url 'calls-page' %}" class="hc-sidebar-link{% if active_page == 'calls' %} active{% endif %}">
-                            <i class="bi bi-telephone-forward-fill"></i>
-                            <span>Call Details</span>
-                        </a>
-                        <a href="{% url 'working-hours-page' %}" class="hc-sidebar-link{% if active_page == 'hours' %} active{% endif %}">
-                            <i class="bi bi-clock-history"></i>
-                            <span>Working Hours</span>
-                        </a>
-                        <a href="{% url 'work-review-page' %}" class="hc-sidebar-link{% if active_page == 'work-review' %} active{% endif %}">
-                            <i class="bi bi-shield-exclamation"></i>
-                            <span>Work Review Center</span>
-                        </a>
-                        <a href="{% url 'referral-monitoring-page' %}" class="hc-sidebar-link{% if active_page == 'referrals' %} active{% endif %}">
-                            <i class="bi bi-people"></i>
-                            <span>Referral Monitoring</span>
-                        </a>
-                    </div>
-                </div>
-            </div>
-
-            <div class="hc-sidebar-section{% if active_page == 'dashboard' %} is-expanded{% endif %}">
+            <div class="hc-sidebar-section{% if active_page == 'dashboard' or active_page == 'live-monitoring' %} is-expanded{% endif %}">
                 <button
                     type="button"
                     class="hc-sidebar-toggle"
                     data-bs-toggle="collapse"
                     data-bs-target="#hcSidebarOverview"
-                    aria-expanded="{% if active_page == 'dashboard' %}true{% else %}false{% endif %}"
+                    aria-expanded="{% if active_page == 'dashboard' or active_page == 'live-monitoring' %}true{% else %}false{% endif %}"
                     aria-controls="hcSidebarOverview"
                 >
                     <span class="hc-sidebar-toggle-icon"><i class="bi bi-grid-1x2-fill"></i></span>
                     <span class="hc-sidebar-toggle-copy">
                         <strong>Overview</strong>
-                        <small>Main dashboard and business summary</small>
+                        <small>Main dashboard and live command center</small>
                     </span>
-                    <span class="hc-sidebar-toggle-badge">1</span>
+                    <span class="hc-sidebar-toggle-badge">2</span>
                     <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
                 </button>
-                <div class="collapse{% if active_page == 'dashboard' %} show{% endif %}" id="hcSidebarOverview" data-bs-parent="#hcSidebarNav">
+                <div class="collapse{% if active_page == 'dashboard' or active_page == 'live-monitoring' %} show{% endif %}" id="hcSidebarOverview" data-bs-parent="#hcSidebarNav">
                     <div class="hc-sidebar-links">
                         <a href="{% url 'dashboard' %}" class="hc-sidebar-link{% if active_page == 'dashboard' %} active{% endif %}">
                             <i class="bi bi-speedometer2"></i>
                             <span>Dashboard</span>
                         </a>
+                        <a href="{% url 'live-monitoring-page' %}" class="hc-sidebar-link{% if active_page == 'live-monitoring' %} active{% endif %}">
+                            <i class="bi bi-activity"></i>
+                            <span>Command Center</span>
+                        </a>
                     </div>
                 </div>
             </div>
 
-            <div class="hc-sidebar-section{% if active_page == 'staff' or active_page == 'leads' or active_page == 'followups' or active_page == 'interested-leads' or active_page == 'recovery' or active_page == 'learning' %} is-expanded{% endif %}">
+            <div class="hc-sidebar-section{% if active_page == 'staff' or active_page == 'leads' or active_page == 'followups' or active_page == 'interested-leads' or active_page == 'recovery' %} is-expanded{% endif %}">
                 <button
                     type="button"
                     class="hc-sidebar-toggle"
                     data-bs-toggle="collapse"
                     data-bs-target="#hcSidebarOperations"
-                    aria-expanded="{% if active_page == 'staff' or active_page == 'leads' or active_page == 'followups' or active_page == 'interested-leads' or active_page == 'recovery' or active_page == 'learning' %}true{% else %}false{% endif %}"
+                    aria-expanded="{% if active_page == 'staff' or active_page == 'leads' or active_page == 'followups' or active_page == 'interested-leads' or active_page == 'recovery' %}true{% else %}false{% endif %}"
                     aria-controls="hcSidebarOperations"
                 >
                     <span class="hc-sidebar-toggle-icon"><i class="bi bi-diagram-3-fill"></i></span>
                     <span class="hc-sidebar-toggle-copy">
-                        <strong>Operations</strong>
-                        <small>Staff, queue flow, and training tools</small>
+                        <strong>Lead Operations</strong>
+                        <small>Staff assignment, queues, and lead flow</small>
                     </span>
-                    <span class="hc-sidebar-toggle-badge">6</span>
+                    <span class="hc-sidebar-toggle-badge">5</span>
                     <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
                 </button>
-                <div class="collapse{% if active_page == 'staff' or active_page == 'leads' or active_page == 'followups' or active_page == 'interested-leads' or active_page == 'recovery' or active_page == 'learning' %} show{% endif %}" id="hcSidebarOperations" data-bs-parent="#hcSidebarNav">
+                <div class="collapse{% if active_page == 'staff' or active_page == 'leads' or active_page == 'followups' or active_page == 'interested-leads' or active_page == 'recovery' %} show{% endif %}" id="hcSidebarOperations" data-bs-parent="#hcSidebarNav">
                     <div class="hc-sidebar-links">
                         <a href="{% url 'staff-page' %}" class="hc-sidebar-link{% if active_page == 'staff' %} active{% endif %}">
                             <i class="bi bi-people-fill"></i>
@@ -181,9 +142,44 @@
                             <i class="bi bi-arrow-repeat"></i>
                             <span>Rejected / No Response</span>
                         </a>
-                        <a href="{% url 'learning-page' %}" class="hc-sidebar-link{% if active_page == 'learning' %} active{% endif %}">
-                            <i class="bi bi-mortarboard-fill"></i>
-                            <span>Learning Center</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hc-sidebar-section{% if active_page == 'calls' or active_page == 'hours' or active_page == 'work-review' or active_page == 'referrals' %} is-expanded{% endif %}">
+                <button
+                    type="button"
+                    class="hc-sidebar-toggle"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#hcSidebarMonitoring"
+                    aria-expanded="{% if active_page == 'calls' or active_page == 'hours' or active_page == 'work-review' or active_page == 'referrals' %}true{% else %}false{% endif %}"
+                    aria-controls="hcSidebarMonitoring"
+                >
+                    <span class="hc-sidebar-toggle-icon"><i class="bi bi-broadcast-pin"></i></span>
+                    <span class="hc-sidebar-toggle-copy">
+                        <strong>Monitoring & Review</strong>
+                        <small>Calls, hours, integrity, and referrals</small>
+                    </span>
+                    <span class="hc-sidebar-toggle-badge">4</span>
+                    <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
+                </button>
+                <div class="collapse{% if active_page == 'calls' or active_page == 'hours' or active_page == 'work-review' or active_page == 'referrals' %} show{% endif %}" id="hcSidebarMonitoring" data-bs-parent="#hcSidebarNav">
+                    <div class="hc-sidebar-links">
+                        <a href="{% url 'calls-page' %}" class="hc-sidebar-link{% if active_page == 'calls' %} active{% endif %}">
+                            <i class="bi bi-telephone-forward-fill"></i>
+                            <span>Call Details</span>
+                        </a>
+                        <a href="{% url 'working-hours-page' %}" class="hc-sidebar-link{% if active_page == 'hours' %} active{% endif %}">
+                            <i class="bi bi-clock-history"></i>
+                            <span>Working Hours</span>
+                        </a>
+                        <a href="{% url 'work-review-page' %}" class="hc-sidebar-link{% if active_page == 'work-review' %} active{% endif %}">
+                            <i class="bi bi-shield-exclamation"></i>
+                            <span>Work Review Center</span>
+                        </a>
+                        <a href="{% url 'referral-monitoring-page' %}" class="hc-sidebar-link{% if active_page == 'referrals' %} active{% endif %}">
+                            <i class="bi bi-people"></i>
+                            <span>Referral Monitoring</span>
                         </a>
                     </div>
                 </div>
@@ -201,7 +197,7 @@
                     <span class="hc-sidebar-toggle-icon"><i class="bi bi-cash-stack"></i></span>
                     <span class="hc-sidebar-toggle-copy">
                         <strong>Payroll</strong>
-                        <small>Salary overview and staff pay settings</small>
+                        <small>Salary overview and payout controls</small>
                     </span>
                     <span class="hc-sidebar-toggle-badge">2</span>
                     <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
@@ -215,6 +211,33 @@
                         <a href="{% url 'salary-control-page' %}" class="hc-sidebar-link{% if active_page == 'salary-control' %} active{% endif %}">
                             <i class="bi bi-sliders2-vertical"></i>
                             <span>Salary Control</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hc-sidebar-section{% if active_page == 'learning' %} is-expanded{% endif %}">
+                <button
+                    type="button"
+                    class="hc-sidebar-toggle"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#hcSidebarTraining"
+                    aria-expanded="{% if active_page == 'learning' %}true{% else %}false{% endif %}"
+                    aria-controls="hcSidebarTraining"
+                >
+                    <span class="hc-sidebar-toggle-icon"><i class="bi bi-mortarboard-fill"></i></span>
+                    <span class="hc-sidebar-toggle-copy">
+                        <strong>Training</strong>
+                        <small>Learning materials and staff guidance</small>
+                    </span>
+                    <span class="hc-sidebar-toggle-badge">1</span>
+                    <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
+                </button>
+                <div class="collapse{% if active_page == 'learning' %} show{% endif %}" id="hcSidebarTraining" data-bs-parent="#hcSidebarNav">
+                    <div class="hc-sidebar-links">
+                        <a href="{% url 'learning-page' %}" class="hc-sidebar-link{% if active_page == 'learning' %} active{% endif %}">
+                            <i class="bi bi-mortarboard-fill"></i>
+                            <span>Learning Center</span>
                         </a>
                     </div>
                 </div>
