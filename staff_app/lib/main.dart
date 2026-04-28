@@ -2567,31 +2567,19 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
-  Future<void> _saveProfile() async {
+  Future<bool> _saveProfile({
+    String? currentPassword,
+    String? newPassword,
+    bool showSuccessMessage = true,
+  }) async {
     FocusScope.of(context).unfocus();
     if (_isProfileSaving) {
-      return;
+      return false;
     }
     if (_profileNameController.text.trim().isEmpty ||
         _profilePhoneController.text.trim().isEmpty) {
       _showMessage('Name and phone number are required.', isError: true);
-      return;
-    }
-    if (_newPasswordController.text.isNotEmpty &&
-        _confirmPasswordController.text != _newPasswordController.text) {
-      _showMessage(
-        'New password and confirm password must match.',
-        isError: true,
-      );
-      return;
-    }
-    if (_newPasswordController.text.isNotEmpty &&
-        _currentPasswordController.text.isEmpty) {
-      _showMessage(
-        'Enter the current password before changing it.',
-        isError: true,
-      );
-      return;
+      return false;
     }
 
     setState(() => _isProfileSaving = true);
@@ -2606,38 +2594,432 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         bankIfscCode: _bankIfscController.text.trim(),
         aadharNumber: _aadharNumberController.text.trim(),
         passbookPhoto: _selectedPassbookPhoto,
-        currentPassword: _currentPasswordController.text.trim().isEmpty
-            ? null
-            : _currentPasswordController.text,
-        newPassword: _newPasswordController.text.trim().isEmpty
-            ? null
-            : _newPasswordController.text,
+        currentPassword: currentPassword,
+        newPassword: newPassword,
         aadharPhoto: _selectedAadharPhoto,
         removeAadharPhoto: _removeAadharPhoto,
         removePassbookPhoto: _removePassbookPhoto,
       );
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() => _applyProfile(profile));
-      _showMessage('Profile updated successfully.');
+      if (showSuccessMessage) {
+        _showMessage('Profile updated successfully.');
+      }
+      return true;
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
         await _handleForcedLogout();
-        return;
+        return false;
       }
       if (error.code == 'network_error') {
         _showNetworkError(
           'Unable to save right now. Please check your connection and try again.',
         );
-        return;
+        return false;
       }
       _showMessage(error.message, isError: true);
+      return false;
     } finally {
       if (mounted) {
         setState(() => _isProfileSaving = false);
       }
     }
+  }
+
+  Future<void> _openEditProfilePage() async {
+    final originalProfile = _profile;
+    if (originalProfile == null || !mounted) {
+      return;
+    }
+
+    setState(() => _applyProfile(originalProfile));
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Edit Profile')),
+          body: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Personal details',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: _profileNameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Full Name',
+                          prefixIcon: Icon(Icons.person),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _profilePhoneController,
+                        keyboardType: TextInputType.phone,
+                        decoration: const InputDecoration(
+                          labelText: 'Phone Number',
+                          prefixIcon: Icon(Icons.phone),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _profileEmailController,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: const InputDecoration(
+                          labelText: 'Email',
+                          prefixIcon: Icon(Icons.email_outlined),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Bank details',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: _bankAccountNameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Account Holder Name',
+                          prefixIcon: Icon(Icons.account_circle_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _bankNameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Bank Name',
+                          prefixIcon: Icon(Icons.account_balance_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _bankAccountNumberController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Account Number',
+                          prefixIcon: Icon(Icons.numbers),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _bankIfscController,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: const InputDecoration(
+                          labelText: 'IFSC Code',
+                          prefixIcon: Icon(Icons.approval_outlined),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Identity documents',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Add clear document images for Aadhaar and passbook from the camera or your gallery.',
+                        style: TextStyle(fontSize: 14.5, color: Colors.black54),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: _aadharNumberController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Aadhaar Number',
+                          prefixIcon: Icon(Icons.badge_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      _buildDocumentPreview(
+                        selectedFile: _selectedAadharPhoto,
+                        removeDocument: _removeAadharPhoto,
+                        existingUrl: originalProfile.aadharPhotoUrl,
+                        documentName: originalProfile.aadharPhotoName,
+                        emptyLabel: 'No Aadhaar photo added',
+                        icon: Icons.badge_outlined,
+                        networkErrorLabel: 'Could not load the saved Aadhaar photo.',
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _pickAadharPhoto,
+                            icon: const Icon(Icons.document_scanner_outlined),
+                            label: const Text('Add Aadhaar'),
+                          ),
+                          if (_selectedAadharPhoto != null ||
+                              (originalProfile.hasAadharPhoto && !_removeAadharPhoto))
+                            OutlinedButton.icon(
+                              onPressed: _isProfileSaving
+                                  ? null
+                                  : () => _confirmDocumentRemoval(_ProfileDocument.aadhar),
+                              icon: const Icon(Icons.delete_outline),
+                              label: const Text('Remove Photo'),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 22),
+                      const Text(
+                        'Passbook image',
+                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildDocumentPreview(
+                        selectedFile: _selectedPassbookPhoto,
+                        removeDocument: _removePassbookPhoto,
+                        existingUrl: originalProfile.passbookPhotoUrl,
+                        documentName: originalProfile.passbookPhotoName,
+                        emptyLabel: 'No passbook photo added',
+                        icon: Icons.menu_book_outlined,
+                        networkErrorLabel: 'Could not load the saved passbook photo.',
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _pickPassbookPhoto,
+                            icon: const Icon(Icons.camera_alt_outlined),
+                            label: const Text('Add Passbook'),
+                          ),
+                          if (_selectedPassbookPhoto != null ||
+                              (originalProfile.hasPassbookPhoto && !_removePassbookPhoto))
+                            OutlinedButton.icon(
+                              onPressed: _isProfileSaving
+                                  ? null
+                                  : () => _confirmDocumentRemoval(_ProfileDocument.passbook),
+                              icon: const Icon(Icons.delete_outline),
+                              label: const Text('Remove Passbook'),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+                ElevatedButton.icon(
+                  onPressed: _isProfileSaving
+                      ? null
+                      : () async {
+                          final savedProfile = await _saveProfile();
+                          if (savedProfile && mounted) {
+                            Navigator.of(context).pop(true);
+                          }
+                        },
+                  icon: _isProfileSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.save_outlined),
+                  label: Text(_isProfileSaving ? 'Saving...' : 'Save Profile'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (saved != true && mounted) {
+      setState(() => _applyProfile(originalProfile));
+    }
+  }
+
+  Future<void> _openChangePasswordDialog() async {
+    final profile = _profile;
+    if (profile == null || !mounted) {
+      return;
+    }
+
+    final currentPasswordController = TextEditingController();
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    String? errorText;
+    var isSubmitting = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> submitPassword() async {
+              final currentPassword = currentPasswordController.text.trim();
+              final newPassword = newPasswordController.text.trim();
+              final confirmPassword = confirmPasswordController.text.trim();
+
+              if (currentPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
+                setDialogState(() {
+                  errorText = 'Enter the current, new, and confirm password.';
+                });
+                return;
+              }
+              if (newPassword != confirmPassword) {
+                setDialogState(() {
+                  errorText = 'New password and confirm password must match.';
+                });
+                return;
+              }
+
+              setDialogState(() {
+                errorText = null;
+                isSubmitting = true;
+              });
+
+              final changed = await _saveProfile(
+                currentPassword: currentPassword,
+                newPassword: newPassword,
+                showSuccessMessage: false,
+              );
+
+              if (!mounted) {
+                return;
+              }
+              if (!dialogContext.mounted) {
+                return;
+              }
+
+              setDialogState(() => isSubmitting = false);
+              if (!changed) {
+                return;
+              }
+
+              Navigator.of(dialogContext).pop();
+              await showDialog<void>(
+                context: context,
+                builder: (successContext) {
+                  return AlertDialog(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                    title: const Text('Password Updated'),
+                    content: const Text('Your password was changed successfully.'),
+                    actions: [
+                      ElevatedButton(
+                        onPressed: () => Navigator.of(successContext).pop(),
+                        child: const Text('OK'),
+                      ),
+                    ],
+                  );
+                },
+              );
+            }
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              title: const Text('Change Password'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Enter your current password and choose a new one.',
+                      style: TextStyle(fontSize: 14.5, color: Colors.black54),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: currentPasswordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Current Password',
+                        prefixIcon: Icon(Icons.lock_outline),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: newPasswordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'New Password',
+                        prefixIcon: Icon(Icons.lock_reset_outlined),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: confirmPasswordController,
+                      obscureText: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Confirm New Password',
+                        prefixIcon: Icon(Icons.verified_outlined),
+                      ),
+                    ),
+                    if (errorText != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        errorText!,
+                        style: const TextStyle(
+                          color: kRed,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSubmitting ? null : submitPassword,
+                  child: Text(isSubmitting ? 'Updating...' : 'Change Password'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    currentPasswordController.dispose();
+    newPasswordController.dispose();
+    confirmPasswordController.dispose();
   }
 
   Future<void> _openReferralDialog() async {
@@ -6202,8 +6584,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           const SizedBox(height: 8),
           Text(
             profile == null
-                ? 'Keep your account, banking, and identity details up to date.'
-                : 'Signed in as ${profile.name}. Update personal and payout details here.',
+                ? 'View your account, payout, and work details here.'
+                : 'Signed in as ${profile.name}. Review your account, salary, and work details here.',
             style: const TextStyle(fontSize: 16.5, color: Colors.black54),
           ),
           const SizedBox(height: 16),
@@ -6270,6 +6652,26 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   ],
                 ],
               ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _openEditProfilePage,
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit Profile'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _openChangePasswordDialog,
+                    icon: const Icon(Icons.lock_reset_outlined),
+                    label: const Text('Change Password'),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
             Container(
@@ -6382,34 +6784,37 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Personal details',
+                    'Account details',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Your main login and contact details are shown here.',
+                    style: TextStyle(fontSize: 14.5, color: Colors.black54),
+                  ),
                   const SizedBox(height: 14),
-                  TextField(
-                    controller: _profileNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Full Name',
-                      prefixIcon: Icon(Icons.person),
-                    ),
+                  _buildProfileDetailRow(
+                    icon: Icons.person_outline,
+                    label: 'Full Name',
+                    value: profile?.name.trim().isNotEmpty == true
+                        ? profile!.name.trim()
+                        : '--',
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _profilePhoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: const InputDecoration(
-                      labelText: 'Phone Number',
-                      prefixIcon: Icon(Icons.phone),
-                    ),
+                  _buildProfileDetailRow(
+                    icon: Icons.phone_outlined,
+                    label: 'Phone Number',
+                    value: profile?.phone.trim().isNotEmpty == true
+                        ? profile!.phone.trim()
+                        : '--',
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _profileEmailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
-                    ),
+                  _buildProfileDetailRow(
+                    icon: Icons.email_outlined,
+                    label: 'Email',
+                    value: profile?.email.trim().isNotEmpty == true
+                        ? profile!.email.trim()
+                        : '--',
                   ),
                 ],
               ),
@@ -6425,42 +6830,45 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Bank details',
+                    'Payout account',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Check your bank account details before salary is paid.',
+                    style: TextStyle(fontSize: 14.5, color: Colors.black54),
+                  ),
                   const SizedBox(height: 14),
-                  TextField(
-                    controller: _bankAccountNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Account Holder Name',
-                      prefixIcon: Icon(Icons.account_circle_outlined),
-                    ),
+                  _buildProfileDetailRow(
+                    icon: Icons.account_circle_outlined,
+                    label: 'Account Holder Name',
+                    value: profile?.bankAccountName.trim().isNotEmpty == true
+                        ? profile!.bankAccountName.trim()
+                        : '--',
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _bankNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Bank Name',
-                      prefixIcon: Icon(Icons.account_balance_outlined),
-                    ),
+                  _buildProfileDetailRow(
+                    icon: Icons.account_balance_outlined,
+                    label: 'Bank Name',
+                    value: profile?.bankName.trim().isNotEmpty == true
+                        ? profile!.bankName.trim()
+                        : '--',
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _bankAccountNumberController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Account Number',
-                      prefixIcon: Icon(Icons.numbers),
-                    ),
+                  _buildProfileDetailRow(
+                    icon: Icons.numbers_outlined,
+                    label: 'Account Number',
+                    value: profile?.bankAccountNumber.trim().isNotEmpty == true
+                        ? profile!.bankAccountNumber.trim()
+                        : '--',
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _bankIfscController,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      labelText: 'IFSC Code',
-                      prefixIcon: Icon(Icons.approval_outlined),
-                    ),
+                  _buildProfileDetailRow(
+                    icon: Icons.approval_outlined,
+                    label: 'IFSC Code',
+                    value: profile?.bankIfscCode.trim().isNotEmpty == true
+                        ? profile!.bankIfscCode.trim()
+                        : '--',
                   ),
                 ],
               ),
@@ -6481,44 +6889,24 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Add clear document images for Aadhaar and passbook from the camera or your gallery.',
+                    'Keep your identity and payout proof ready for verification.',
                     style: TextStyle(fontSize: 14.5, color: Colors.black54),
                   ),
                   const SizedBox(height: 14),
-                  TextField(
-                    controller: _aadharNumberController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Aadhaar Number',
-                      prefixIcon: Icon(Icons.badge_outlined),
-                    ),
+                  _buildProfileDetailRow(
+                    icon: Icons.badge_outlined,
+                    label: 'Aadhaar Number',
+                    value: profile?.aadharNumber.trim().isNotEmpty == true
+                        ? profile!.aadharNumber.trim()
+                        : '--',
                   ),
                   const SizedBox(height: 14),
-                  aadharWidget,
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: _pickAadharPhoto,
-                        icon: const Icon(Icons.document_scanner_outlined),
-                        label: const Text('Add Aadhaar'),
-                      ),
-                      if (_selectedAadharPhoto != null ||
-                          (profile?.hasAadharPhoto == true &&
-                              !_removeAadharPhoto))
-                        OutlinedButton.icon(
-                          onPressed: _isProfileSaving
-                              ? null
-                              : () => _confirmDocumentRemoval(
-                                  _ProfileDocument.aadhar,
-                                ),
-                          icon: const Icon(Icons.delete_outline),
-                          label: const Text('Remove Photo'),
-                        ),
-                    ],
+                  const Text(
+                    'Aadhaar photo',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
                   ),
+                  const SizedBox(height: 12),
+                  aadharWidget,
                   const SizedBox(height: 22),
                   const Text(
                     'Passbook image',
@@ -6526,74 +6914,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   ),
                   const SizedBox(height: 12),
                   passbookWidget,
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: _pickPassbookPhoto,
-                        icon: const Icon(Icons.camera_alt_outlined),
-                        label: const Text('Add Passbook'),
-                      ),
-                      if (_selectedPassbookPhoto != null ||
-                          (profile?.hasPassbookPhoto == true &&
-                              !_removePassbookPhoto))
-                        OutlinedButton.icon(
-                          onPressed: _isProfileSaving
-                              ? null
-                              : () => _confirmDocumentRemoval(
-                                  _ProfileDocument.passbook,
-                                ),
-                          icon: const Icon(Icons.delete_outline),
-                          label: const Text('Remove Passbook'),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Change password',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: _currentPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Current Password',
-                      prefixIcon: Icon(Icons.lock_outline),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _newPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'New Password',
-                      prefixIcon: Icon(Icons.lock_reset_outlined),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _confirmPasswordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Confirm New Password',
-                      prefixIcon: Icon(Icons.verified_outlined),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -6752,20 +7072,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               ),
             ),
             const SizedBox(height: 18),
-            ElevatedButton.icon(
-              onPressed: _isProfileSaving ? null : _saveProfile,
-              icon: _isProfileSaving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.save_outlined),
-              label: Text(_isProfileSaving ? 'Saving...' : 'Save Profile'),
-            ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _confirmLogout,
@@ -6774,6 +7080,60 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               label: const Text('Logout'),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProfileDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kSoft,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: kPrimary.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(icon, color: kPrimaryDark),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 15.5,
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
