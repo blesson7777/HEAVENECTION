@@ -46,6 +46,7 @@
                     <th>Ended</th>
                     <th>Duration</th>
                     <th>Status</th>
+                    <th>Sync Note</th>
                 </tr>
             </thead>
             <tbody id="callTableBody">
@@ -58,9 +59,16 @@
                     <td>{{ call.end_time }}</td>
                     <td>{{ call.duration_label }}</td>
                     <td><span class="hc-status {% if call.is_qualifying %}hc-status-success{% else %}hc-status-muted{% endif %}">{{ call.status_label }}</span></td>
+                    <td>
+                        {% if call.auto_skipped_sync_issue %}
+                        <span class="hc-status hc-status-warning">{{ call.sync_skip_reason_label }}</span>
+                        {% else %}
+                        <span class="text-muted">--</span>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="7" class="text-center py-4">No call records available.</td></tr>
+                <tr><td colspan="8" class="text-center py-4">No call records available.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

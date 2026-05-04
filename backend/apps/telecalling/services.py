@@ -6901,6 +6901,11 @@ def build_call_detail_payload(*, limit=200, date_value=""):
                     call.callback_window,
                 ),
                 "is_qualifying": call.is_qualifying,
+                "auto_skipped_sync_issue": call.auto_skipped_sync_issue,
+                "sync_skip_reason": call.sync_skip_reason,
+                "sync_skip_reason_label": call.get_sync_skip_reason_display()
+                if call.sync_skip_reason
+                else "",
             }
         )
 
@@ -7881,6 +7886,8 @@ def retry_pending_staff_call(call):
     call.callback_date = None
     call.is_verified = False
     call.verification_source = ""
+    call.auto_skipped_sync_issue = False
+    call.sync_skip_reason = ""
     call.save(
         update_fields=[
             "start_time",
@@ -7891,6 +7898,8 @@ def retry_pending_staff_call(call):
             "callback_date",
             "is_verified",
             "verification_source",
+            "auto_skipped_sync_issue",
+            "sync_skip_reason",
             "updated_at",
         ]
     )
@@ -7949,15 +7958,28 @@ def end_staff_call(
 
     requested_status = status
     normalized_requested_status = requested_status
+    sync_skip_reason = ""
+    auto_skipped_sync_issue = False
     if requested_status == Call.Status.NOT_INTERESTED and (
         not is_verified or resolved_duration <= 0
     ):
         normalized_requested_status = Call.Status.NO_ANSWER
+    if source == "sync_issue_no_log_access_skip":
+        sync_skip_reason = Call.SyncSkipReason.NO_LOG_ACCESS
+        auto_skipped_sync_issue = True
+    elif source == "sync_issue_no_log_match_skip":
+        sync_skip_reason = Call.SyncSkipReason.NO_MATCHING_LOG
+        auto_skipped_sync_issue = True
+    elif source == "sync_issue_read_error_skip":
+        sync_skip_reason = Call.SyncSkipReason.LOG_READ_FAILED
+        auto_skipped_sync_issue = True
     call.end_time = resolved_end_time
     call.duration_seconds = resolved_duration
     call.is_qualifying = call.duration_seconds >= SHORT_CALL_SECONDS
     call.is_verified = is_verified
     call.verification_source = source if is_verified else ""
+    call.auto_skipped_sync_issue = auto_skipped_sync_issue
+    call.sync_skip_reason = sync_skip_reason
     if session:
         _credit_call_duration_to_session(
             session,
@@ -7989,6 +8011,8 @@ def end_staff_call(
             "is_qualifying",
             "is_verified",
             "verification_source",
+            "auto_skipped_sync_issue",
+            "sync_skip_reason",
             "status",
             "updated_at",
         ]
@@ -8017,6 +8041,8 @@ def end_staff_call(
             "is_verified": call.is_verified,
             "status": call.status,
             "source": source,
+            "auto_skipped_sync_issue": call.auto_skipped_sync_issue,
+            "sync_skip_reason": call.sync_skip_reason,
             "ended_at": call.end_time.isoformat(),
         },
     )

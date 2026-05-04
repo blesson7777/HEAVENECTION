@@ -207,6 +207,11 @@ class Call(models.Model):
         CONVERTED = "converted", "Converted"
         INVALID_SHORT = "invalid_short", "Invalid Short"
 
+    class SyncSkipReason(models.TextChoices):
+        NO_LOG_ACCESS = "no_log_access", "Auto skipped because no log access"
+        NO_MATCHING_LOG = "no_matching_log", "Auto skipped because no matching call log"
+        LOG_READ_FAILED = "log_read_failed", "Auto skipped because log read failed"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     staff = models.ForeignKey(Staff, on_delete=models.CASCADE, related_name="calls")
     lead = models.ForeignKey(Lead, on_delete=models.CASCADE, related_name="calls")
@@ -225,6 +230,14 @@ class Call(models.Model):
     is_qualifying = models.BooleanField(default=False, db_index=True)
     is_verified = models.BooleanField(default=False, db_index=True)
     verification_source = models.CharField(max_length=40, blank=True, default="")
+    auto_skipped_sync_issue = models.BooleanField(default=False, db_index=True)
+    sync_skip_reason = models.CharField(
+        max_length=40,
+        choices=SyncSkipReason.choices,
+        blank=True,
+        default="",
+        db_index=True,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

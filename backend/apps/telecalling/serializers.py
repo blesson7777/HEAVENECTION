@@ -1167,6 +1167,10 @@ class CallSerializer(serializers.ModelSerializer):
     lead_name = serializers.CharField(source="lead.name", read_only=True)
     lead_phone = serializers.CharField(source="lead.phone", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
+    sync_skip_reason_label = serializers.CharField(
+        source="get_sync_skip_reason_display",
+        read_only=True,
+    )
     callback_window_label = serializers.CharField(
         source="get_callback_window_display",
         read_only=True,
@@ -1196,6 +1200,9 @@ class CallSerializer(serializers.ModelSerializer):
             "is_qualifying",
             "is_verified",
             "verification_source",
+            "auto_skipped_sync_issue",
+            "sync_skip_reason",
+            "sync_skip_reason_label",
         )
 
     def get_callback_date_label(self, obj):
