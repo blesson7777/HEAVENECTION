@@ -5996,6 +5996,70 @@ def delete_app_release(app_release):
 def build_developer_release_payload(request):
     releases = AppRelease.objects.select_related("created_by").order_by("-version_code", "-published_at")
     latest_release = get_latest_app_release()
+    now = timezone.now()
+    _, start, end = _today_range()
+    active_cutoff = now - timedelta(seconds=ONLINE_WINDOW_SECONDS)
+    open_sessions = _open_sessions_by_staff()
+    live_call_staff_ids = _live_call_staff_ids()
+    staff_queryset = Staff.objects.filter(role=Staff.Role.STAFF, is_active=True)
+    staff_by_id = {staff.id: staff for staff in staff_queryset}
+    online_now = 0
+    away_now = 0
+    warning_now = 0
+    offline_now = 0
+    for staff_id, staff in staff_by_id.items():
+        session = open_sessions.get(staff_id)
+        online_label = _staff_online_label(
+            session,
+            active_cutoff,
+            is_in_customer_call=staff_id in live_call_staff_ids,
+        )
+        if online_label in {"Online", "On Call"}:
+            online_now += 1
+        elif online_label == "Away":
+            away_now += 1
+        elif online_label == "Warning":
+            warning_now += 1
+        else:
+            offline_now += 1
+
+    worked_today_count = (
+        Session.objects.filter(
+            staff__role=Staff.Role.STAFF,
+            staff__is_active=True,
+            login_time__range=(start, end),
+        )
+        .values("staff_id")
+        .distinct()
+        .count()
+    )
+    latest_heartbeat_session = (
+        Session.objects.select_related("staff")
+        .filter(
+            staff__role=Staff.Role.STAFF,
+            staff__is_active=True,
+            last_heartbeat_at__isnull=False,
+        )
+        .order_by("-last_heartbeat_at")
+        .first()
+    )
+    if online_now > 0:
+        app_status_label = "App active now"
+        app_status_tone = "success"
+        app_status_note = f"{online_now} staff device(s) are sending live app activity right now."
+    elif warning_now > 0 or away_now > 0:
+        app_status_label = "App reachable"
+        app_status_tone = "warning"
+        app_status_note = "Staff devices were seen recently, but no one is actively working in the foreground right now."
+    elif worked_today_count > 0:
+        app_status_label = "No one online right now"
+        app_status_tone = "muted"
+        app_status_note = "The mobile app is reachable, but there is no current live heartbeat from staff at this moment."
+    else:
+        app_status_label = "Waiting for app activity"
+        app_status_tone = "muted"
+        app_status_note = "No staff app heartbeat has been recorded today yet."
+
     total_uploaded_bytes = sum(int(release.file_size_bytes or 0) for release in releases)
     max_release_bytes = max((int(release.file_size_bytes or 0) for release in releases), default=0)
     release_rows = [
@@ -6047,6 +6111,29 @@ def build_developer_release_payload(request):
             "largest_release_label": f"{round(max_release_bytes / (1024 * 1024), 2)} MB"
             if max_release_bytes
             else "0 MB",
+        },
+        "app_health": {
+            "checked_at": _format_datetime(now),
+            "server_status_label": "Developer center reachable",
+            "server_status_tone": "success",
+            "server_note": f"The release center is loading correctly from {request.get_host()}.",
+            "app_status_label": app_status_label,
+            "app_status_tone": app_status_tone,
+            "app_status_note": app_status_note,
+            "online_now": online_now,
+            "on_call_now": len(live_call_staff_ids),
+            "away_now": away_now,
+            "warning_now": warning_now,
+            "offline_now": offline_now,
+            "worked_today_count": worked_today_count,
+            "open_sessions_now": len(open_sessions),
+            "latest_heartbeat_label": _format_datetime(
+                latest_heartbeat_session.last_heartbeat_at,
+                fallback="No heartbeat yet",
+            )
+            if latest_heartbeat_session
+            else "No heartbeat yet",
+            "latest_heartbeat_staff": latest_heartbeat_session.staff.name if latest_heartbeat_session else "",
         },
         "upload_graph_rows": upload_graph_rows,
         "release_rows": release_rows,
