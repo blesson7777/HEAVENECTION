@@ -393,6 +393,27 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _clearPendingCallStatus();
   }
 
+  void _applySummarySnapshot(
+    DailySummary summary, {
+    bool updateBlockedCallTab = true,
+  }) {
+    _summary = summary;
+    _syncPendingCallStatusFromSummary();
+    if (_summary.pendingCallStatusRequired) {
+      _resetActiveCallTracking();
+    } else if (_summary.recoverableCallRequired) {
+      _syncRecoverableCallFromSummary();
+    } else {
+      _resetActiveCallTracking();
+    }
+    if (updateBlockedCallTab &&
+        (_summary.pendingCallStatusRequired ||
+            _summary.recoverableCallRequired)) {
+      _tab = 1;
+      _lastLoadedTab = 1;
+    }
+  }
+
   void _clearPendingCallStatus() {
     _pendingStatusCallId = null;
     _pendingStatusLeadId = null;
@@ -1459,24 +1480,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         return;
       }
       setState(() {
-        _summary = results[0] as DailySummary;
+        _applySummarySnapshot(results[0] as DailySummary);
         _leads = results[1] as List<LeadItem>;
         _followups = results[2] as List<LeadItem>;
         _applyLearningPayload(results[3] as LearningCenterPayload);
-        _syncPendingCallStatusFromSummary();
-        if (_summary.pendingCallStatusRequired) {
-          _resetActiveCallTracking();
-        } else if (_summary.recoverableCallRequired) {
-          _syncRecoverableCallFromSummary();
-        } else {
-          _resetActiveCallTracking();
-        }
         _isNetworkErrorVisible = false;
-        if (_summary.pendingCallStatusRequired ||
-            _summary.recoverableCallRequired) {
-          _tab = 1;
-          _lastLoadedTab = 1;
-        }
         if (_leadIndex >= _leads.length) {
           _leadIndex = _leads.isEmpty ? 0 : _leads.length - 1;
         }
@@ -3221,7 +3229,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         return;
       }
       setState(() {
-        _summary = response.summary;
+        _applySummarySnapshot(response.summary);
         _lastInteractionAt = DateTime.now();
         _lastCallActivityAt = DateTime.now();
         _backgroundedAt = null;
@@ -3267,7 +3275,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       _dismissIdleWarning();
       setState(() {
-        _summary = response.summary;
+        _applySummarySnapshot(response.summary);
         _backgroundedAt = null;
       });
       _syncPresenceMonitoring();
@@ -3312,11 +3320,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         return;
       }
       setState(() {
-        _summary = response.summary;
+        _applySummarySnapshot(response.summary);
         if (interaction) {
           _lastInteractionAt = DateTime.now();
         }
       });
+      if (_summary.pendingCallStatusRequired &&
+          _requiredPermissionsGranted == true) {
+        _schedulePendingCallStatusPrompt();
+      }
       _syncPresenceMonitoring();
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
@@ -4634,7 +4646,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         return;
       }
       setState(() {
-        _summary = response.summary;
+        _applySummarySnapshot(response.summary);
       });
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
