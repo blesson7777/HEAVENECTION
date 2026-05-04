@@ -4267,6 +4267,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
+    await _focusLeadWorkflowAfterCallResultSaved();
+    if (!mounted) {
+      return;
+    }
+
     if (call.status == 'invalid_short') {
       _showMessage(
         'Call duration was less than 5 seconds, so it was not counted.',
