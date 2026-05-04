@@ -3474,7 +3474,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _showMessage('No assigned leads available.', isError: true);
       return;
     }
-    if (!await _ensurePendingCallStatusResolved(lead)) {
+    final hasPendingStatusForSameLead =
+        _hasPendingCallStatus && _pendingStatusLeadId == lead.id;
+    if (!hasPendingStatusForSameLead &&
+        !await _ensurePendingCallStatusResolved(lead)) {
       return;
     }
     if (!_summary.workingNow) {
@@ -3483,7 +3486,47 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         return;
       }
     }
+    if (hasPendingStatusForSameLead) {
+      await _retryPendingCustomerCall();
+      return;
+    }
+    final hasRecoverableCallForSameLead =
+        _hasRecoverableCustomerCall &&
+        _summary.recoverableCallLeadId == lead.id;
+    if (hasRecoverableCallForSameLead) {
+      await _openCurrentCallScreen(
+        notice:
+            'Solving the current customer call first, then calling the same customer again.',
+      );
+      if (!mounted) {
+        return;
+      }
+      if (_hasPendingCallStatus && _pendingStatusLeadId == lead.id) {
+        await _retryPendingCustomerCall();
+        return;
+      }
+      if (_hasRecoverableCustomerCall || _hasActiveCustomerCall) {
+        return;
+      }
+    }
     if (_activeCallId != null) {
+      if (_activeCallLeadId == lead.id) {
+        await _syncCallFromLog(
+          allowManualFallback: true,
+          showMissingMessage: true,
+        );
+        if (!mounted) {
+          return;
+        }
+        await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+        if (!mounted) {
+          return;
+        }
+        if (_hasPendingCallStatus && _pendingStatusLeadId == lead.id) {
+          await _retryPendingCustomerCall();
+        }
+        return;
+      }
       await _openCurrentCallScreen(
         notice: 'Finish the current customer call before starting another.',
       );
@@ -5952,6 +5995,18 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   Widget _call(LeadItem? lead) {
     final hasActiveCallForLead = lead != null && _activeCallLeadId == lead.id;
+    final hasPendingCallForLead =
+        lead != null &&
+        _hasPendingCallStatus &&
+        _pendingStatusLeadId == lead.id;
+    final hasRecoverableCallForLead =
+        lead != null &&
+        _hasRecoverableCustomerCall &&
+        _summary.recoverableCallLeadId == lead.id;
+    final callButtonLabel =
+        hasActiveCallForLead || hasPendingCallForLead || hasRecoverableCallForLead
+        ? 'Call Again'
+        : 'Call';
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -6054,7 +6109,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                             ? null
                             : () => _startCall(selectedLead: lead),
                         icon: const Icon(Icons.phone_forwarded),
-                        label: const Text('Call'),
+                        label: Text(callButtonLabel),
                       ),
                     ),
                     const SizedBox(width: 12),
