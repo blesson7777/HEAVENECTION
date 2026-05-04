@@ -4280,100 +4280,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
-  Future<void> _handleSyncFailureRecallPrompt(
-    PendingDialerCall pendingCall, {
-    required String message,
-  }) async {
-    if (!mounted) {
-      return;
-    }
-
-    final existingLead = _leadById(pendingCall.leadId);
-    final isFollowupLead =
-        _activeCallFromFollowup || _isFollowupLeadItem(existingLead);
-    final lead =
-        existingLead ??
-        LeadItem(
-          id: pendingCall.leadId,
-          name: _summary.recoverableCallLeadName.isNotEmpty
-              ? _summary.recoverableCallLeadName
-              : (pendingCall.phone.isNotEmpty
-                    ? pendingCall.phone
-                    : 'Recent customer'),
-          phone: pendingCall.phone,
-          status: isFollowupLead ? 'call_back' : 'new',
-          statusLabel: isFollowupLead ? 'Follow Up' : 'New',
-          callbackWindow: '',
-          callbackWindowLabel: '',
-          callbackDate: null,
-          callbackDateLabel: '',
-          callbackScheduleLabel: '',
-          notes: '',
-        );
-
-    final action = await showDialog<_SyncFailureAction>(
-      context: context,
-      barrierDismissible: true,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-          ),
-          title: const Text('Sync Issue Detected'),
-          content: Text(
-            '$message\n\nYou can exit this call without phone-log verification and ask the staff to call the customer again.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(_SyncFailureAction.cancel),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(_SyncFailureAction.exitCall),
-              child: const Text('Exit Call'),
-            ),
-            ElevatedButton(
-              onPressed: () =>
-                  Navigator.of(dialogContext).pop(_SyncFailureAction.callAgain),
-              child: const Text('Call Again'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (action == null || action == _SyncFailureAction.cancel) {
-      return;
-    }
-
-    await _completeCallManually(
-      source: action == _SyncFailureAction.callAgain
-          ? 'manual_call_log_retry_prompt'
-          : 'manual_call_log_issue_exit',
-    );
-
-    if (!mounted || action != _SyncFailureAction.callAgain) {
-      return;
-    }
-
-    _showMessage('Calling the customer again.');
-    try {
-      await _placeCallForLead(lead);
-    } on ApiException catch (error) {
-      if (error.statusCode == 401) {
-        await _handleForcedLogout();
-        return;
-      }
-      if (error.code == 'network_error') {
-        _showNetworkError('Connection lost while reopening the customer call.');
-        return;
-      }
-      _showMessage(error.message, isError: true);
-    }
-  }
-
   Future<bool> _syncCallFromLog({
     required bool allowManualFallback,
     bool showMissingMessage = false,
@@ -4385,13 +4291,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     final canReadCallLog = await _ensureCallLogAccess();
     if (!canReadCallLog) {
-      if (allowManualFallback) {
-        await _handleSyncFailureRecallPrompt(
-          pendingCall,
-          message:
-              'The app could not read the phone call log for this customer call.',
-        );
-      }
+      await _completeCallManually(source: 'sync_issue_no_log_access_skip');
       return false;
     }
 
@@ -4409,18 +4309,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         }
       }
 
-      if (allowManualFallback) {
-        await _handleSyncFailureRecallPrompt(
-          pendingCall,
-          message:
-              'No matching phone call log was found in time for this customer call.',
-        );
-      } else if (showMissingMessage) {
-        _showMessage(
-          'No matching phone call log was found yet. Wait a few more seconds and open the app again after the call ends.',
-          isError: true,
-        );
-      }
+      await _completeCallManually(source: 'sync_issue_no_log_match_skip');
       return false;
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
@@ -4436,14 +4325,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _showMessage(error.message, isError: true);
       return false;
     } catch (_) {
-      if (allowManualFallback) {
-        await _completeCallManually(source: 'manual_call_log_error');
-      } else if (showMissingMessage) {
-        _showMessage(
-          'Unable to read the phone call log right now.',
-          isError: true,
-        );
-      }
+      await _completeCallManually(source: 'sync_issue_read_error_skip');
       return false;
     } finally {
       _setCallLogSyncing(false);
@@ -9100,8 +8982,6 @@ class _CallRemarkDialogResult {
 }
 
 enum ShortCallDecision { markNoResponse, markRejected, callAgain }
-
-enum _SyncFailureAction { cancel, exitCall, callAgain }
 
 enum _PendingCallAction { markStatus, callRecent, cancel }
 
