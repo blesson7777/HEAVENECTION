@@ -52,6 +52,7 @@ const Duration kCallLogSyncRetryDelay = Duration(seconds: 2);
 const Duration kCallLogMatchLookback = Duration(minutes: 5);
 const Duration kCallLogMatchLookahead = Duration(minutes: 2);
 const Duration kNetworkErrorDelay = Duration(seconds: 3);
+const Duration kActiveCallAutoCheckInterval = Duration(seconds: 3);
 
 String _formatCallbackDateLabel(DateTime value) {
   const months = [
@@ -233,6 +234,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _hasConnection = true;
   bool _isLoginPasswordVisible = false;
   Timer? _networkErrorTimer;
+  DateTime? _lastActiveCallAutoCheckAt;
   String? _pendingNetworkErrorMessage;
   AppUpdateInfo? _pendingAppUpdate;
   File? _selectedAadharPhoto;
@@ -455,13 +457,27 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (_callTimer != null) {
       return;
     }
+    _lastActiveCallAutoCheckAt = null;
     _callTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted || !_hasActiveCustomerCall) {
         _callTimer?.cancel();
         _callTimer = null;
+        _lastActiveCallAutoCheckAt = null;
         return;
       }
       setState(() => _elapsed += const Duration(seconds: 1));
+      final now = DateTime.now();
+      final shouldAutoCheck =
+          _lifecycleState == AppLifecycleState.resumed &&
+          !_isSyncingCallLog &&
+          (_lastActiveCallAutoCheckAt == null ||
+              now.difference(_lastActiveCallAutoCheckAt!) >=
+                  kActiveCallAutoCheckInterval);
+      if (!shouldAutoCheck) {
+        return;
+      }
+      _lastActiveCallAutoCheckAt = now;
+      unawaited(_maybeAutoSyncEndedCall(showMissingMessage: false));
     });
   }
 
@@ -3355,6 +3371,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   void _resetActiveCallTracking() {
     _callTimer?.cancel();
+    _callTimer = null;
+    _lastActiveCallAutoCheckAt = null;
     _activeCallId = null;
     _activeCallLeadId = null;
     _activeCallFromFollowup = false;
