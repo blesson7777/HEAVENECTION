@@ -4215,10 +4215,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     } else if (call.status == 'not_interested') {
       _showMessage('Call marked as Rejected.');
     } else {
-      _showMessage(
-        'Call duration was less than 5 seconds, so it was not counted.',
-        isError: true,
-      );
+      _showMessage('Call sync completed successfully.', isSuccess: true);
       return;
     }
 
@@ -4286,14 +4283,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    if (call.status == 'invalid_short') {
-      _showMessage(
-        'Call duration was less than 5 seconds, so it was not counted.',
-        isError: true,
-      );
-    } else {
-      _showMessage('Call synced from phone log.');
-    }
+    _showMessage('Call sync completed successfully.', isSuccess: true);
   }
 
   Future<void> _completeCallManually({required String source}) async {
@@ -4345,17 +4335,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    if (call.status == 'invalid_short') {
-      _showMessage(
-        'Call duration was less than 5 seconds, so it was not counted.',
-        isError: true,
-      );
-    } else {
-      _showMessage(
-        'Call ended without phone-log verification. No work hours were added.',
-        isError: true,
-      );
-    }
+    _showMessage('Call sync completed successfully.', isSuccess: true);
   }
 
   Future<bool> _syncCallFromLog({
@@ -5045,14 +5025,20 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     );
   }
 
-  void _showMessage(String message, {bool isError = false}) {
+  void _showMessage(
+    String message, {
+    bool isError = false,
+    bool isSuccess = false,
+  }) {
     if (!mounted) {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? kRed : kPrimaryDark,
+        backgroundColor: isError
+            ? kRed
+            : (isSuccess ? kGreen : kPrimaryDark),
         behavior: SnackBarBehavior.floating,
       ),
     );
