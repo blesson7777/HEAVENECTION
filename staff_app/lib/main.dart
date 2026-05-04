@@ -47,8 +47,10 @@ const Duration kIdleWarningGrace = Duration(minutes: 5);
 const Duration kBackgroundSessionTimeout = Duration(minutes: 5);
 const Duration kShortCallReviewThreshold = Duration(seconds: 15);
 const Duration kMinimumQualifyingCallDuration = Duration(seconds: 5);
-const int kCallLogSyncAttempts = 6;
-const Duration kCallLogSyncRetryDelay = Duration(seconds: 1);
+const int kCallLogSyncAttempts = 15;
+const Duration kCallLogSyncRetryDelay = Duration(seconds: 2);
+const Duration kCallLogMatchLookback = Duration(minutes: 5);
+const Duration kCallLogMatchLookahead = Duration(minutes: 2);
 const Duration kNetworkErrorDelay = Duration(seconds: 3);
 
 String _formatCallbackDateLabel(DateTime value) {
@@ -3625,8 +3627,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     PendingDialerCall pendingCall,
   ) async {
     final entries = await CallLog.query(
-      dateTimeFrom: pendingCall.startedAt.subtract(const Duration(minutes: 2)),
-      dateTimeTo: DateTime.now().add(const Duration(minutes: 1)),
+      dateTimeFrom: pendingCall.startedAt.subtract(kCallLogMatchLookback),
+      dateTimeTo: DateTime.now().add(kCallLogMatchLookahead),
       type: CallType.outgoing,
     );
 
@@ -3642,7 +3644,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
       final startedAt = DateTime.fromMillisecondsSinceEpoch(timestamp);
       if (startedAt.isBefore(
-        pendingCall.startedAt.subtract(const Duration(minutes: 2)),
+        pendingCall.startedAt.subtract(kCallLogMatchLookback),
       )) {
         continue;
       }
@@ -4411,11 +4413,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         await _handleSyncFailureRecallPrompt(
           pendingCall,
           message:
-              'No matching phone call log was found for this customer call.',
+              'No matching phone call log was found in time for this customer call.',
         );
       } else if (showMissingMessage) {
         _showMessage(
-          'No matching phone call log was found yet. Open the app again after the call ends.',
+          'No matching phone call log was found yet. Wait a few more seconds and open the app again after the call ends.',
           isError: true,
         );
       }
