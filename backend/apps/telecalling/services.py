@@ -8016,18 +8016,47 @@ def end_staff_call(
     callback_window="",
     callback_date=None,
 ):
-    if call.end_time:
+    sync_skip_reason = ""
+    auto_skipped_sync_issue = False
+    if source == "sync_issue_no_log_access_skip":
+        sync_skip_reason = Call.SyncSkipReason.NO_LOG_ACCESS
+        auto_skipped_sync_issue = True
+    elif source == "sync_issue_no_log_match_skip":
+        sync_skip_reason = Call.SyncSkipReason.NO_MATCHING_LOG
+        auto_skipped_sync_issue = True
+    elif source == "sync_issue_read_error_skip":
+        sync_skip_reason = Call.SyncSkipReason.LOG_READ_FAILED
+        auto_skipped_sync_issue = True
+
+    force_sync_issue_resolution = (
+        bool(call.end_time)
+        and call.status == Call.Status.STARTED
+        and source
+        in {
+            "sync_issue_no_log_access_skip",
+            "sync_issue_no_log_match_skip",
+            "sync_issue_read_error_skip",
+            "manual_sync_escape",
+        }
+    )
+    if call.end_time and not force_sync_issue_resolution:
         return call
 
     now = timezone.now()
     session = get_open_session(call.staff, reconcile=True)
+    already_ended = bool(call.end_time)
     is_verified = (
         duration_seconds is not None
         and ended_at is not None
         and source in VERIFIED_CALL_SOURCES
     )
 
-    if is_verified:
+    if force_sync_issue_resolution:
+        resolved_end_time = call.end_time or ended_at or now
+        if resolved_end_time < call.start_time:
+            resolved_end_time = call.start_time
+        resolved_duration = max(0, int(call.duration_seconds or 0))
+    elif is_verified:
         resolved_end_time = min(ended_at, now + timedelta(seconds=VERIFIED_CALL_TIME_SKEW_SECONDS))
         if resolved_end_time < call.start_time:
             resolved_end_time = call.start_time
@@ -8045,21 +8074,12 @@ def end_staff_call(
 
     requested_status = status
     normalized_requested_status = requested_status
-    sync_skip_reason = ""
-    auto_skipped_sync_issue = False
+    if force_sync_issue_resolution and not normalized_requested_status:
+        normalized_requested_status = Call.Status.NO_ANSWER
     if requested_status == Call.Status.NOT_INTERESTED and (
         not is_verified or resolved_duration <= 0
     ):
         normalized_requested_status = Call.Status.NO_ANSWER
-    if source == "sync_issue_no_log_access_skip":
-        sync_skip_reason = Call.SyncSkipReason.NO_LOG_ACCESS
-        auto_skipped_sync_issue = True
-    elif source == "sync_issue_no_log_match_skip":
-        sync_skip_reason = Call.SyncSkipReason.NO_MATCHING_LOG
-        auto_skipped_sync_issue = True
-    elif source == "sync_issue_read_error_skip":
-        sync_skip_reason = Call.SyncSkipReason.LOG_READ_FAILED
-        auto_skipped_sync_issue = True
     call.end_time = resolved_end_time
     call.duration_seconds = resolved_duration
     call.is_qualifying = call.duration_seconds >= SHORT_CALL_SECONDS
@@ -8067,7 +8087,7 @@ def end_staff_call(
     call.verification_source = source if is_verified else ""
     call.auto_skipped_sync_issue = auto_skipped_sync_issue
     call.sync_skip_reason = sync_skip_reason
-    if session:
+    if session and not already_ended:
         _credit_call_duration_to_session(
             session,
             resolved_end_time,
