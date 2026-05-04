@@ -53,6 +53,7 @@ const Duration kCallLogMatchLookback = Duration(minutes: 5);
 const Duration kCallLogMatchLookahead = Duration(minutes: 2);
 const Duration kNetworkErrorDelay = Duration(seconds: 3);
 const Duration kActiveCallAutoCheckInterval = Duration(seconds: 3);
+const Duration kSyncSolveCountdownTick = Duration(seconds: 1);
 
 String _formatCallbackDateLabel(DateTime value) {
   const months = [
@@ -227,6 +228,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _isCallStatusPromptVisible = false;
   bool _isCallScreenOpen = false;
   bool _isExitDialogVisible = false;
+  Timer? _syncSolveCountdownTimer;
+  int? _syncSolveCountdownSeconds;
   bool _isCheckingForUpdate = false;
   bool _isUpdateDialogVisible = false;
   bool _isDownloadingUpdate = false;
@@ -274,6 +277,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _callTimer?.cancel();
     _heartbeatTimer?.cancel();
     _idleMonitorTimer?.cancel();
+    _syncSolveCountdownTimer?.cancel();
     _networkErrorTimer?.cancel();
     _connectivitySubscription?.cancel();
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
@@ -485,11 +489,52 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (_isSyncingCallLog == value) {
       return;
     }
+    if (value) {
+      _startSyncSolveCountdown();
+    } else {
+      _stopSyncSolveCountdown();
+    }
     if (!mounted) {
       _isSyncingCallLog = value;
       return;
     }
     setState(() => _isSyncingCallLog = value);
+  }
+
+  void _startSyncSolveCountdown() {
+    final totalSeconds =
+        kCallLogSyncAttempts * kCallLogSyncRetryDelay.inSeconds;
+    _syncSolveCountdownTimer?.cancel();
+    _syncSolveCountdownSeconds = totalSeconds;
+    _syncSolveCountdownTimer = Timer.periodic(kSyncSolveCountdownTick, (_) {
+      final remaining = _syncSolveCountdownSeconds;
+      if (remaining == null || remaining <= 0) {
+        _syncSolveCountdownTimer?.cancel();
+        _syncSolveCountdownTimer = null;
+        return;
+      }
+      final next = remaining - 1;
+      if (!mounted) {
+        _syncSolveCountdownSeconds = next;
+        return;
+      }
+      setState(() {
+        _syncSolveCountdownSeconds = next;
+      });
+    });
+  }
+
+  void _stopSyncSolveCountdown() {
+    _syncSolveCountdownTimer?.cancel();
+    _syncSolveCountdownTimer = null;
+    _syncSolveCountdownSeconds = null;
+  }
+
+  String _formatSecondsAsTimer(int totalSeconds) {
+    final safe = totalSeconds < 0 ? 0 : totalSeconds;
+    final minutes = (safe ~/ 60).toString().padLeft(2, '0');
+    final seconds = (safe % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 
   void _openPendingCustomerPage() {
@@ -3373,6 +3418,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _callTimer?.cancel();
     _callTimer = null;
     _lastActiveCallAutoCheckAt = null;
+    _stopSyncSolveCountdown();
     _activeCallId = null;
     _activeCallLeadId = null;
     _activeCallFromFollowup = false;
@@ -5858,8 +5904,23 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               foregroundColor: Colors.white,
             ),
             icon: const Icon(Icons.build_circle_outlined),
-            label: const Text('Solve Sync Issue'),
+            label: Text(
+              _isSyncingCallLog && _syncSolveCountdownSeconds != null
+                  ? 'Solving ${_formatSecondsAsTimer(_syncSolveCountdownSeconds!)}'
+                  : 'Solve Sync Issue',
+            ),
           ),
+          if (_isSyncingCallLog && _syncSolveCountdownSeconds != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Solving sync issue... ${_formatSecondsAsTimer(_syncSolveCountdownSeconds!)} remaining',
+              style: const TextStyle(
+                fontSize: 13.5,
+                color: Color(0xFF6F4A16),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: _isSyncingCallLog ? null : _escapeSyncIssueCall,
@@ -6023,6 +6084,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         hasActiveCallForLead || hasPendingCallForLead || hasRecoverableCallForLead
         ? 'Call Again'
         : 'Call';
+    final syncSolveLabel =
+        _isSyncingCallLog && _syncSolveCountdownSeconds != null
+        ? 'Solving ${_formatSecondsAsTimer(_syncSolveCountdownSeconds!)}'
+        : 'Solving...';
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -6141,7 +6206,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                               : Icons.build_circle_outlined,
                         ),
                         label: Text(
-                          _isSyncingCallLog ? 'Solving...' : 'Solve Sync Issue',
+                          _isSyncingCallLog
+                              ? syncSolveLabel
+                              : 'Solve Sync Issue',
                         ),
                       ),
                     ),
@@ -6157,7 +6224,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                       borderRadius: BorderRadius.circular(18),
                       border: Border.all(color: const Color(0xFFF1A34B)),
                     ),
-                    child: const Row(
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Icon(
@@ -6167,7 +6234,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                         SizedBox(width: 10),
                         Expanded(
                           child: Text(
-                            'Call sync issue is active. Tap "Solve Sync Issue" to finish this customer call before moving on.',
+                            _isSyncingCallLog &&
+                                    _syncSolveCountdownSeconds != null
+                                ? 'Call sync issue is being solved. Estimated time remaining: ${_formatSecondsAsTimer(_syncSolveCountdownSeconds!)}.'
+                                : 'Call sync issue is active. Tap "Solve Sync Issue" to finish this customer call before moving on.',
                             style: TextStyle(
                               fontSize: 14.5,
                               fontWeight: FontWeight.w700,
