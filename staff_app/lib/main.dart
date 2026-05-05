@@ -760,9 +760,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       if (!mounted) {
         return;
       }
+      final retryLead = _leadById(_pendingStatusLeadId);
+      final isFollowupRetry =
+          retryLead != null
+              ? _isFollowupLeadItem(retryLead)
+              : _pendingStatusFromFollowup;
       setState(() {
         _activeCallId = call.id;
         _activeCallLeadId = _pendingStatusLeadId;
+        _activeCallFromFollowup = isFollowupRetry;
         _pendingDialerCall = PendingDialerCall(
           callId: call.id,
           leadId: _pendingStatusLeadId ?? '',
@@ -3488,9 +3494,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   }
 
   bool _isFollowupLeadContext(LeadItem? lead) {
-    return _pendingStatusFromFollowup ||
-        _activeCallFromFollowup ||
-        _isFollowupLeadItem(lead);
+    if (lead != null) {
+      return _isFollowupLeadItem(lead);
+    }
+    return _pendingStatusFromFollowup || _activeCallFromFollowup;
   }
 
   Future<void> _placeCallForLead(LeadItem lead) async {
@@ -4253,11 +4260,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     if (decision == ShortCallDecision.callAgain) {
-      _showMessage('Follow-up try saved. Calling the customer again.');
+      _showMessage(
+        isFollowupLead
+            ? 'Follow-up try saved. Calling the customer again.'
+            : 'Calling the customer again.',
+      );
       final refreshedLead = _leadById(pendingCall.leadId);
       if (refreshedLead != null) {
-        _activeCallFromFollowup = true;
-        _pendingStatusFromFollowup = true;
+        _activeCallFromFollowup = isFollowupLead;
+        _pendingStatusFromFollowup = isFollowupLead;
         await _placeCallForLead(refreshedLead);
       } else {
         _showMessage(
@@ -5054,7 +5065,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         if (savedCall == null) {
           return;
         }
-        _showMessage('Calling the customer again.');
+        final isFollowupRetry = _isFollowupLeadItem(lead);
+        _activeCallFromFollowup = isFollowupRetry;
+        _pendingStatusFromFollowup = isFollowupRetry;
+        _showMessage(
+          isFollowupRetry
+              ? 'Follow-up try saved. Calling the customer again.'
+              : 'Calling the customer again.',
+        );
         await _placeCallForLead(lead);
       }
       return;
