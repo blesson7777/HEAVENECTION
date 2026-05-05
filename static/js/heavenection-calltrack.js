@@ -516,10 +516,14 @@
         const submitButton = document.getElementById("leadSubmitButton");
         const openSelectionButtons = Array.from(document.querySelectorAll(".js-open-lead-selection-mode"));
         const openAllocationButtons = Array.from(document.querySelectorAll(".js-open-lead-allocation-mode"));
+        const openUnassignButtons = Array.from(document.querySelectorAll(".js-open-lead-unassign-mode"));
         const deleteSelectedButtons = Array.from(document.querySelectorAll(".js-delete-selected-leads-button"));
         const allocateSelectedButtons = Array.from(document.querySelectorAll(".js-allocate-selected-leads-button"));
+        const unassignSelectedButtons = Array.from(document.querySelectorAll(".js-unassign-selected-leads-button"));
         const bulkDeleteForm = document.getElementById("bulkLeadDeleteForm");
         const bulkDeleteInputs = document.getElementById("bulkLeadDeleteInputs");
+        const bulkUnassignForm = document.getElementById("bulkLeadUnassignForm");
+        const bulkUnassignInputs = document.getElementById("bulkLeadUnassignInputs");
         const bulkAllocateModalNode = document.getElementById("bulkLeadAllocateModal");
         const bulkAllocateModal = bulkAllocateModalNode
             ? bootstrap.Modal.getOrCreateInstance(bulkAllocateModalNode)
@@ -565,6 +569,10 @@
                 button.disabled = selectedCount === 0;
                 button.textContent = selectedCount > 0 ? `Allocate Marked (${selectedCount})` : "Allocate Marked";
             });
+            unassignSelectedButtons.forEach((button) => {
+                button.disabled = selectedCount === 0;
+                button.textContent = selectedCount > 0 ? `Unassign Marked (${selectedCount})` : "Unassign Marked";
+            });
             if (selectAllCheckbox) {
                 selectAllCheckbox.checked = selectedCount > 0 && selectedCount === selectionCheckboxes.length;
                 selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < selectionCheckboxes.length;
@@ -593,6 +601,9 @@
             allocateSelectedButtons.forEach((button) => {
                 button.classList.toggle("d-none", mode !== "allocate");
             });
+            unassignSelectedButtons.forEach((button) => {
+                button.classList.toggle("d-none", mode !== "unassign");
+            });
             openSelectionButtons.forEach((button) => {
                 const isDeleteMode = mode === "delete";
                 button.textContent = isDeleteMode ? "Cancel Delete" : "Delete Leads";
@@ -604,6 +615,12 @@
                 button.textContent = isAllocateMode ? "Cancel Allocation" : "Allocate Leads";
                 button.classList.toggle("btn-outline-success", !isAllocateMode);
                 button.classList.toggle("btn-outline-secondary", isAllocateMode);
+            });
+            openUnassignButtons.forEach((button) => {
+                const isUnassignMode = mode === "unassign";
+                button.textContent = isUnassignMode ? "Cancel Unassign" : "Unassign Leads";
+                button.classList.toggle("btn-outline-warning", !isUnassignMode);
+                button.classList.toggle("btn-outline-secondary", isUnassignMode);
             });
             if (!enabled || changedMode) {
                 clearLeadSelections();
@@ -630,6 +647,12 @@
         openAllocationButtons.forEach((button) => {
             button.addEventListener("click", () => {
                 toggleSelectionMode(selectionMode === "allocate" ? "" : "allocate");
+            });
+        });
+
+        openUnassignButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                toggleSelectionMode(selectionMode === "unassign" ? "" : "unassign");
             });
         });
 
@@ -691,6 +714,37 @@
                     bulkAllocateStaffInput.value = "";
                 }
                 bulkAllocateModal.show();
+            });
+        });
+
+        unassignSelectedButtons.forEach((button) => {
+            button.addEventListener("click", async () => {
+                const selectedIds = selectionCheckboxes
+                    .filter((checkbox) => checkbox.checked)
+                    .map((checkbox) => checkbox.value);
+                if (!selectedIds.length) {
+                    window.alert("Select at least one lead to unassign.");
+                    return;
+                }
+                if (!bulkUnassignForm || !bulkUnassignInputs) {
+                    return;
+                }
+                const confirmed = await confirmAction(`Move ${selectedIds.length} selected lead(s) back to the waiting queue?`, {
+                    title: "Unassign leads",
+                    confirmText: "Unassign",
+                });
+                if (!confirmed) {
+                    return;
+                }
+                bulkUnassignInputs.innerHTML = "";
+                selectedIds.forEach((leadId) => {
+                    const input = document.createElement("input");
+                    input.type = "hidden";
+                    input.name = "selected_lead_ids";
+                    input.value = leadId;
+                    bulkUnassignInputs.appendChild(input);
+                });
+                bulkUnassignForm.submit();
             });
         });
 

@@ -1689,6 +1689,32 @@ def leads_page(request):
             messages.success(request, message)
             return redirect("leads-page")
 
+        if lead_action == "bulk_unassign":
+            selected_lead_ids = [
+                lead_id.strip()
+                for lead_id in request.POST.getlist("selected_lead_ids")
+                if lead_id.strip()
+            ]
+            if not selected_lead_ids:
+                messages.error(request, "Select at least one lead to unassign.")
+                return redirect("leads-page")
+
+            unassignable_queryset = Lead.objects.filter(
+                id__in=selected_lead_ids,
+                assigned_to__isnull=False,
+            )
+            unassignable_count = unassignable_queryset.count()
+            if unassignable_count == 0:
+                messages.error(request, "The selected leads are already unassigned or could not be found.")
+                return redirect("leads-page")
+
+            unassignable_queryset.update(assigned_to=None, updated_at=timezone.now())
+            messages.success(
+                request,
+                f"Moved {unassignable_count} selected lead(s) back to the waiting queue.",
+            )
+            return redirect("leads-page")
+
         messages.error(request, "Lead request could not be processed.")
         return redirect("leads-page")
 
