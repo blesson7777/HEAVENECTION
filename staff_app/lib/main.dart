@@ -4567,6 +4567,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (callState['isInCall'] == true) {
       return false;
     }
+    await Future<void>.delayed(const Duration(seconds: 2));
+    final confirmedState = await _readPhoneCallState();
+    if (confirmedState['permissionGranted'] != true) {
+      return false;
+    }
+    if (confirmedState['isInCall'] == true) {
+      return false;
+    }
 
     return _syncCallFromLog(
       allowManualFallback: false,
