@@ -643,7 +643,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       if (notice != null && notice.isNotEmpty) {
         _showMessage(notice, isError: true);
       }
-      final didResolve = await _syncCallFromLog(
+      final didResolve = await _waitForCallEndThenSync(
         allowManualFallback: true,
         showMissingMessage: true,
       );
@@ -3587,7 +3587,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
     if (_activeCallId != null) {
       if (_activeCallLeadId == lead.id) {
-        await _syncCallFromLog(
+        await _waitForCallEndThenSync(
           allowManualFallback: true,
           showMissingMessage: true,
         );
@@ -3641,7 +3641,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
 
-    await _syncCallFromLog(allowManualFallback: true, showMissingMessage: true);
+    await _waitForCallEndThenSync(
+      allowManualFallback: true,
+      showMissingMessage: true,
+    );
   }
 
   Future<void> _solveSyncIssue({String? notice}) async {
@@ -4556,6 +4559,67 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     return _syncCallFromLog(
       allowManualFallback: false,
+      showMissingMessage: showMissingMessage,
+    );
+  }
+
+  Future<bool> _waitForCallToEnd({
+    Duration timeout = const Duration(minutes: 5),
+  }) async {
+    final deadline = DateTime.now().add(timeout);
+    while (DateTime.now().isBefore(deadline)) {
+      final callState = await _readPhoneCallState();
+      if (callState['permissionGranted'] != true) {
+        return false;
+      }
+      if (callState['isInCall'] != true) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        final confirmedState = await _readPhoneCallState();
+        return confirmedState['permissionGranted'] == true &&
+            confirmedState['isInCall'] != true;
+      }
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
+    return false;
+  }
+
+  Future<bool> _waitForCallEndThenSync({
+    required bool allowManualFallback,
+    bool showMissingMessage = false,
+  }) async {
+    final canReadPhoneState = await _ensurePhoneStateAccess(
+      showMessageOnDenied: true,
+    );
+    if (!canReadPhoneState) {
+      return false;
+    }
+
+    final initialCallState = await _readPhoneCallState();
+    if (initialCallState['permissionGranted'] != true) {
+      _showMessage(
+        'Allow all required Android permissions so the app can detect when a customer call ends.',
+        isError: true,
+      );
+      return false;
+    }
+
+    final wasInCall = initialCallState['isInCall'] == true;
+    if (wasInCall) {
+      _showMessage(
+        'Waiting for the customer call to end. The app will check the final phone log automatically.',
+      );
+      final didEnd = await _waitForCallToEnd();
+      if (!didEnd) {
+        _showMessage(
+          'End the customer call first so the app can check the final phone log.',
+          isError: true,
+        );
+        return false;
+      }
+    }
+
+    return _syncCallFromLog(
+      allowManualFallback: allowManualFallback,
       showMissingMessage: showMissingMessage,
     );
   }
