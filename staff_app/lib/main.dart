@@ -3751,10 +3751,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       type: CallType.outgoing,
     );
 
-    final sortedEntries = entries.toList()
-      ..sort((a, b) => (b.timestamp ?? 0).compareTo(a.timestamp ?? 0));
+    final matchingEntries = <CallLogEntry>[];
 
-    for (final entry in sortedEntries) {
+    for (final entry in entries) {
       final timestamp = entry.timestamp;
       final number = entry.number ?? entry.formattedNumber ?? '';
       if (timestamp == null || !_phoneMatches(number, pendingCall.phone)) {
@@ -3767,10 +3766,34 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       )) {
         continue;
       }
-      return entry;
+      matchingEntries.add(entry);
     }
 
-    return null;
+    if (matchingEntries.isEmpty) {
+      return null;
+    }
+
+    matchingEntries.sort((a, b) {
+      final aTimestamp = a.timestamp ?? 0;
+      final bTimestamp = b.timestamp ?? 0;
+      final aDiff = (aTimestamp - pendingCall.startedAt.millisecondsSinceEpoch)
+          .abs();
+      final bDiff = (bTimestamp - pendingCall.startedAt.millisecondsSinceEpoch)
+          .abs();
+      if (aDiff != bDiff) {
+        return aDiff.compareTo(bDiff);
+      }
+
+      final aDuration = a.duration ?? 0;
+      final bDuration = b.duration ?? 0;
+      if (aDuration != bDuration) {
+        return bDuration.compareTo(aDuration);
+      }
+
+      return bTimestamp.compareTo(aTimestamp);
+    });
+
+    return matchingEntries.first;
   }
 
   Future<_CallRemarkDialogResult?> _showCallRemarkDialog({
