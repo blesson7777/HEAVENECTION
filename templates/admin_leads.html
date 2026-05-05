@@ -263,7 +263,7 @@
                         <div class="col-md-6">
                             <label class="form-label fw-semibold" for="leadAssignedTo">Assign To</label>
                             <select class="form-select" id="leadAssignedTo">
-                                <option value="">Unassigned</option>
+                                <option value="">Unassign</option>
                                 {% for staff in staff_options %}
                                 <option value="{{ staff.id }}">{{ staff.name }}</option>
                                 {% endfor %}
