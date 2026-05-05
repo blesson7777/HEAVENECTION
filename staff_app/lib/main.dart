@@ -13,6 +13,7 @@ import 'package:video_player/video_player.dart';
 import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 import 'api_client.dart';
+import 'app_notifications.dart';
 import 'app_models.dart';
 
 const String kBrandName = 'HEAVENECTION';
@@ -96,6 +97,14 @@ class HeavenectionApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: kBrandName,
+      builder: (context, child) {
+        return Stack(
+          children: [
+            child ?? const SizedBox.shrink(),
+            const AppNotificationOverlay(),
+          ],
+        );
+      },
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: kBg,
@@ -385,6 +394,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   void _applyLearningPayload(LearningCenterPayload payload) {
     _learningSummary = payload.summary;
     _lessons = payload.lessons;
+  }
+
+  void _applyStaffNotifications(List<AppNotificationItem> notifications) {
+    AppNotificationOverlayController.instance.syncRemote(notifications);
   }
 
   void _syncPendingCallStatusFromSummary() {
@@ -1546,8 +1559,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       if (!mounted) {
         return;
       }
+      final todayPayload = results[0] as StaffTodayPayload;
       setState(() {
-        _applySummarySnapshot(results[0] as DailySummary);
+        _applySummarySnapshot(todayPayload.summary);
+        _applyStaffNotifications(todayPayload.notifications);
         _leads = results[1] as List<LeadItem>;
         _followups = results[2] as List<LeadItem>;
         _applyLearningPayload(results[3] as LearningCenterPayload);
@@ -2310,6 +2325,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _idleMonitorTimer?.cancel();
     _dismissIdleWarning();
     _dismissPendingCallStatusPrompt();
+    AppNotificationOverlayController.instance.clearAll();
     await _apiClient.clearSession();
     if (!mounted) {
       return;
@@ -2353,6 +2369,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _idleMonitorTimer?.cancel();
     _dismissIdleWarning();
     _dismissPendingCallStatusPrompt();
+    AppNotificationOverlayController.instance.clearAll();
     try {
       await _apiClient.logout();
     } catch (_) {
@@ -3297,6 +3314,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       setState(() {
         _applySummarySnapshot(response.summary);
+        _applyStaffNotifications(response.notifications);
         _lastInteractionAt = DateTime.now();
         _lastCallActivityAt = DateTime.now();
         _backgroundedAt = null;
@@ -3343,6 +3361,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       _dismissIdleWarning();
       setState(() {
         _applySummarySnapshot(response.summary);
+        _applyStaffNotifications(response.notifications);
         _backgroundedAt = null;
       });
       _syncPresenceMonitoring();
@@ -3388,6 +3407,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       setState(() {
         _applySummarySnapshot(response.summary);
+        _applyStaffNotifications(response.notifications);
         if (interaction) {
           _lastInteractionAt = DateTime.now();
         }
@@ -4797,6 +4817,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
       setState(() {
         _applySummarySnapshot(response.summary);
+        _applyStaffNotifications(response.notifications);
       });
     } on ApiException catch (error) {
       if (error.statusCode == 401) {
@@ -5189,17 +5210,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     bool isError = false,
     bool isSuccess = false,
   }) {
-    if (!mounted) {
+    if (message.trim().isEmpty) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError
-            ? kRed
-            : (isSuccess ? kGreen : kPrimaryDark),
-        behavior: SnackBarBehavior.floating,
-      ),
+    AppNotificationOverlayController.instance.showLocal(
+      message: message,
+      severity: isError
+          ? 'critical'
+          : (isSuccess ? 'good' : 'normal'),
     );
   }
 

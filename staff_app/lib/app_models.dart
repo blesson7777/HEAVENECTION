@@ -1002,16 +1002,90 @@ class DailySummary {
 }
 
 class SessionResponse {
-  const SessionResponse({required this.summary});
+  const SessionResponse({required this.summary, required this.notifications});
 
   final DailySummary summary;
+  final List<AppNotificationItem> notifications;
 
   factory SessionResponse.fromJson(Map<String, dynamic> json) {
     final summary = json['summary'];
+    final rows = json['notifications'];
     return SessionResponse(
       summary: DailySummary.fromJson(
         summary is Map<String, dynamic> ? summary : const {},
       ),
+      notifications:
+          (rows as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .map(AppNotificationItem.fromJson)
+              .toList() ??
+          const [],
+    );
+  }
+}
+
+class StaffTodayPayload {
+  const StaffTodayPayload({required this.summary, required this.notifications});
+
+  final DailySummary summary;
+  final List<AppNotificationItem> notifications;
+
+  factory StaffTodayPayload.fromJson(Map<String, dynamic> json) {
+    final summary = json['summary'];
+    final rows = json['notifications'];
+    return StaffTodayPayload(
+      summary: DailySummary.fromJson(
+        summary is Map<String, dynamic> ? summary : const {},
+      ),
+      notifications:
+          (rows as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .map(AppNotificationItem.fromJson)
+              .toList() ??
+          const [],
+    );
+  }
+}
+
+class AppNotificationItem {
+  const AppNotificationItem({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.severity,
+    required this.severityLabel,
+    required this.source,
+    required this.sourceLabel,
+    required this.autoDismissSeconds,
+    required this.allowManualClose,
+    required this.createdAt,
+  });
+
+  final String id;
+  final String title;
+  final String message;
+  final String severity;
+  final String severityLabel;
+  final String source;
+  final String sourceLabel;
+  final int autoDismissSeconds;
+  final bool allowManualClose;
+  final DateTime? createdAt;
+
+  factory AppNotificationItem.fromJson(Map<String, dynamic> json) {
+    return AppNotificationItem(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      message: json['message']?.toString() ?? '',
+      severity: json['severity']?.toString() ?? 'normal',
+      severityLabel: json['severity_label']?.toString() ?? 'Normal',
+      source: json['source']?.toString() ?? 'manual',
+      sourceLabel: json['source_label']?.toString() ?? 'Manual',
+      autoDismissSeconds: _asInt(json['auto_dismiss_seconds']),
+      allowManualClose: json['allow_manual_close'] != false,
+      createdAt: json['created_at'] == null
+          ? null
+          : DateTime.tryParse(json['created_at'].toString())?.toLocal(),
     );
   }
 }

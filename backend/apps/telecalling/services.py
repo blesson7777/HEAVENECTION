@@ -20,6 +20,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from backend.apps.telecalling.models import (
+    AppNotification,
     AppRelease,
     Call,
     CompanyProfile,
@@ -120,6 +121,13 @@ PHONE_COLUMN_ALIASES = {
     "number",
     "whatsapp",
     "whatsapp number",
+}
+
+APP_NOTIFICATION_SEVERITY_ORDER = {
+    AppNotification.Severity.CRITICAL: 0,
+    AppNotification.Severity.WARNING: 1,
+    AppNotification.Severity.NORMAL: 2,
+    AppNotification.Severity.GOOD: 3,
 }
 LEAD_ID_COLUMN_ALIASES = {
     "id",
@@ -556,6 +564,76 @@ def _format_datetime(value, fallback="--"):
             return str(value)
         except Exception:
             return fallback
+
+
+def _notification_payload_from_row(row):
+    created_at = row.created_at
+    return {
+        "id": str(row.id),
+        "title": row.title or "",
+        "message": row.message,
+        "severity": row.severity,
+        "severity_label": row.get_severity_display(),
+        "source": row.source,
+        "source_label": row.get_source_display(),
+        "audience": row.audience,
+        "audience_label": row.get_audience_display(),
+        "target_staff_id": str(row.target_staff_id) if row.target_staff_id else "",
+        "target_staff_name": row.target_staff.name if row.target_staff_id else "",
+        "is_active": row.is_active,
+        "allow_manual_close": row.allow_manual_close,
+        "auto_dismiss_seconds": int(row.auto_dismiss_seconds or 0),
+        "show_from": row.show_from.isoformat() if row.show_from else None,
+        "show_from_label": _format_datetime(row.show_from),
+        "show_until": row.show_until.isoformat() if row.show_until else None,
+        "show_until_label": _format_datetime(row.show_until, fallback="Until closed")
+        if row.show_until
+        else "Until closed",
+        "created_at": created_at.isoformat() if created_at else None,
+        "created_at_label": _format_datetime(created_at),
+        "created_by_name": row.created_by.name if row.created_by_id else "",
+    }
+
+
+def build_staff_active_notifications_payload(staff, *, now=None):
+    now = now or timezone.now()
+    queryset = (
+        AppNotification.objects.select_related("target_staff", "created_by")
+        .filter(is_active=True, show_from__lte=now)
+        .filter(Q(show_until__isnull=True) | Q(show_until__gte=now))
+        .filter(
+            Q(audience=AppNotification.Audience.ALL_STAFF)
+            | Q(audience=AppNotification.Audience.SINGLE_STAFF, target_staff=staff)
+        )
+    )
+    rows = sorted(
+        queryset,
+        key=lambda row: (
+            APP_NOTIFICATION_SEVERITY_ORDER.get(row.severity, 99),
+            -(row.show_from.timestamp() if row.show_from else 0),
+            -(row.created_at.timestamp() if row.created_at else 0),
+        ),
+    )
+    return [_notification_payload_from_row(row) for row in rows]
+
+
+def build_app_notification_management_payload():
+    rows = [
+        _notification_payload_from_row(row)
+        for row in AppNotification.objects.select_related("target_staff", "created_by").all()[:50]
+    ]
+    active_count = sum(1 for row in rows if row["is_active"])
+    critical_count = sum(
+        1 for row in rows if row["is_active"] and row["severity"] == AppNotification.Severity.CRITICAL
+    )
+    return {
+        "summary": {
+            "total_notifications": len(rows),
+            "active_notifications": active_count,
+            "critical_notifications": critical_count,
+        },
+        "rows": rows,
+    }
 
 
 def build_staff_document_url(staff, document_type, *, request=None, route_name="staff-document-page"):
@@ -7399,6 +7477,7 @@ def build_staff_today_payload(staff):
     learning_payload = build_staff_learning_payload(staff)
     pending_status_call = get_pending_status_call(staff)
     recoverable_open_call = get_recoverable_open_call(staff, now=now)
+    notifications = build_staff_active_notifications_payload(staff, now=now)
 
     active_seconds = _effective_active_seconds_for_staff(
         staff=staff,
@@ -7412,6 +7491,7 @@ def build_staff_today_payload(staff):
 
     return {
         "today": today.isoformat(),
+        "notifications": notifications,
         "summary": {
             "active_seconds": active_seconds,
             "active_label": _format_hours(active_seconds),

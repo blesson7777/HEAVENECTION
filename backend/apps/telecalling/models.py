@@ -359,6 +359,72 @@ class StaffAction(models.Model):
         ]
 
 
+class AppNotification(models.Model):
+    class Severity(models.TextChoices):
+        NORMAL = "normal", "Normal"
+        GOOD = "good", "Good"
+        WARNING = "warning", "Warning"
+        CRITICAL = "critical", "Critical"
+
+    class Source(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        AUTOMATED = "automated", "Automated"
+
+    class Audience(models.TextChoices):
+        ALL_STAFF = "all_staff", "All Staff"
+        SINGLE_STAFF = "single_staff", "Single Staff"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=150, blank=True)
+    message = models.TextField()
+    severity = models.CharField(
+        max_length=20,
+        choices=Severity.choices,
+        default=Severity.NORMAL,
+        db_index=True,
+    )
+    source = models.CharField(
+        max_length=20,
+        choices=Source.choices,
+        default=Source.MANUAL,
+        db_index=True,
+    )
+    audience = models.CharField(
+        max_length=20,
+        choices=Audience.choices,
+        default=Audience.ALL_STAFF,
+        db_index=True,
+    )
+    target_staff = models.ForeignKey(
+        Staff,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="app_notifications",
+    )
+    is_active = models.BooleanField(default=True, db_index=True)
+    allow_manual_close = models.BooleanField(default=True)
+    auto_dismiss_seconds = models.PositiveSmallIntegerField(default=6)
+    show_from = models.DateTimeField(default=timezone.now, db_index=True)
+    show_until = models.DateTimeField(null=True, blank=True, db_index=True)
+    created_by = models.ForeignKey(
+        Staff,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_app_notifications",
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-is_active", "-show_from", "-created_at")
+        indexes = [
+            models.Index(fields=["is_active", "show_from"], name="tc_appnotif_active_from"),
+            models.Index(fields=["audience", "severity"], name="tc_appnotif_audience_sev"),
+        ]
+
+
 class Salary(models.Model):
     class PayoutCycle(models.TextChoices):
         WEEKLY = "weekly", "Weekly"

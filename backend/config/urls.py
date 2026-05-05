@@ -34,6 +34,7 @@ urlpatterns = [
     path("work-review/", views.work_review_page, name="work-review-page"),
     path("live-monitoring/", views.live_monitoring_page, name="live-monitoring-page"),
     path("referrals/", views.referral_monitoring_page, name="referral-monitoring-page"),
+    path("app-notifications/", views.app_notifications_page, name="app-notifications-page"),
     path("salary/", views.salary_page, name="salary-page"),
     path("salary/<uuid:staff_id>/", views.salary_detail_page, name="salary-detail-page"),
     path("salary-control/", views.salary_control_page, name="salary-control-page"),

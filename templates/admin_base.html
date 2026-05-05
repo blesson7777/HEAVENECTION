@@ -146,13 +146,13 @@
                 </div>
             </div>
 
-            <div class="hc-sidebar-section{% if active_page == 'calls' or active_page == 'hours' or active_page == 'work-review' or active_page == 'referrals' %} is-expanded{% endif %}">
+            <div class="hc-sidebar-section{% if active_page == 'calls' or active_page == 'hours' or active_page == 'work-review' or active_page == 'referrals' or active_page == 'app-notifications' %} is-expanded{% endif %}">
                 <button
                     type="button"
                     class="hc-sidebar-toggle"
                     data-bs-toggle="collapse"
                     data-bs-target="#hcSidebarMonitoring"
-                    aria-expanded="{% if active_page == 'calls' or active_page == 'hours' or active_page == 'work-review' or active_page == 'referrals' %}true{% else %}false{% endif %}"
+                    aria-expanded="{% if active_page == 'calls' or active_page == 'hours' or active_page == 'work-review' or active_page == 'referrals' or active_page == 'app-notifications' %}true{% else %}false{% endif %}"
                     aria-controls="hcSidebarMonitoring"
                 >
                     <span class="hc-sidebar-toggle-icon"><i class="bi bi-broadcast-pin"></i></span>
@@ -160,10 +160,10 @@
                         <strong>Monitoring & Review</strong>
                         <small>Calls, hours, integrity, and referrals</small>
                     </span>
-                    <span class="hc-sidebar-toggle-badge">4</span>
+                    <span class="hc-sidebar-toggle-badge">5</span>
                     <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
                 </button>
-                <div class="collapse{% if active_page == 'calls' or active_page == 'hours' or active_page == 'work-review' or active_page == 'referrals' %} show{% endif %}" id="hcSidebarMonitoring" data-bs-parent="#hcSidebarNav">
+                <div class="collapse{% if active_page == 'calls' or active_page == 'hours' or active_page == 'work-review' or active_page == 'referrals' or active_page == 'app-notifications' %} show{% endif %}" id="hcSidebarMonitoring" data-bs-parent="#hcSidebarNav">
                     <div class="hc-sidebar-links">
                         <a href="{% url 'calls-page' %}" class="hc-sidebar-link{% if active_page == 'calls' %} active{% endif %}">
                             <i class="bi bi-telephone-forward-fill"></i>
@@ -180,6 +180,10 @@
                         <a href="{% url 'referral-monitoring-page' %}" class="hc-sidebar-link{% if active_page == 'referrals' %} active{% endif %}">
                             <i class="bi bi-people"></i>
                             <span>Referral Monitoring</span>
+                        </a>
+                        <a href="{% url 'app-notifications-page' %}" class="hc-sidebar-link{% if active_page == 'app-notifications' %} active{% endif %}">
+                            <i class="bi bi-bell-fill"></i>
+                            <span>App Notifications</span>
                         </a>
                     </div>
                 </div>

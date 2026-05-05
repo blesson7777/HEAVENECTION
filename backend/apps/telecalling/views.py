@@ -2,6 +2,7 @@ import logging
 import mimetypes
 from pathlib import Path
 from decimal import Decimal, InvalidOperation
+from datetime import datetime
 
 from django.conf import settings
 from django.db.models import Count, Q
@@ -9,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.contrib import messages
 from django.shortcuts import redirect, render
+from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
 from rest_framework.decorators import api_view, permission_classes
@@ -23,6 +25,7 @@ from backend.apps.telecalling.auth import (
     set_auth_cookies,
 )
 from backend.apps.telecalling.models import (
+    AppNotification,
     AppRelease,
     Call,
     InterestedLeadDetail,
@@ -76,6 +79,7 @@ from backend.apps.telecalling.services import (
     auto_allocate_leads,
     authenticate_staff,
     build_app_update_payload,
+    build_app_notification_management_payload,
     build_callback_csv_response,
     build_callback_excel_response,
     build_callback_payload,
@@ -109,6 +113,7 @@ from backend.apps.telecalling.services import (
     build_staff_profile_payload,
     build_staff_learning_payload,
     build_staff_followups_payload,
+    build_staff_active_notifications_payload,
     build_staff_today_payload,
     build_team_management_payload,
     build_work_hours_payload,
@@ -2065,6 +2070,124 @@ def referral_monitoring_page(request):
 
 
 @require_http_methods(["GET", "POST"])
+def app_notifications_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    if request.method == "POST":
+        action = request.POST.get("notification_action", "").strip()
+        if action == "send_notification":
+            title = request.POST.get("title", "").strip()
+            message_text = request.POST.get("message", "").strip()
+            severity = request.POST.get("severity", AppNotification.Severity.NORMAL).strip()
+            audience = request.POST.get("audience", AppNotification.Audience.ALL_STAFF).strip()
+            target_staff_id = request.POST.get("target_staff_id", "").strip()
+            auto_dismiss_value = request.POST.get("auto_dismiss_seconds", "6").strip()
+            show_until_value = request.POST.get("show_until", "").strip()
+
+            if not message_text:
+                messages.error(request, "Enter the notification message.")
+                return redirect("app-notifications-page")
+            if severity not in AppNotification.Severity.values:
+                messages.error(request, "Choose a valid notification level.")
+                return redirect("app-notifications-page")
+            if audience not in AppNotification.Audience.values:
+                messages.error(request, "Choose who should receive this notification.")
+                return redirect("app-notifications-page")
+
+            target_staff = None
+            if audience == AppNotification.Audience.SINGLE_STAFF:
+                target_staff = Staff.objects.filter(
+                    id=target_staff_id,
+                    role=Staff.Role.STAFF,
+                    is_active=True,
+                ).first()
+                if not target_staff:
+                    messages.error(request, "Choose an active staff member for a single-staff notification.")
+                    return redirect("app-notifications-page")
+
+            try:
+                auto_dismiss_seconds = max(1, min(int(auto_dismiss_value or "6"), 60))
+            except ValueError:
+                messages.error(request, "Auto close seconds must be between 1 and 60.")
+                return redirect("app-notifications-page")
+
+            show_until = None
+            if show_until_value:
+                parsed = parse_datetime(show_until_value)
+                if parsed is None:
+                    try:
+                        parsed = datetime.fromisoformat(show_until_value)
+                    except ValueError:
+                        parsed = None
+                if parsed is None:
+                    messages.error(request, "Enter a valid end time for this notification.")
+                    return redirect("app-notifications-page")
+                if timezone.is_naive(parsed):
+                    parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+                show_until = parsed
+                if show_until <= timezone.now():
+                    messages.error(request, "Notification end time must be in the future.")
+                    return redirect("app-notifications-page")
+
+            AppNotification.objects.create(
+                title=title,
+                message=message_text,
+                severity=severity,
+                source=AppNotification.Source.MANUAL,
+                audience=audience,
+                target_staff=target_staff,
+                auto_dismiss_seconds=auto_dismiss_seconds,
+                show_until=show_until,
+                created_by=current_user,
+            )
+            messages.success(request, "Notification sent successfully.")
+            return redirect("app-notifications-page")
+
+        notification_id = request.POST.get("notification_id", "").strip()
+        notification = AppNotification.objects.filter(id=notification_id).first()
+        if not notification:
+            messages.error(request, "Notification not found.")
+            return redirect("app-notifications-page")
+
+        if action == "deactivate_notification":
+            notification.is_active = False
+            notification.save(update_fields=["is_active", "updated_at"])
+            messages.warning(request, "Notification deactivated.")
+            return redirect("app-notifications-page")
+        if action == "activate_notification":
+            notification.is_active = True
+            notification.save(update_fields=["is_active", "updated_at"])
+            messages.success(request, "Notification activated again.")
+            return redirect("app-notifications-page")
+        if action == "delete_notification":
+            notification.delete()
+            messages.success(request, "Notification deleted.")
+            return redirect("app-notifications-page")
+
+        messages.error(request, "Notification action could not be processed.")
+        return redirect("app-notifications-page")
+
+    payload = build_app_notification_management_payload()
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="app-notifications",
+        page_title="App Notifications",
+        page_heading="App Notifications",
+        page_subtitle="Send top in-app messages with color-coded levels, auto close timing, and manual close support.",
+        extra_context={
+            **payload,
+            "active_staff_rows": Staff.objects.filter(role=Staff.Role.STAFF, is_active=True).order_by("name"),
+            "severity_choices": AppNotification.Severity.choices,
+            "audience_choices": AppNotification.Audience.choices,
+        },
+    )
+    return render(request, "admin_app_notifications.html", context)
+
+
+@require_http_methods(["GET", "POST"])
 def salary_page(request):
     current_user = _get_admin_user_or_redirect(request)
     if not current_user:
@@ -3041,6 +3164,7 @@ def start_session_api(request):
             "created": created,
             "session": SessionSerializer(session).data,
             "summary": build_staff_today_payload(request.user)["summary"],
+            "notifications": build_staff_active_notifications_payload(request.user),
         }
     )
 
@@ -3055,6 +3179,7 @@ def end_session_api(request):
         {
             "session": SessionSerializer(session).data,
             "summary": build_staff_today_payload(request.user)["summary"],
+            "notifications": build_staff_active_notifications_payload(request.user),
         }
     )
 
@@ -3075,6 +3200,7 @@ def heartbeat_api(request):
             {
                 "detail": "No active session found.",
                 "summary": build_staff_today_payload(request.user)["summary"],
+                "notifications": build_staff_active_notifications_payload(request.user),
             },
             status=409,
         )
@@ -3082,6 +3208,7 @@ def heartbeat_api(request):
         {
             "session": SessionSerializer(session).data,
             "summary": build_staff_today_payload(request.user)["summary"],
+            "notifications": build_staff_active_notifications_payload(request.user),
         }
     )
 
