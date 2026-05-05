@@ -559,8 +559,17 @@
             clearFeedback();
         }
 
+        function visibleSelectionCheckboxes() {
+            return selectionCheckboxes.filter((checkbox) => {
+                const row = checkbox.closest("tr");
+                return row && !row.hidden;
+            });
+        }
+
         function refreshSelectionActionState() {
             const selectedCount = selectionCheckboxes.filter((checkbox) => checkbox.checked).length;
+            const visibleCheckboxes = visibleSelectionCheckboxes();
+            const visibleSelectedCount = visibleCheckboxes.filter((checkbox) => checkbox.checked).length;
             deleteSelectedButtons.forEach((button) => {
                 button.disabled = selectedCount === 0;
                 button.textContent = selectedCount > 0 ? `Delete Marked (${selectedCount})` : "Delete Marked";
@@ -574,8 +583,8 @@
                 button.textContent = selectedCount > 0 ? `Unassign Marked (${selectedCount})` : "Unassign Marked";
             });
             if (selectAllCheckbox) {
-                selectAllCheckbox.checked = selectedCount > 0 && selectedCount === selectionCheckboxes.length;
-                selectAllCheckbox.indeterminate = selectedCount > 0 && selectedCount < selectionCheckboxes.length;
+                selectAllCheckbox.checked = visibleSelectedCount > 0 && visibleSelectedCount === visibleCheckboxes.length && visibleCheckboxes.length > 0;
+                selectAllCheckbox.indeterminate = visibleSelectedCount > 0 && visibleSelectedCount < visibleCheckboxes.length;
             }
         }
 
@@ -657,7 +666,7 @@
         });
 
         selectAllCheckbox?.addEventListener("change", () => {
-            selectionCheckboxes.forEach((checkbox) => {
+            visibleSelectionCheckboxes().forEach((checkbox) => {
                 checkbox.checked = selectAllCheckbox.checked;
             });
             refreshSelectionActionState();
@@ -806,6 +815,13 @@
                 } catch (error) {
                     window.alert(error.message);
                 }
+            });
+        });
+
+        document.getElementById("leadSearchInput")?.addEventListener("input", refreshSelectionActionState);
+        document.querySelectorAll(".hc-filter-chip[data-filter-status]").forEach((chip) => {
+            chip.addEventListener("click", () => {
+                window.setTimeout(refreshSelectionActionState, 0);
             });
         });
 
