@@ -6189,10 +6189,30 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         hasActiveCallForLead || hasPendingCallForLead || hasRecoverableCallForLead
         ? 'Call Again'
         : 'Call';
+    final showSyncIssueForLead =
+        hasRecoverableCallForLead ||
+        (_isSyncingCallLog && (hasActiveCallForLead || hasRecoverableCallForLead));
+    final showPendingResultForLead = hasPendingCallForLead;
     final syncSolveLabel =
         _isSyncingCallLog && _syncSolveCountdownSeconds != null
         ? 'Solving ${_formatSecondsAsTimer(_syncSolveCountdownSeconds!)}'
         : 'Solving...';
+    final secondaryButtonLabel = _isSyncingCallLog
+        ? syncSolveLabel
+        : hasActiveCallForLead
+        ? 'End Call'
+        : hasRecoverableCallForLead
+        ? 'Solve Sync Issue'
+        : showPendingResultForLead
+        ? 'Mark Call Result'
+        : 'Solve Sync Issue';
+    final secondaryButtonIcon = _isSyncingCallLog
+        ? Icons.hourglass_top
+        : hasActiveCallForLead
+        ? Icons.call_end
+        : showPendingResultForLead
+        ? Icons.assignment_turned_in
+        : Icons.build_circle_outlined;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -6276,7 +6296,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                       const SizedBox(height: 8),
                       Text(
                         _formatTimer(
-                          hasActiveCallForLead ? _elapsed : Duration.zero,
+                          hasActiveCallForLead || hasRecoverableCallForLead
+                              ? _elapsed
+                              : Duration.zero,
                         ),
                         style: const TextStyle(
                           fontSize: 36,
@@ -6301,25 +6323,23 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: hasActiveCallForLead && !_isSyncingCallLog
+                        onPressed: _isSyncingCallLog
+                            ? null
+                            : hasActiveCallForLead
                             ? () => _endCall()
+                            : hasRecoverableCallForLead
+                            ? _solveSyncIssue
+                            : showPendingResultForLead
+                            ? _recoverPendingCallStatusPrompt
                             : null,
                         style: ElevatedButton.styleFrom(backgroundColor: kRed),
-                        icon: Icon(
-                          _isSyncingCallLog
-                              ? Icons.hourglass_top
-                              : Icons.build_circle_outlined,
-                        ),
-                        label: Text(
-                          _isSyncingCallLog
-                              ? syncSolveLabel
-                              : 'Solve Sync Issue',
-                        ),
+                        icon: Icon(secondaryButtonIcon),
+                        label: Text(secondaryButtonLabel),
                       ),
                     ),
                   ],
                 ),
-                if (hasActiveCallForLead) ...[
+                if (showSyncIssueForLead) ...[
                   const SizedBox(height: 12),
                   Container(
                     width: double.infinity,
@@ -6342,7 +6362,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                             _isSyncingCallLog &&
                                     _syncSolveCountdownSeconds != null
                                 ? 'Call sync issue is being solved. Estimated time remaining: ${_formatSecondsAsTimer(_syncSolveCountdownSeconds!)}.'
-                                : 'Call sync issue is active. Tap "Solve Sync Issue" to finish this customer call before moving on.',
+                                : 'Call sync issue is active for this customer. Use "Solve Sync Issue" to finish this call before moving on.',
                             style: TextStyle(
                               fontSize: 14.5,
                               fontWeight: FontWeight.w700,
@@ -6362,6 +6382,35 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                           : _escapeSyncIssueCall,
                       icon: const Icon(Icons.close_rounded),
                       label: const Text('Close Without Sync'),
+                    ),
+                  ),
+                ],
+                if (showPendingResultForLead) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF7FF),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFF92BDEB)),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.assignment_late, color: Color(0xFF245C9E)),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'This call is waiting for a result. Mark the customer remark or call the same customer again from this screen.',
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF245C9E),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
