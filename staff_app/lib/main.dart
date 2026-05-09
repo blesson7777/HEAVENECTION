@@ -48,10 +48,11 @@ const Duration kIdleWarningGrace = Duration(minutes: 5);
 const Duration kBackgroundSessionTimeout = Duration(minutes: 5);
 const Duration kShortCallReviewThreshold = Duration(seconds: 15);
 const Duration kMinimumQualifyingCallDuration = Duration(seconds: 5);
-const int kCallLogSyncAttempts = 15;
+const int kCallLogSyncAttempts = 30;
 const Duration kCallLogSyncRetryDelay = Duration(seconds: 2);
-const Duration kCallLogMatchLookback = Duration(minutes: 5);
-const Duration kCallLogMatchLookahead = Duration(minutes: 2);
+const Duration kCallLogMatchLookback = Duration(minutes: 10);
+const Duration kCallLogMatchLookahead = Duration(minutes: 5);
+const Duration kCallLogLooseMatchTolerance = Duration(minutes: 2);
 const Duration kNetworkErrorDelay = Duration(seconds: 3);
 const Duration kActiveCallAutoCheckInterval = Duration(seconds: 3);
 const Duration kSyncSolveCountdownTick = Duration(seconds: 1);
@@ -3775,19 +3776,69 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   Future<CallLogEntry?> _findMatchingCallLogEntry(
     PendingDialerCall pendingCall,
   ) async {
-    final entries = await CallLog.query(
-      dateTimeFrom: pendingCall.startedAt.subtract(kCallLogMatchLookback),
-      dateTimeTo: DateTime.now().add(kCallLogMatchLookahead),
+    final from = pendingCall.startedAt.subtract(kCallLogMatchLookback);
+    final to = DateTime.now().add(kCallLogMatchLookahead);
+    final primaryEntries = await CallLog.query(
+      dateTimeFrom: from,
+      dateTimeTo: to,
       type: CallType.outgoing,
     );
 
+    final primaryMatch = _pickBestCallLogMatch(
+      pendingCall: pendingCall,
+      entries: primaryEntries,
+      requirePhoneMatch: true,
+    );
+    if (primaryMatch != null) {
+      return primaryMatch;
+    }
+
+    // Some OEM phones (including specific OnePlus builds) can delay or hide
+    // outgoing tagging; use a looser fallback so sync does not stay stuck.
+    final fallbackEntries = await CallLog.query(
+      dateTimeFrom: from,
+      dateTimeTo: to,
+    );
+    final phoneFallback = _pickBestCallLogMatch(
+      pendingCall: pendingCall,
+      entries: fallbackEntries,
+      requirePhoneMatch: true,
+    );
+    if (phoneFallback != null) {
+      return phoneFallback;
+    }
+
+    return _pickBestCallLogMatch(
+      pendingCall: pendingCall,
+      entries: fallbackEntries,
+      requirePhoneMatch: false,
+    );
+  }
+
+  CallLogEntry? _pickBestCallLogMatch({
+    required PendingDialerCall pendingCall,
+    required Iterable<CallLogEntry> entries,
+    required bool requirePhoneMatch,
+  }) {
     final matchingEntries = <CallLogEntry>[];
+    final pendingTimestamp = pendingCall.startedAt.millisecondsSinceEpoch;
 
     for (final entry in entries) {
       final timestamp = entry.timestamp;
-      final number = entry.number ?? entry.formattedNumber ?? '';
-      if (timestamp == null || !_phoneMatches(number, pendingCall.phone)) {
+      if (timestamp == null) {
         continue;
+      }
+
+      if (requirePhoneMatch) {
+        final number = entry.number ?? entry.formattedNumber ?? '';
+        if (!_phoneMatches(number, pendingCall.phone)) {
+          continue;
+        }
+      } else {
+        final diff = (timestamp - pendingTimestamp).abs();
+        if (diff > kCallLogLooseMatchTolerance.inMilliseconds) {
+          continue;
+        }
       }
 
       final startedAt = DateTime.fromMillisecondsSinceEpoch(timestamp);
@@ -3806,10 +3857,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     matchingEntries.sort((a, b) {
       final aTimestamp = a.timestamp ?? 0;
       final bTimestamp = b.timestamp ?? 0;
-      final aDiff = (aTimestamp - pendingCall.startedAt.millisecondsSinceEpoch)
-          .abs();
-      final bDiff = (bTimestamp - pendingCall.startedAt.millisecondsSinceEpoch)
-          .abs();
+      final aDiff = (aTimestamp - pendingTimestamp).abs();
+      final bDiff = (bTimestamp - pendingTimestamp).abs();
       if (aDiff != bDiff) {
         return aDiff.compareTo(bDiff);
       }
