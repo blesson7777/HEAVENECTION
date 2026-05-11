@@ -5175,6 +5175,15 @@ def build_team_management_payload(*, quality_range_start=None, quality_range_end
             }
         )
 
+    team_rows.sort(
+        key=lambda row: (
+            0 if row.get("is_active") else 1,
+            0 if row.get("status_filter") == "online" else 1,
+            0 if row.get("status_filter") == "attention" else 1,
+            row.get("name", "").lower(),
+        )
+    )
+
     return {
         "today_label": today.strftime("%A, %d %b %Y"),
         "team_summary": {
