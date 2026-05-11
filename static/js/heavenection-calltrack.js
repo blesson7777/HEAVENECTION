@@ -138,6 +138,57 @@
         return window.confirm(message);
     }
 
+    function wait(ms) {
+        return new Promise((resolve) => window.setTimeout(resolve, ms));
+    }
+
+    async function playStaffActionAnimation(button, actionType) {
+        const row = button?.closest(".hc-staff-roster-row");
+        if (!row) {
+            return;
+        }
+
+        const actionClass = `is-animating-${actionType}`;
+        row.classList.remove(
+            "is-animating-delete",
+            "is-animating-activate",
+            "is-animating-deactivate",
+            "is-animating-edit",
+            "is-animating-profile"
+        );
+        row.classList.add(actionClass);
+
+        const flare = document.createElement("div");
+        flare.className = `hc-staff-action-flare is-${actionType}`;
+
+        const icon = document.createElement("span");
+        icon.className = "hc-staff-action-flare-icon";
+        icon.innerHTML = {
+            delete: '<i class="bi bi-trash3-fill"></i>',
+            activate: '<i class="bi bi-play-circle-fill"></i>',
+            deactivate: '<i class="bi bi-pause-circle-fill"></i>',
+            edit: '<i class="bi bi-pencil-square"></i>',
+            profile: '<i class="bi bi-person-vcard-fill"></i>',
+        }[actionType] || '<i class="bi bi-stars"></i>';
+
+        const label = document.createElement("strong");
+        label.textContent = {
+            delete: "Sending to bin",
+            activate: "Waking account",
+            deactivate: "Cooling account",
+            edit: "Opening editor",
+            profile: "Opening profile",
+        }[actionType] || "Working";
+
+        flare.append(icon, label);
+        row.appendChild(flare);
+
+        await wait(actionType === "delete" ? 720 : 560);
+
+        flare.remove();
+        row.classList.remove(actionClass);
+    }
+
     function extractErrorMessage(payload) {
         if (!payload || typeof payload !== "object") {
             return "Unable to complete the request right now.";
@@ -426,6 +477,7 @@
 
         document.querySelectorAll(".js-edit-staff").forEach((button) => {
             button.addEventListener("click", () => {
+                playStaffActionAnimation(button, "edit");
                 clearFeedback();
                 idInput.value = button.dataset.staffId || "";
                 nameInput.value = button.dataset.name || "";
@@ -453,6 +505,7 @@
                     return;
                 }
                 try {
+                    await playStaffActionAnimation(button, "delete");
                     await requestJson(`${config.teamMembersUrl}${staffId}/`, { method: "DELETE" });
                     window.location.reload();
                 } catch (error) {
@@ -477,6 +530,7 @@
                     return;
                 }
                 try {
+                    await playStaffActionAnimation(button, isActive ? "deactivate" : "activate");
                     await requestJson(`${config.teamMembersUrl}${staffId}/`, {
                         method: "PATCH",
                         body: JSON.stringify({ is_active: !isActive }),
@@ -485,6 +539,12 @@
                 } catch (error) {
                     window.alert(error.message);
                 }
+            });
+        });
+
+        document.querySelectorAll(".js-open-staff-profile").forEach((button) => {
+            button.addEventListener("click", () => {
+                playStaffActionAnimation(button, "profile");
             });
         });
 
