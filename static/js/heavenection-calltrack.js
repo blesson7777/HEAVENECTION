@@ -225,7 +225,9 @@
                 return;
             }
 
-            const rows = Array.from(tableBody.querySelectorAll("tr"));
+            const rows = Array.from(
+                tableBody.querySelectorAll("[data-filter-item], tr")
+            );
             const searchInput = document.getElementById(inputId);
             const chips = Array.from(document.querySelectorAll(".hc-filter-chip"));
 

@@ -50,149 +50,186 @@
     <div class="mf-db2-panel-head mb-3">
         <div>
             <span class="mf-db2-kicker">Roster Board</span>
-            <h5>Staff accounts and current performance</h5>
+            <h5>Staff accounts, live control tools, and daily performance</h5>
         </div>
         <span class="hc-sync-pill"><i class="bi bi-people-fill"></i> {{ team_summary.online_now }} live now</span>
     </div>
 
-    <div class="hc-staff-toolbar">
-        <div class="hc-search-box mb-0">
-            <i class="bi bi-search"></i>
-            <input type="search" id="staffSearchInput" placeholder="Search by name, phone, rate, or status">
+    <div class="hc-staff-command-shell">
+        <div class="hc-staff-toolbar">
+            <div class="hc-search-box mb-0">
+                <i class="bi bi-search"></i>
+                <input type="search" id="staffSearchInput" placeholder="Search by name, phone, rate, or status">
+            </div>
+            <div class="hc-filter-row hc-staff-filter-row">
+                <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All Staff</button>
+                <button type="button" class="hc-filter-chip" data-filter-status="online">Live Now</button>
+                <button type="button" class="hc-filter-chip" data-filter-status="attention">Need Attention</button>
+                <button type="button" class="hc-filter-chip" data-filter-status="offline">Offline</button>
+                <button type="button" class="hc-filter-chip" data-filter-status="inactive">Inactive</button>
+            </div>
         </div>
-        <div class="hc-filter-row hc-staff-filter-row">
-            <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All Staff</button>
-            <button type="button" class="hc-filter-chip" data-filter-status="online">Live Now</button>
-            <button type="button" class="hc-filter-chip" data-filter-status="attention">Need Attention</button>
-            <button type="button" class="hc-filter-chip" data-filter-status="offline">Offline</button>
-            <button type="button" class="hc-filter-chip" data-filter-status="inactive">Inactive</button>
+
+        <div class="hc-staff-command-grid">
+            <article class="hc-staff-command-card hc-staff-command-card-primary">
+                <div class="hc-staff-command-visual" aria-hidden="true">
+                    <span class="hc-staff-command-orbit hc-staff-command-orbit-a"></span>
+                    <span class="hc-staff-command-orbit hc-staff-command-orbit-b"></span>
+                    <span class="hc-staff-command-core"><i class="bi bi-broadcast-pin"></i></span>
+                </div>
+                <div class="hc-staff-command-copy">
+                    <span class="mf-db2-kicker">Control Deck</span>
+                    <strong>Open a profile, edit pay rules, or disable access without losing daily context.</strong>
+                    <p class="mb-0">This board keeps today’s work, quality signals, and lead ownership visible in one quick scan.</p>
+                </div>
+            </article>
+
+            <article class="hc-staff-command-card">
+                <span class="mf-db2-kicker">Quick Read</span>
+                <div class="hc-staff-command-statline">
+                    <strong>{{ team_summary.total_calls_today }}</strong>
+                    <span>Calls today</span>
+                </div>
+                <div class="hc-staff-command-meter">
+                    <span style="width:{% if team_summary.total_staff %}{% widthratio team_summary.online_now team_summary.total_staff 100 %}{% else %}0{% endif %}%"></span>
+                </div>
+                <small>{{ team_summary.total_converted_today }} conversions and {{ team_summary.total_assigned }} active leads currently distributed.</small>
+            </article>
+
+            <article class="hc-staff-command-card">
+                <span class="mf-db2-kicker">Motion Legend</span>
+                <div class="hc-staff-legend-stack">
+                    <span><i class="bi bi-circle-fill hc-tone-dot is-live"></i> Live pulse means the staff is available right now.</span>
+                    <span><i class="bi bi-circle-fill hc-tone-dot is-attention"></i> Amber motion means the account needs review or follow-up.</span>
+                    <span><i class="bi bi-circle-fill hc-tone-dot is-offline"></i> Calm gray state means offline or disabled.</span>
+                </div>
+            </article>
         </div>
     </div>
 
-    <div class="table-responsive">
-        <table class="table hc-table hc-staff-table align-middle mb-0">
-            <thead>
-                <tr>
-                    <th>Staff</th>
-                    <th>Presence</th>
-                    <th>Daily Output</th>
-                    <th>Quality Score</th>
-                    <th>Lead Queue</th>
-                    <th>Rates</th>
-                    <th class="text-end">Actions</th>
-                </tr>
-            </thead>
-            <tbody id="staffTableBody">
-                {% for staff in team_rows %}
-                <tr data-status="{{ staff.status_filter }}">
-                    <td>
-                        <div class="hc-staff-persona">
-                            <span class="hc-staff-avatar">{{ staff.name|slice:":1"|upper }}</span>
-                            <div class="hc-staff-persona-copy">
-                                <strong>{{ staff.name }}</strong>
-                                <span>{{ staff.phone }}</span>
-                                <small>{{ staff.compensation_type_label }} payout</small>
-                            </div>
+    <div id="staffTableBody" class="hc-staff-roster-grid">
+        {% for staff in team_rows %}
+        <article class="hc-staff-roster-card hc-staff-roster-card-{{ staff.status_tone }}" data-status="{{ staff.status_filter }}" data-filter-item>
+            <div class="hc-staff-roster-card-backdrop" aria-hidden="true">
+                <span class="hc-staff-card-glow"></span>
+                <span class="hc-staff-card-line hc-staff-card-line-a"></span>
+                <span class="hc-staff-card-line hc-staff-card-line-b"></span>
+            </div>
+
+            <div class="hc-staff-roster-head">
+                <div class="hc-staff-persona">
+                    <span class="hc-staff-avatar">{{ staff.name|slice:":1"|upper }}</span>
+                    <div class="hc-staff-persona-copy">
+                        <strong>{{ staff.name }}</strong>
+                        <span>{{ staff.phone }}</span>
+                        <small>{{ staff.compensation_type_label }} payout</small>
+                    </div>
+                </div>
+                <div class="hc-staff-presence-cluster">
+                    <span class="hc-status hc-status-{{ staff.status_tone }}">
+                        {{ staff.online_label }}{% if not staff.is_active %} / Inactive{% endif %}
+                    </span>
+                    <div class="hc-staff-signal hc-staff-signal-{{ staff.status_tone }}" aria-hidden="true">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hc-staff-roster-body">
+                <div class="hc-staff-live-note">
+                    <strong>{{ staff.last_seen }}</strong>
+                    <span>
+                        {% if staff.is_available %}
+                        Available for active work
+                        {% elif not staff.is_active %}
+                        Account disabled
+                        {% else %}
+                        Session state: {{ staff.session_state|title }}
+                        {% endif %}
+                    </span>
+                </div>
+
+                <div class="hc-staff-metrics hc-staff-metrics-fancy">
+                    <div class="hc-staff-metric">
+                        <strong>{{ staff.active_hours_today }}</strong>
+                        <span>Hours</span>
+                    </div>
+                    <div class="hc-staff-metric">
+                        <strong>{{ staff.calls_today }}</strong>
+                        <span>Calls</span>
+                    </div>
+                    <div class="hc-staff-metric">
+                        <strong>{{ staff.converted_today }}</strong>
+                        <span>Converted</span>
+                    </div>
+                </div>
+
+                <div class="hc-staff-roster-band">
+                    <div class="hc-quality-card">
+                        <div class="hc-quality-card-head">
+                            <strong>{{ staff.quality_score }}</strong>
+                            <span class="hc-status hc-status-{{ staff.quality_tone }}">{{ staff.quality_label }}</span>
                         </div>
-                    </td>
-                    <td>
-                        <div class="hc-staff-presence">
-                            <span class="hc-status hc-status-{{ staff.status_tone }}">
-                                {{ staff.online_label }}{% if not staff.is_active %} / Inactive{% endif %}
-                            </span>
-                            <small>{{ staff.last_seen }}</small>
-                            <span class="hc-staff-presence-note">
-                                {% if staff.is_available %}
-                                Available for active work
-                                {% elif not staff.is_active %}
-                                Account disabled
-                                {% else %}
-                                Session state: {{ staff.session_state|title }}
-                                {% endif %}
-                            </span>
+                        <small>{{ staff.quality_note }}</small>
+                        <div class="hc-quality-card-meta">
+                            <span>Call Record {{ staff.outcome_consistency_label }}</span>
+                            <span>Real Calls {{ staff.attempt_review_label }}</span>
+                            <span>Away History {{ staff.away_review_label }}</span>
                         </div>
-                    </td>
-                    <td>
-                        <div class="hc-staff-metrics">
-                            <div class="hc-staff-metric">
-                                <strong>{{ staff.active_hours_today }}</strong>
-                                <span>Hours</span>
-                            </div>
-                            <div class="hc-staff-metric">
-                                <strong>{{ staff.calls_today }}</strong>
-                                <span>Calls</span>
-                            </div>
-                            <div class="hc-staff-metric">
-                                <strong>{{ staff.converted_today }}</strong>
-                                <span>Converted</span>
-                            </div>
+                        {% if staff.suspicious_block_count or staff.zero_only_block_count %}
+                        <div class="hc-quality-card-meta">
+                            <span>{{ staff.suspicious_block_count }} block(s) need call review</span>
+                            <span>{{ staff.zero_only_block_count }} zero-talk block(s)</span>
                         </div>
-                    </td>
-                    <td>
-                        <div class="hc-quality-card">
-                            <div class="hc-quality-card-head">
-                                <strong>{{ staff.quality_score }}</strong>
-                                <span class="hc-status hc-status-{{ staff.quality_tone }}">{{ staff.quality_label }}</span>
-                            </div>
-                            <small>{{ staff.quality_note }}</small>
-                            <div class="hc-quality-card-meta">
-                                <span>Call Record {{ staff.outcome_consistency_label }}</span>
-                                <span>Real Calls {{ staff.attempt_review_label }}</span>
-                                <span>Away History {{ staff.away_review_label }}</span>
-                            </div>
-                            {% if staff.suspicious_block_count or staff.zero_only_block_count %}
-                            <div class="hc-quality-card-meta">
-                                <span>{{ staff.suspicious_block_count }} block(s) need call review</span>
-                                <span>{{ staff.zero_only_block_count }} zero-talk block(s)</span>
-                            </div>
-                            {% endif %}
-                        </div>
-                    </td>
-                    <td>
-                        <div class="hc-staff-queue-card">
+                        {% endif %}
+                    </div>
+
+                    <div class="hc-staff-ops-column">
+                        <div class="hc-staff-queue-card hc-staff-queue-card-fancy">
                             <strong>{{ staff.assigned_leads }}</strong>
                             <span>Active leads assigned</span>
                         </div>
-                    </td>
-                    <td>
-                        <div class="hc-staff-rate-stack">
+                        <div class="hc-staff-rate-stack hc-staff-rate-stack-fancy">
                             <div><strong>{{ staff.hourly_rate }}</strong> <span>/ hour</span></div>
                             <div><strong>{{ staff.call_rate }}</strong> <span>/ call</span></div>
-                            <small>{{ staff.bonus_per_conversion }} bonus</small>
+                            <small>{{ staff.bonus_per_conversion }} converted reward</small>
                         </div>
-                    </td>
-                    <td class="text-end">
-                        <div class="hc-staff-actions">
-                            <a href="{% url 'staff-profile-page' staff.id %}" class="btn btn-dark btn-sm">
-                                <i class="bi bi-person-vcard"></i>
-                                <span>Profile</span>
-                            </a>
-                            <button
-                                type="button"
-                                class="btn btn-outline-primary btn-sm js-edit-staff"
-                                data-staff-id="{{ staff.id }}"
-                                data-name="{{ staff.name }}"
-                                data-phone="{{ staff.phone }}"
-                                data-hourly-rate="{{ staff.hourly_rate|cut:'Rs. '|cut:',' }}"
-                                data-call-rate="{{ staff.call_rate|cut:'Rs. '|cut:',' }}"
-                                data-bonus="{{ staff.bonus_per_conversion|cut:'Rs. '|cut:',' }}"
-                                data-is-active="{% if staff.is_active %}true{% else %}false{% endif %}"
-                            >
-                                <i class="bi bi-pencil-square"></i>
-                                <span>Edit</span>
-                            </button>
-                            <button type="button" class="btn btn-outline-danger btn-sm js-delete-staff" data-staff-id="{{ staff.id }}" data-name="{{ staff.name }}">
-                                <i class="bi bi-trash3"></i>
-                                <span>Delete</span>
-                            </button>
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="7" class="text-center py-4">No staff accounts available.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hc-staff-actions hc-staff-actions-fancy">
+                <a href="{% url 'staff-profile-page' staff.id %}" class="btn btn-dark btn-sm">
+                    <i class="bi bi-person-vcard"></i>
+                    <span>Profile</span>
+                </a>
+                <button
+                    type="button"
+                    class="btn btn-outline-primary btn-sm js-edit-staff"
+                    data-staff-id="{{ staff.id }}"
+                    data-name="{{ staff.name }}"
+                    data-phone="{{ staff.phone }}"
+                    data-hourly-rate="{{ staff.hourly_rate|cut:'Rs. '|cut:',' }}"
+                    data-call-rate="{{ staff.call_rate|cut:'Rs. '|cut:',' }}"
+                    data-bonus="{{ staff.bonus_per_conversion|cut:'Rs. '|cut:',' }}"
+                    data-is-active="{% if staff.is_active %}true{% else %}false{% endif %}"
+                >
+                    <i class="bi bi-pencil-square"></i>
+                    <span>Edit</span>
+                </button>
+                <button type="button" class="btn btn-outline-danger btn-sm js-delete-staff" data-staff-id="{{ staff.id }}" data-name="{{ staff.name }}">
+                    <i class="bi bi-trash3"></i>
+                    <span>Delete</span>
+                </button>
+            </div>
+        </article>
+        {% empty %}
+        <article class="hc-staff-empty-card" data-filter-item data-status="all">
+            <i class="bi bi-people"></i>
+            <strong>No staff accounts available.</strong>
+            <span>Add the first staff member to start building the roster board.</span>
+        </article>
+        {% endfor %}
     </div>
 </section>
 

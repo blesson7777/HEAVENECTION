@@ -3411,6 +3411,439 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
     justify-content: flex-end;
 }
 
+.hc-staff-command-shell {
+    display: grid;
+    gap: 1rem;
+}
+
+.hc-staff-command-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) repeat(2, minmax(220px, 0.7fr));
+    gap: 1rem;
+}
+
+.hc-staff-command-card {
+    position: relative;
+    min-height: 100%;
+    padding: 1rem 1.05rem;
+    border-radius: 22px;
+    border: 1px solid rgba(77, 92, 144, 0.1);
+    background:
+        radial-gradient(circle at 100% 0%, rgba(161, 188, 255, 0.2), rgba(161, 188, 255, 0) 32%),
+        linear-gradient(145deg, #ffffff 0%, #f4f7ff 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+    overflow: hidden;
+}
+
+.hc-staff-command-card-primary {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+    align-items: center;
+    gap: 1rem;
+    background:
+        radial-gradient(circle at 10% 12%, rgba(77, 92, 144, 0.12), rgba(77, 92, 144, 0) 34%),
+        linear-gradient(135deg, #f8fbff 0%, #eef3ff 100%);
+}
+
+.hc-staff-command-visual {
+    position: relative;
+    width: 92px;
+    height: 92px;
+    margin-inline: auto;
+    display: grid;
+    place-items: center;
+}
+
+.hc-staff-command-orbit,
+.hc-staff-command-core {
+    position: absolute;
+    border-radius: 50%;
+}
+
+.hc-staff-command-orbit {
+    inset: 0;
+    border: 1px solid rgba(77, 92, 144, 0.14);
+}
+
+.hc-staff-command-orbit-a {
+    animation: hcStaffOrbitSpin 10s linear infinite;
+}
+
+.hc-staff-command-orbit-b {
+    inset: 11px;
+    border-style: dashed;
+    animation: hcStaffOrbitSpin 7s linear infinite reverse;
+}
+
+.hc-staff-command-core {
+    width: 56px;
+    height: 56px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #4d5c90, #7386c4);
+    color: #ffffff;
+    font-size: 1.35rem;
+    box-shadow: 0 14px 28px rgba(77, 92, 144, 0.22);
+    animation: hcStaffCoreBounce 3.2s ease-in-out infinite;
+}
+
+.hc-staff-command-copy {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.hc-staff-command-copy strong {
+    color: #1f2d4f;
+    font-size: 1rem;
+    line-height: 1.45;
+}
+
+.hc-staff-command-copy p,
+.hc-staff-command-card small {
+    color: #61718d;
+    line-height: 1.55;
+}
+
+.hc-staff-command-statline {
+    display: flex;
+    align-items: end;
+    gap: 0.55rem;
+    margin: 0.45rem 0 0.7rem;
+}
+
+.hc-staff-command-statline strong {
+    color: #22345a;
+    font-size: 1.9rem;
+    line-height: 1;
+    font-weight: 800;
+}
+
+.hc-staff-command-statline span {
+    color: #7182a1;
+    font-weight: 700;
+}
+
+.hc-staff-command-meter {
+    height: 0.72rem;
+    border-radius: 999px;
+    background: #e5ebf8;
+    overflow: hidden;
+    margin-bottom: 0.7rem;
+}
+
+.hc-staff-command-meter span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #4d5c90, #8ba0e5);
+    animation: hcStaffMeterFlow 3.6s ease-in-out infinite;
+}
+
+.hc-staff-legend-stack {
+    display: grid;
+    gap: 0.55rem;
+    margin-top: 0.55rem;
+}
+
+.hc-staff-legend-stack span {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    color: #5f6f8b;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.hc-tone-dot {
+    font-size: 0.64rem;
+}
+
+.hc-tone-dot.is-live {
+    color: #1dbb78;
+}
+
+.hc-tone-dot.is-attention {
+    color: #d4a636;
+}
+
+.hc-tone-dot.is-offline {
+    color: #8b98b1;
+}
+
+.hc-staff-roster-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 1rem;
+}
+
+.hc-staff-roster-card,
+.hc-staff-empty-card {
+    position: relative;
+    min-height: 100%;
+    padding: 1.1rem;
+    border-radius: 26px;
+    border: 1px solid #dce4f5;
+    background:
+        radial-gradient(circle at top right, rgba(168, 181, 223, 0.22), rgba(168, 181, 223, 0) 30%),
+        linear-gradient(160deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: 0 18px 32px rgba(28, 41, 70, 0.08);
+    overflow: hidden;
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.hc-staff-roster-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 24px 40px rgba(28, 41, 70, 0.12);
+}
+
+.hc-staff-roster-card-online {
+    border-color: rgba(38, 180, 119, 0.22);
+}
+
+.hc-staff-roster-card-success {
+    border-color: rgba(38, 180, 119, 0.22);
+}
+
+.hc-staff-roster-card-attention {
+    border-color: rgba(212, 166, 54, 0.24);
+}
+
+.hc-staff-roster-card-warning {
+    border-color: rgba(212, 166, 54, 0.24);
+}
+
+.hc-staff-roster-card-offline,
+.hc-staff-roster-card-inactive,
+.hc-staff-roster-card-muted {
+    border-color: rgba(119, 132, 156, 0.16);
+}
+
+.hc-staff-roster-card-backdrop {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.hc-staff-card-glow {
+    position: absolute;
+    width: 12rem;
+    height: 12rem;
+    top: -7rem;
+    right: -5rem;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(77, 92, 144, 0.16), rgba(77, 92, 144, 0));
+    animation: hcStaffGlowFloat 6s ease-in-out infinite;
+}
+
+.hc-staff-card-line {
+    position: absolute;
+    width: 8rem;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(77, 92, 144, 0), rgba(77, 92, 144, 0.28), rgba(77, 92, 144, 0));
+}
+
+.hc-staff-card-line-a {
+    right: 1rem;
+    bottom: 4.2rem;
+    transform: rotate(-22deg);
+}
+
+.hc-staff-card-line-b {
+    left: -1.4rem;
+    top: 4.8rem;
+    transform: rotate(24deg);
+}
+
+.hc-staff-roster-head,
+.hc-staff-actions-fancy {
+    position: relative;
+    z-index: 1;
+}
+
+.hc-staff-roster-head {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.hc-staff-presence-cluster {
+    display: grid;
+    justify-items: end;
+    gap: 0.5rem;
+}
+
+.hc-staff-signal {
+    display: inline-flex;
+    align-items: end;
+    gap: 0.2rem;
+    height: 1.2rem;
+}
+
+.hc-staff-signal span {
+    width: 0.3rem;
+    border-radius: 999px;
+    background: #97a6c8;
+    animation: hcStaffSignal 1.1s ease-in-out infinite;
+}
+
+.hc-staff-signal span:nth-child(1) {
+    height: 0.5rem;
+}
+
+.hc-staff-signal span:nth-child(2) {
+    height: 1rem;
+    animation-delay: 0.12s;
+}
+
+.hc-staff-signal span:nth-child(3) {
+    height: 0.72rem;
+    animation-delay: 0.24s;
+}
+
+.hc-staff-signal-online span {
+    background: linear-gradient(180deg, #29d48c, #149c62);
+}
+
+.hc-staff-signal-success span {
+    background: linear-gradient(180deg, #29d48c, #149c62);
+}
+
+.hc-staff-signal-attention span {
+    background: linear-gradient(180deg, #f0c259, #d1971f);
+}
+
+.hc-staff-signal-warning span {
+    background: linear-gradient(180deg, #f0c259, #d1971f);
+}
+
+.hc-staff-signal-offline span,
+.hc-staff-signal-inactive span,
+.hc-staff-signal-muted span {
+    background: linear-gradient(180deg, #a6b1c8, #7f8ca8);
+    animation-duration: 1.8s;
+}
+
+.hc-staff-roster-body {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 0.9rem;
+    margin-top: 1rem;
+}
+
+.hc-staff-live-note {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 0.8rem;
+    padding: 0.8rem 0.9rem;
+    border-radius: 18px;
+    background: rgba(77, 92, 144, 0.06);
+}
+
+.hc-staff-live-note strong {
+    color: #22345b;
+    font-size: 0.86rem;
+}
+
+.hc-staff-live-note span {
+    color: #61718f;
+    font-size: 0.84rem;
+    text-align: right;
+    line-height: 1.45;
+}
+
+.hc-staff-metrics-fancy {
+    gap: 0.7rem;
+}
+
+.hc-staff-roster-band {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(180px, 0.8fr);
+    gap: 0.9rem;
+    align-items: start;
+}
+
+.hc-staff-ops-column {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.hc-staff-queue-card-fancy,
+.hc-staff-rate-stack-fancy {
+    min-height: 100%;
+    padding: 0.95rem 1rem;
+    border-radius: 20px;
+    border: 1px solid rgba(77, 92, 144, 0.1);
+    background: linear-gradient(150deg, #f9fbff 0%, #eef3fd 100%);
+}
+
+.hc-staff-queue-card-fancy strong {
+    display: block;
+    color: #1f2d4f;
+    font-size: 1.55rem;
+    line-height: 1;
+    font-weight: 800;
+}
+
+.hc-staff-queue-card-fancy span,
+.hc-staff-rate-stack-fancy span,
+.hc-staff-rate-stack-fancy small {
+    color: #677791;
+}
+
+.hc-staff-rate-stack-fancy {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.hc-staff-rate-stack-fancy div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.8rem;
+}
+
+.hc-staff-rate-stack-fancy strong {
+    color: #22345a;
+}
+
+.hc-staff-actions-fancy {
+    margin-top: 1rem;
+    padding-top: 0.95rem;
+    border-top: 1px solid #e7edf9;
+    justify-content: space-between;
+}
+
+.hc-staff-actions-fancy .btn:first-child {
+    margin-right: auto;
+}
+
+.hc-staff-empty-card {
+    display: grid;
+    place-items: center;
+    gap: 0.45rem;
+    min-height: 260px;
+    text-align: center;
+}
+
+.hc-staff-empty-card i {
+    font-size: 2rem;
+    color: #7c8cb0;
+}
+
+.hc-staff-empty-card strong {
+    color: #1f2d4f;
+}
+
+.hc-staff-empty-card span {
+    color: #62708e;
+    max-width: 24rem;
+}
+
 .hc-staff-table tbody td {
     padding-top: 1.1rem;
     padding-bottom: 1.1rem;
@@ -3606,6 +4039,62 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
     font-weight: 700;
 }
 
+@keyframes hcStaffOrbitSpin {
+    from {
+        transform: rotate(0deg);
+    }
+
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes hcStaffCoreBounce {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-5px);
+    }
+}
+
+@keyframes hcStaffMeterFlow {
+    0%,
+    100% {
+        filter: saturate(1);
+    }
+
+    50% {
+        filter: saturate(1.2) brightness(1.06);
+    }
+}
+
+@keyframes hcStaffGlowFloat {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+
+    50% {
+        transform: translate3d(-0.4rem, 0.5rem, 0) scale(1.08);
+    }
+}
+
+@keyframes hcStaffSignal {
+    0%,
+    100% {
+        transform: scaleY(0.78);
+        opacity: 0.7;
+    }
+
+    50% {
+        transform: scaleY(1.12);
+        opacity: 1;
+    }
+}
+
 .hc-salary-payment-brief {
     min-width: 180px;
     display: flex;
@@ -3716,6 +4205,19 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
         width: 100%;
     }
 
+    .hc-staff-command-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .hc-staff-command-card-primary {
+        grid-template-columns: 1fr;
+        text-align: center;
+    }
+
+    .hc-staff-roster-band {
+        grid-template-columns: 1fr;
+    }
+
     .hc-staff-table {
         min-width: 980px;
     }
@@ -3749,6 +4251,36 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
 @media (max-width: 767.98px) {
     .hc-staff-overview-grid {
         grid-template-columns: 1fr;
+    }
+
+    .hc-staff-toolbar,
+    .hc-staff-filter-row {
+        justify-content: stretch;
+    }
+
+    .hc-staff-roster-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .hc-staff-roster-card,
+    .hc-staff-empty-card {
+        padding: 0.95rem;
+        border-radius: 22px;
+    }
+
+    .hc-staff-roster-head,
+    .hc-staff-live-note,
+    .hc-staff-actions-fancy {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .hc-staff-presence-cluster {
+        justify-items: start;
+    }
+
+    .hc-staff-live-note span {
+        text-align: left;
     }
 
     .hc-staff-metrics {
