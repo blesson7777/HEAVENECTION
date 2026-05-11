@@ -107,18 +107,19 @@
         </div>
     </div>
 
-    <div class="hc-staff-list-head">
-        <div>Staff</div>
-        <div>Presence</div>
-        <div>Today</div>
-        <div>Quality</div>
-        <div>Queue & Pay</div>
-        <div class="text-end">Controls</div>
-    </div>
+    <div class="hc-staff-list-scroll">
+        <div class="hc-staff-list-head">
+            <div>Staff</div>
+            <div>Presence</div>
+            <div>Today</div>
+            <div>Quality</div>
+            <div>Queue & Pay</div>
+            <div class="text-end">Controls</div>
+        </div>
 
-    <div id="staffTableBody" class="hc-staff-roster-list">
-        {% for staff in team_rows %}
-        <article class="hc-staff-roster-row hc-staff-roster-row-{{ staff.status_tone }}" data-status="{{ staff.status_filter }}" data-filter-item>
+        <div id="staffTableBody" class="hc-staff-roster-list">
+            {% for staff in team_rows %}
+            <article class="hc-staff-roster-row hc-staff-roster-row-{{ staff.status_tone }}" data-status="{{ staff.status_filter }}" data-filter-item>
             <div class="hc-staff-roster-row-backdrop" aria-hidden="true">
                 <span class="hc-staff-card-glow"></span>
                 <span class="hc-staff-card-line hc-staff-card-line-a"></span>
@@ -247,14 +248,15 @@
                     </button>
                 </div>
             </div>
-        </article>
-        {% empty %}
-        <article class="hc-staff-empty-card" data-filter-item data-status="all">
-            <i class="bi bi-people"></i>
-            <strong>No staff accounts available.</strong>
-            <span>Add the first staff member to start building the roster board.</span>
-        </article>
-        {% endfor %}
+            </article>
+            {% empty %}
+            <article class="hc-staff-empty-card" data-filter-item data-status="all">
+                <i class="bi bi-people"></i>
+                <strong>No staff accounts available.</strong>
+                <span>Add the first staff member to start building the roster board.</span>
+            </article>
+            {% endfor %}
+        </div>
     </div>
 </section>
 
