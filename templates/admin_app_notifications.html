@@ -1,11 +1,23 @@
 {% extends "admin_base.html" %}
 
-{% block content %}
-<div class="container-fluid py-4">
-    <div class="row g-4">
+{% block admin_content %}
+<section class="hc-surface-card animate-on-scroll mb-4">
+    <div class="mf-db2-panel-head mb-2">
+        <div>
+            <span class="mf-db2-kicker">Notification Desk</span>
+            <h5>Staff app notification center</h5>
+        </div>
+        <span class="hc-sync-pill"><i class="bi bi-bell-fill"></i> Live banners</span>
+    </div>
+    <p class="text-muted mb-0">
+        Send manual top-banner messages to the staff app, control who sees them, and manage active or expired notifications from one page.
+    </p>
+</section>
+
+<div class="row g-4">
         <div class="col-12 col-xl-5">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body p-4">
+            <div class="hc-surface-card h-100 animate-on-scroll">
+                <div class="p-1">
                     <div class="d-flex align-items-start justify-content-between gap-3 mb-4">
                         <div>
                             <span class="badge text-bg-primary-subtle text-primary-emphasis mb-2">Manual Broadcast</span>
@@ -82,34 +94,34 @@
             </div>
         </div>
         <div class="col-12 col-xl-7">
-            <div class="row g-3 mb-4">
+            <div class="row g-3 mb-4 animate-on-scroll">
                 <div class="col-md-4">
-                    <div class="card border-0 shadow-sm h-100">
-                        <div class="card-body">
+                    <div class="hc-summary-card h-100">
+                        <div>
                             <div class="text-muted small mb-1">Stored Messages</div>
                             <div class="display-6 fw-bold">{{ summary.total_notifications }}</div>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-4">
-                    <div class="card border-0 shadow-sm h-100">
-                        <div class="card-body">
+                    <div class="hc-summary-card h-100">
+                        <div>
                             <div class="text-muted small mb-1">Active Messages</div>
                             <div class="display-6 fw-bold text-primary">{{ summary.active_notifications }}</div>
                         </div>
                     </div>
                 </div>
                 <div class="col-md-4">
-                    <div class="card border-0 shadow-sm h-100">
-                        <div class="card-body">
+                    <div class="hc-summary-card h-100">
+                        <div>
                             <div class="text-muted small mb-1">Critical Active</div>
                             <div class="display-6 fw-bold text-danger">{{ summary.critical_notifications }}</div>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="card border-0 shadow-sm">
-                <div class="card-body p-4">
+            <div class="hc-surface-card animate-on-scroll">
+                <div class="p-1">
                     <div class="d-flex align-items-center justify-content-between gap-3 mb-3">
                         <div>
                             <h3 class="h4 mb-1">Recent Notifications</h3>
@@ -179,7 +191,6 @@
                 </div>
             </div>
         </div>
-    </div>
 </div>
 <script>
 document.addEventListener("DOMContentLoaded", function () {
