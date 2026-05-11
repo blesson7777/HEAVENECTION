@@ -461,6 +461,33 @@
             });
         });
 
+        document.querySelectorAll(".js-toggle-staff-active").forEach((button) => {
+            button.addEventListener("click", async () => {
+                const staffId = button.dataset.staffId;
+                const staffName = button.dataset.name || "this staff member";
+                const isActive = button.dataset.isActive === "true";
+                const confirmed = await confirmAction(
+                    `${isActive ? "Deactivate" : "Activate"} ${staffName}?`,
+                    {
+                        title: `${isActive ? "Deactivate" : "Activate"} staff`,
+                        confirmText: isActive ? "Deactivate" : "Activate",
+                    }
+                );
+                if (!staffId || !confirmed) {
+                    return;
+                }
+                try {
+                    await requestJson(`${config.teamMembersUrl}${staffId}/`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ is_active: !isActive }),
+                    });
+                    window.location.reload();
+                } catch (error) {
+                    window.alert(error.message);
+                }
+            });
+        });
+
         form.addEventListener("submit", async (event) => {
             event.preventDefault();
             clearFeedback();

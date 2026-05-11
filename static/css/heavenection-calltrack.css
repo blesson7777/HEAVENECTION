@@ -3422,6 +3422,10 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
     gap: 1rem;
 }
 
+.hc-staff-command-grid-listing {
+    grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(240px, 0.7fr));
+}
+
 .hc-staff-command-card {
     position: relative;
     min-height: 100%;
@@ -3577,6 +3581,82 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
     gap: 1rem;
 }
 
+.hc-staff-list-head {
+    display: grid;
+    grid-template-columns: minmax(240px, 1.15fr) minmax(180px, 0.95fr) minmax(180px, 0.8fr) minmax(240px, 1.2fr) minmax(180px, 0.9fr) minmax(240px, 1fr);
+    gap: 1rem;
+    padding: 0 1rem 0.7rem;
+    margin-top: 0.2rem;
+    color: #6b7a95;
+    font-size: 0.74rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 800;
+}
+
+.hc-staff-roster-list {
+    display: grid;
+    gap: 0.95rem;
+}
+
+.hc-staff-roster-row,
+.hc-staff-empty-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(240px, 1.15fr) minmax(180px, 0.95fr) minmax(180px, 0.8fr) minmax(240px, 1.2fr) minmax(180px, 0.9fr) minmax(240px, 1fr);
+    gap: 1rem;
+    align-items: start;
+    min-height: 100%;
+    padding: 1.05rem 1rem;
+    border-radius: 24px;
+    border: 1px solid #dce4f5;
+    background:
+        radial-gradient(circle at top right, rgba(168, 181, 223, 0.22), rgba(168, 181, 223, 0) 30%),
+        linear-gradient(160deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: 0 18px 32px rgba(28, 41, 70, 0.08);
+    overflow: hidden;
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+}
+
+.hc-staff-roster-row:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 24px 40px rgba(28, 41, 70, 0.12);
+}
+
+.hc-staff-roster-row-online,
+.hc-staff-roster-row-success {
+    border-color: rgba(38, 180, 119, 0.22);
+}
+
+.hc-staff-roster-row-attention,
+.hc-staff-roster-row-warning {
+    border-color: rgba(212, 166, 54, 0.24);
+}
+
+.hc-staff-roster-row-offline,
+.hc-staff-roster-row-inactive,
+.hc-staff-roster-row-muted {
+    border-color: rgba(119, 132, 156, 0.16);
+}
+
+.hc-staff-roster-row-backdrop {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.hc-staff-roster-cell {
+    position: relative;
+    z-index: 1;
+    min-width: 0;
+}
+
+.hc-staff-roster-cell-staff {
+    display: flex;
+    align-items: center;
+}
+
 .hc-staff-roster-card,
 .hc-staff-empty-card {
     position: relative;
@@ -3673,6 +3753,15 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
     display: grid;
     justify-items: end;
     gap: 0.5rem;
+}
+
+.hc-staff-presence-cluster-list {
+    justify-items: start;
+}
+
+.hc-staff-presence-cluster-list small {
+    color: #60718e;
+    font-weight: 700;
 }
 
 .hc-staff-signal {
@@ -3816,6 +3905,20 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
     padding-top: 0.95rem;
     border-top: 1px solid #e7edf9;
     justify-content: space-between;
+}
+
+.hc-staff-actions-list {
+    justify-content: flex-end;
+    gap: 0.55rem;
+}
+
+.hc-staff-actions-list .btn {
+    min-width: 108px;
+    justify-content: center;
+}
+
+.hc-quality-card-compact {
+    min-width: 0;
 }
 
 .hc-staff-actions-fancy .btn:first-child {
@@ -4214,6 +4317,14 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
         text-align: center;
     }
 
+    .hc-staff-list-head {
+        display: none;
+    }
+
+    .hc-staff-roster-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .hc-staff-roster-band {
         grid-template-columns: 1fr;
     }
@@ -4262,6 +4373,12 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
         grid-template-columns: 1fr;
     }
 
+    .hc-staff-roster-row {
+        grid-template-columns: 1fr;
+        padding: 0.95rem;
+        border-radius: 22px;
+    }
+
     .hc-staff-roster-card,
     .hc-staff-empty-card {
         padding: 0.95rem;
@@ -4277,6 +4394,10 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
 
     .hc-staff-presence-cluster {
         justify-items: start;
+    }
+
+    .hc-staff-actions-list .btn {
+        width: 100%;
     }
 
     .hc-staff-live-note span {
