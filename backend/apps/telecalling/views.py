@@ -120,6 +120,7 @@ from backend.apps.telecalling.services import (
     complete_training_lesson,
     delete_salary_payment_transaction,
     delete_app_release,
+    delete_oldest_manageable_leads,
     end_staff_call,
     end_staff_session,
     get_assigned_leads,
@@ -141,6 +142,7 @@ from backend.apps.telecalling.services import (
     reset_staff_review_leads_to_new_queue,
     release_staff_queue,
     reactivate_oldest_recovery_leads,
+    run_automatic_lead_cleanup_if_due,
     set_active_app_release,
     retry_pending_staff_call,
     search_staff_customer_history,
@@ -1720,8 +1722,81 @@ def leads_page(request):
             )
             return redirect("leads-page")
 
+        if lead_action == "delete_oldest":
+            delete_mode = request.POST.get("delete_mode", "").strip()
+            raw_days = request.POST.get("older_than_days", "").strip()
+            raw_count = request.POST.get("oldest_count", "").strip()
+            try:
+                if delete_mode == "age_days":
+                    summary = delete_oldest_manageable_leads(older_than_days=raw_days)
+                    messages.success(
+                        request,
+                        f"Deleted {summary['deleted_count']} lead(s) older than {int(raw_days)} day(s).",
+                    )
+                elif delete_mode == "oldest_count":
+                    summary = delete_oldest_manageable_leads(oldest_count=raw_count)
+                    messages.success(
+                        request,
+                        f"Deleted {summary['deleted_count']} oldest lead(s) from lead management.",
+                    )
+                else:
+                    messages.error(request, "Choose delete by age or delete by oldest count.")
+                    return redirect("leads-page")
+            except (TypeError, ValueError) as error:
+                messages.error(request, str(error))
+            return redirect("leads-page")
+
+        if lead_action == "save_auto_delete_settings":
+            company_profile = get_company_profile()
+            auto_enabled = request.POST.get("lead_auto_delete_enabled") == "on"
+            mode = request.POST.get("lead_auto_delete_mode", "").strip()
+            raw_days = request.POST.get("lead_auto_delete_days", "").strip() or str(company_profile.lead_auto_delete_days)
+            raw_count = request.POST.get("lead_auto_delete_count", "").strip() or str(company_profile.lead_auto_delete_count)
+            try:
+                days_value = int(raw_days)
+                count_value = int(raw_count)
+            except (TypeError, ValueError):
+                messages.error(request, "Enter valid automatic delete values.")
+                return redirect("leads-page")
+
+            if mode not in {"age_days", "oldest_count"}:
+                messages.error(request, "Choose a valid automatic delete mode.")
+                return redirect("leads-page")
+            if days_value < 1:
+                messages.error(request, "Automatic delete days must be at least 1.")
+                return redirect("leads-page")
+            if count_value < 1:
+                messages.error(request, "Automatic delete count must be at least 1.")
+                return redirect("leads-page")
+
+            company_profile.lead_auto_delete_enabled = auto_enabled
+            company_profile.lead_auto_delete_mode = mode
+            company_profile.lead_auto_delete_days = days_value
+            company_profile.lead_auto_delete_count = count_value
+            company_profile.save(
+                update_fields=[
+                    "lead_auto_delete_enabled",
+                    "lead_auto_delete_mode",
+                    "lead_auto_delete_days",
+                    "lead_auto_delete_count",
+                    "updated_at",
+                ]
+            )
+            if auto_enabled:
+                messages.success(request, "Automatic lead delete is now active.")
+            else:
+                messages.success(request, "Automatic lead delete is now turned off.")
+            return redirect("leads-page")
+
         messages.error(request, "Lead request could not be processed.")
         return redirect("leads-page")
+
+    cleanup_summary = run_automatic_lead_cleanup_if_due()
+    if cleanup_summary["ran"] and cleanup_summary["deleted_count"] > 0:
+        messages.info(
+            request,
+            f"Automatic lead cleanup removed {cleanup_summary['deleted_count']} old lead(s) today.",
+        )
 
     payload = build_lead_management_payload()
     context = _admin_web_context(

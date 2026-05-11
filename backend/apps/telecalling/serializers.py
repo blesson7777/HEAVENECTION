@@ -847,6 +847,11 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             "hourly_call_bonus_enabled",
             "hourly_call_bonus_threshold",
             "hourly_call_bonus_rate",
+            "lead_auto_delete_enabled",
+            "lead_auto_delete_mode",
+            "lead_auto_delete_days",
+            "lead_auto_delete_count",
+            "lead_auto_delete_last_run_on",
             "description",
             "logo",
             "logo_url",
@@ -888,6 +893,10 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
             "hourly_call_bonus_enabled",
             "hourly_call_bonus_threshold",
             "hourly_call_bonus_rate",
+            "lead_auto_delete_enabled",
+            "lead_auto_delete_mode",
+            "lead_auto_delete_days",
+            "lead_auto_delete_count",
             "description",
             "logo",
             "remove_logo",
@@ -908,6 +917,20 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
             return value
         if int(value) < 0:
             raise serializers.ValidationError("Target calls per hour cannot be negative.")
+        return value
+
+    def validate_lead_auto_delete_days(self, value):
+        if value is None:
+            return value
+        if int(value) < 1:
+            raise serializers.ValidationError("Auto delete days must be at least 1.")
+        return value
+
+    def validate_lead_auto_delete_count(self, value):
+        if value is None:
+            return value
+        if int(value) < 1:
+            raise serializers.ValidationError("Auto delete count must be at least 1.")
         return value
 
     def validate_hourly_call_bonus_rate(self, value):

@@ -2731,6 +2731,74 @@ def _recovery_lead_queryset():
     return Lead.objects.filter(status__in=RECOVERY_LEAD_STATUSES)
 
 
+def _lead_management_queryset():
+    return Lead.objects.exclude(status__in=RECOVERY_LEAD_STATUSES)
+
+
+def _oldest_manageable_leads_queryset():
+    return _lead_management_queryset().order_by("created_at", "id")
+
+
+def delete_oldest_manageable_leads(*, older_than_days=None, oldest_count=None):
+    if older_than_days is None and oldest_count is None:
+        raise ValueError("Choose delete by age or delete by oldest count.")
+
+    queryset = _oldest_manageable_leads_queryset()
+    mode = ""
+    if older_than_days is not None:
+        days_value = int(older_than_days)
+        if days_value < 1:
+            raise ValueError("Delete age must be at least 1 day.")
+        cutoff = timezone.now() - timedelta(days=days_value)
+        queryset = queryset.filter(created_at__lt=cutoff)
+        mode = "age_days"
+    else:
+        count_value = int(oldest_count)
+        if count_value < 1:
+            raise ValueError("Delete count must be at least 1.")
+        queryset = queryset[:count_value]
+        mode = "oldest_count"
+
+    selected_ids = list(queryset.values_list("id", flat=True))
+    if not selected_ids:
+        return {
+            "deleted_count": 0,
+            "mode": mode,
+        }
+
+    deleted_count = Lead.objects.filter(id__in=selected_ids).count()
+    Lead.objects.filter(id__in=selected_ids).delete()
+    auto_allocate_leads()
+    return {
+        "deleted_count": deleted_count,
+        "mode": mode,
+    }
+
+
+def run_automatic_lead_cleanup_if_due(*, reference_date=None):
+    company_profile = get_company_profile()
+    if not company_profile.lead_auto_delete_enabled:
+        return {"ran": False, "deleted_count": 0, "reason": "disabled"}
+
+    today = reference_date or timezone.localdate()
+    if company_profile.lead_auto_delete_last_run_on == today:
+        return {"ran": False, "deleted_count": 0, "reason": "already_ran_today"}
+
+    if company_profile.lead_auto_delete_mode == CompanyProfile.LeadAutoDeleteMode.OLDEST_COUNT:
+        summary = delete_oldest_manageable_leads(oldest_count=company_profile.lead_auto_delete_count)
+    else:
+        summary = delete_oldest_manageable_leads(older_than_days=company_profile.lead_auto_delete_days)
+
+    company_profile.lead_auto_delete_last_run_on = today
+    company_profile.save(update_fields=["lead_auto_delete_last_run_on", "updated_at"])
+    return {
+        "ran": True,
+        "deleted_count": summary["deleted_count"],
+        "reason": "executed",
+        "mode": summary["mode"],
+    }
+
+
 def _normalize_status_value(value):
     normalized = _normalize_column_name(value)
     status_map = {
@@ -6341,12 +6409,11 @@ def build_settings_payload(current_user):
 
 def build_lead_management_payload():
     leads = (
-        Lead.objects.select_related("assigned_to")
-        .exclude(
-            status__in=RECOVERY_LEAD_STATUSES,
-        )
+        _lead_management_queryset()
+        .select_related("assigned_to")
         .order_by("-updated_at")
     )
+    company_profile = get_company_profile()
     active_queue = _lead_queue_queryset()
     queue_limit = get_lead_queue_limit()
     staff_options = [
@@ -6397,6 +6464,15 @@ def build_lead_management_payload():
         "readd_summary": {
             "has_readded": readded_lead_count > 0,
             "readded_count": readded_lead_count,
+        },
+        "lead_cleanup_settings": {
+            "auto_enabled": company_profile.lead_auto_delete_enabled,
+            "mode": company_profile.lead_auto_delete_mode,
+            "days": company_profile.lead_auto_delete_days,
+            "count": company_profile.lead_auto_delete_count,
+            "last_run_on": company_profile.lead_auto_delete_last_run_on.isoformat()
+            if company_profile.lead_auto_delete_last_run_on
+            else "",
         },
     }
 

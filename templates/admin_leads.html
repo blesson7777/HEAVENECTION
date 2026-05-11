@@ -8,6 +8,7 @@
 <button type="button" class="btn btn-warning btn-sm d-none js-unassign-selected-leads-button" disabled>Unassign Marked</button>
 <button type="button" class="btn btn-outline-danger btn-sm js-open-lead-selection-mode">Delete Leads</button>
 <button type="button" class="btn btn-danger btn-sm d-none js-delete-selected-leads-button" disabled>Delete Marked</button>
+<button type="button" class="btn btn-outline-dark btn-sm" data-bs-toggle="modal" data-bs-target="#leadCleanupModal">Auto Delete</button>
 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#leadModal" id="openCreateLeadModal">Add Lead</button>
 {% endblock %}
 
@@ -67,6 +68,7 @@
         <button type="button" class="btn btn-warning d-none js-unassign-selected-leads-button" disabled>Unassign Marked</button>
         <button type="button" class="btn btn-outline-danger js-open-lead-selection-mode">Delete Leads</button>
         <button type="button" class="btn btn-danger d-none js-delete-selected-leads-button" disabled>Delete Marked</button>
+        <button type="button" class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#leadCleanupModal">Auto Delete</button>
         <span class="text-muted small">Choose allocation mode to move selected leads into one staff queue, unassign mode to return marked assigned leads to the waiting queue, or delete mode to remove marked leads.</span>
     </div>
 
@@ -354,6 +356,108 @@
                         <button type="submit" class="btn btn-primary" id="leadImportSubmitButton">Upload Leads</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="leadCleanupModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content hc-modal-card">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <span class="mf-db2-kicker">Lead Cleanup</span>
+                    <h5 class="modal-title mt-1">Delete oldest leads manually or automatically</h5>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body pt-3">
+                <div class="row g-4">
+                    <div class="col-lg-6">
+                        <div class="border rounded-4 p-3 h-100">
+                            <span class="mf-db2-kicker">Manual Delete</span>
+                            <h6 class="mt-1">Delete oldest leads now</h6>
+                            <form method="post" action="{% url 'leads-page' %}" id="leadCleanupNowForm" class="row g-3 mt-1" data-confirm-title="Delete Old Leads" data-confirm-message="Delete the selected old leads now? This cannot be undone." data-confirm-ok="Delete Now" data-confirm-class="btn-danger">
+                                {% csrf_token %}
+                                <input type="hidden" name="lead_action" value="delete_oldest">
+                                <div class="col-12">
+                                    <label class="form-label fw-semibold" for="leadCleanupDeleteMode">Delete by</label>
+                                    <select class="form-select" id="leadCleanupDeleteMode" name="delete_mode">
+                                        <option value="age_days">Age in days</option>
+                                        <option value="oldest_count">Oldest lead count</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 js-lead-cleanup-days-field">
+                                    <label class="form-label fw-semibold" for="leadCleanupOlderThanDays">Delete leads older than</label>
+                                    <div class="input-group">
+                                        <input type="number" min="1" class="form-control" id="leadCleanupOlderThanDays" name="older_than_days" value="{{ lead_cleanup_settings.days }}">
+                                        <span class="input-group-text">days</span>
+                                    </div>
+                                </div>
+                                <div class="col-12 d-none js-lead-cleanup-count-field">
+                                    <label class="form-label fw-semibold" for="leadCleanupOldestCount">Delete oldest lead count</label>
+                                    <input type="number" min="1" class="form-control" id="leadCleanupOldestCount" name="oldest_count" value="{{ lead_cleanup_settings.count }}">
+                                </div>
+                                <div class="col-12">
+                                    <div class="alert alert-light border mb-0">
+                                        This removes leads only from the main lead management list. Recovery leads stay in their own section.
+                                    </div>
+                                </div>
+                                <div class="col-12 d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-danger">Delete Now</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="border rounded-4 p-3 h-100">
+                            <span class="mf-db2-kicker">Automatic Delete</span>
+                            <h6 class="mt-1">Keep deleting old leads when active</h6>
+                            <form method="post" action="{% url 'leads-page' %}" id="leadCleanupAutoForm" class="row g-3 mt-1">
+                                {% csrf_token %}
+                                <input type="hidden" name="lead_action" value="save_auto_delete_settings">
+                                <div class="col-12">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="leadAutoDeleteEnabled" name="lead_auto_delete_enabled"{% if lead_cleanup_settings.auto_enabled %} checked{% endif %}>
+                                        <label class="form-check-label fw-semibold" for="leadAutoDeleteEnabled">Enable automatic lead delete</label>
+                                    </div>
+                                    <div class="form-text">When active, the system runs this cleanup once per day whenever the lead management page is opened.</div>
+                                </div>
+                                <div class="col-12">
+                                    <label class="form-label fw-semibold" for="leadAutoDeleteMode">Automatic delete by</label>
+                                    <select class="form-select" id="leadAutoDeleteMode" name="lead_auto_delete_mode">
+                                        <option value="age_days"{% if lead_cleanup_settings.mode == 'age_days' %} selected{% endif %}>Age in days</option>
+                                        <option value="oldest_count"{% if lead_cleanup_settings.mode == 'oldest_count' %} selected{% endif %}>Oldest lead count</option>
+                                    </select>
+                                </div>
+                                <div class="col-12 js-lead-auto-days-field{% if lead_cleanup_settings.mode == 'oldest_count' %} d-none{% endif %}">
+                                    <label class="form-label fw-semibold" for="leadAutoDeleteDays">Delete leads older than</label>
+                                    <div class="input-group">
+                                        <input type="number" min="1" class="form-control" id="leadAutoDeleteDays" name="lead_auto_delete_days" value="{{ lead_cleanup_settings.days }}">
+                                        <span class="input-group-text">days</span>
+                                    </div>
+                                </div>
+                                <div class="col-12 js-lead-auto-count-field{% if lead_cleanup_settings.mode != 'oldest_count' %} d-none{% endif %}">
+                                    <label class="form-label fw-semibold" for="leadAutoDeleteCount">Delete oldest lead count</label>
+                                    <input type="number" min="1" class="form-control" id="leadAutoDeleteCount" name="lead_auto_delete_count" value="{{ lead_cleanup_settings.count }}">
+                                </div>
+                                <div class="col-12">
+                                    <div class="alert alert-light border mb-0">
+                                        Last automatic run:
+                                        {% if lead_cleanup_settings.last_run_on %}
+                                        <strong>{{ lead_cleanup_settings.last_run_on }}</strong>
+                                        {% else %}
+                                        <strong>Not run yet</strong>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-12 d-flex justify-content-end">
+                                    <button type="submit" class="btn btn-primary">Save Automatic Rule</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

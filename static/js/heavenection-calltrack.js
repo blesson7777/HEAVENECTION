@@ -531,6 +531,13 @@
         const bulkAllocateForm = document.getElementById("bulkLeadAllocateForm");
         const bulkAllocateInputs = document.getElementById("bulkLeadAllocateInputs");
         const bulkAllocateStaffInput = document.getElementById("bulkLeadAllocateStaff");
+        const cleanupNowForm = document.getElementById("leadCleanupNowForm");
+        const cleanupDeleteMode = document.getElementById("leadCleanupDeleteMode");
+        const cleanupDaysField = document.querySelector(".js-lead-cleanup-days-field");
+        const cleanupCountField = document.querySelector(".js-lead-cleanup-count-field");
+        const cleanupAutoMode = document.getElementById("leadAutoDeleteMode");
+        const cleanupAutoDaysField = document.querySelector(".js-lead-auto-days-field");
+        const cleanupAutoCountField = document.querySelector(".js-lead-auto-count-field");
         const selectAllCheckbox = document.getElementById("leadSelectAll");
         const selectionColumns = Array.from(document.querySelectorAll(".lead-select-column"));
         const selectionCheckboxes = Array.from(document.querySelectorAll(".js-lead-select-checkbox"));
@@ -596,6 +603,16 @@
                 selectAllCheckbox.checked = false;
                 selectAllCheckbox.indeterminate = false;
             }
+        }
+
+        function toggleCleanupFields() {
+            const deleteMode = cleanupDeleteMode?.value || "age_days";
+            cleanupDaysField?.classList.toggle("d-none", deleteMode !== "age_days");
+            cleanupCountField?.classList.toggle("d-none", deleteMode !== "oldest_count");
+
+            const autoMode = cleanupAutoMode?.value || "age_days";
+            cleanupAutoDaysField?.classList.toggle("d-none", autoMode !== "age_days");
+            cleanupAutoCountField?.classList.toggle("d-none", autoMode !== "oldest_count");
         }
 
         function toggleSelectionMode(nextMode) {
@@ -780,6 +797,27 @@
                 input.value = leadId;
                 bulkAllocateInputs.appendChild(input);
             });
+        });
+
+        cleanupDeleteMode?.addEventListener("change", toggleCleanupFields);
+        cleanupAutoMode?.addEventListener("change", toggleCleanupFields);
+        toggleCleanupFields();
+
+        cleanupNowForm?.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const confirmed = await confirmAction(
+                cleanupDeleteMode?.value === "oldest_count"
+                    ? "Delete the oldest selected number of leads now? This cannot be undone."
+                    : "Delete all lead-management leads older than the selected number of days? This cannot be undone.",
+                {
+                    title: "Delete old leads",
+                    confirmText: "Delete Now",
+                }
+            );
+            if (!confirmed) {
+                return;
+            }
+            cleanupNowForm.submit();
         });
 
         document.querySelectorAll(".js-edit-lead").forEach((button) => {

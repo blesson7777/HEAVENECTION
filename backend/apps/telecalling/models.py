@@ -106,6 +106,10 @@ class Staff(AbstractBaseUser, PermissionsMixin):
 
 
 class CompanyProfile(models.Model):
+    class LeadAutoDeleteMode(models.TextChoices):
+        AGE_DAYS = "age_days", "Delete by age"
+        OLDEST_COUNT = "oldest_count", "Delete by oldest count"
+
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     company_name = models.CharField(max_length=150, default="Heavenection")
     legal_name = models.CharField(max_length=200, blank=True)
@@ -127,6 +131,15 @@ class CompanyProfile(models.Model):
     hourly_call_bonus_enabled = models.BooleanField(default=False)
     hourly_call_bonus_threshold = models.PositiveIntegerField(default=50)
     hourly_call_bonus_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0.50)
+    lead_auto_delete_enabled = models.BooleanField(default=False)
+    lead_auto_delete_mode = models.CharField(
+        max_length=20,
+        choices=LeadAutoDeleteMode.choices,
+        default=LeadAutoDeleteMode.AGE_DAYS,
+    )
+    lead_auto_delete_days = models.PositiveIntegerField(default=30)
+    lead_auto_delete_count = models.PositiveIntegerField(default=100)
+    lead_auto_delete_last_run_on = models.DateField(null=True, blank=True)
     description = models.TextField(blank=True)
     logo = models.FileField(upload_to="branding/", blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
