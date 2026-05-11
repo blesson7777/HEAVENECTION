@@ -2649,6 +2649,48 @@ def _normalize_phone(phone_value):
     return digits
 
 
+def _allocatable_lead_ids(candidate_lead_ids):
+    valid_ids = [lead_id for lead_id in (candidate_lead_ids or []) if lead_id]
+    if not valid_ids:
+        return set()
+
+    candidate_rows = list(
+        Lead.objects.filter(id__in=valid_ids)
+        .values("id", "phone", "created_at")
+    )
+    if not candidate_rows:
+        return set()
+
+    candidate_phone_map = {}
+    phone_values = set()
+    for row in candidate_rows:
+        normalized_phone = _normalize_phone(row["phone"])
+        if not normalized_phone:
+            continue
+        candidate_phone_map[row["id"]] = normalized_phone
+        phone_values.add(normalized_phone)
+
+    if not phone_values:
+        return set()
+
+    canonical_ids_by_phone = {}
+    global_rows = (
+        Lead.objects.filter(phone__in=phone_values)
+        .order_by("phone", "created_at", "id")
+        .values("id", "phone")
+    )
+    for row in global_rows:
+        normalized_phone = _normalize_phone(row["phone"])
+        if normalized_phone and normalized_phone not in canonical_ids_by_phone:
+            canonical_ids_by_phone[normalized_phone] = row["id"]
+
+    return {
+        lead_id
+        for lead_id, normalized_phone in candidate_phone_map.items()
+        if canonical_ids_by_phone.get(normalized_phone) == lead_id
+    }
+
+
 def _normalize_column_name(value):
     text = re.sub(r"[^a-z0-9]+", " ", str(value or "").strip().lower())
     return " ".join(text.split())
@@ -3697,6 +3739,7 @@ def _normalize_active_queue_assignments(*, target_staff=None, prioritized_lead_i
     if target_staff is not None:
         queue_queryset = queue_queryset.filter(assigned_to=target_staff)
 
+    allocatable_queue_ids = _allocatable_lead_ids(queue_queryset.values_list("id", flat=True))
     release_ids = []
     kept_counts = defaultdict(int)
     for lead in _ordered_lead_queryset(
@@ -3707,6 +3750,10 @@ def _normalize_active_queue_assignments(*, target_staff=None, prioritized_lead_i
     ):
         assigned_staff = lead.assigned_to
         if not assigned_staff or assigned_staff.role != Staff.Role.STAFF or not assigned_staff.is_active:
+            release_ids.append(lead.id)
+            continue
+
+        if lead.id not in allocatable_queue_ids:
             release_ids.append(lead.id)
             continue
 
@@ -3755,9 +3802,14 @@ def auto_allocate_leads(*, target_staff=None, prioritized_lead_ids=None):
         .annotate(count=Count("id"))
     }
     completed_today_counts = _daily_completed_call_counts()
+    allocatable_open_ids = _allocatable_lead_ids(
+        _staff_call_queue_queryset(_lead_queue_queryset().filter(assigned_to=None)).values_list("id", flat=True)
+    )
     open_leads = list(
         _ordered_lead_queryset(
-            _staff_call_queue_queryset(_lead_queue_queryset().filter(assigned_to=None)),
+            _staff_call_queue_queryset(
+                _lead_queue_queryset().filter(assigned_to=None, id__in=allocatable_open_ids)
+            ),
             now=now,
             prioritized_lead_ids=prioritized_lead_ids,
         ).values("id", "status", "callback_window")
@@ -3834,8 +3886,9 @@ def assign_imported_leads_to_staff(*, imported_lead_ids, selected_staff):
         }
         for staff in selected_staff
     ]
+    allocatable_imported_ids = _allocatable_lead_ids(imported_lead_ids)
     ordered_imported_ids = list(
-        Lead.objects.filter(id__in=list(imported_lead_ids)).order_by("created_at", "id").values_list("id", flat=True)
+        Lead.objects.filter(id__in=list(allocatable_imported_ids)).order_by("created_at", "id").values_list("id", flat=True)
     )
     assigned_by_staff = defaultdict(list)
     remaining_unassigned = []
@@ -3891,10 +3944,13 @@ def assign_selected_leads_to_staff_queue(*, selected_lead_ids, target_staff):
             "displaced_count": 0,
         }
 
+    allocatable_selected_ids = _allocatable_lead_ids(lead.id for lead in selected_leads)
     eligible_lead_ids = []
     previous_staff_ids = set()
     for lead in selected_leads:
         if not _is_active_queue_status(lead.status):
+            continue
+        if lead.id not in allocatable_selected_ids:
             continue
         eligible_lead_ids.append(lead.id)
         if lead.assigned_to_id and lead.assigned_to_id != target_staff.id:
@@ -6904,6 +6960,12 @@ def _recovery_status_scope(scope):
     return RECOVERY_LEAD_STATUSES
 
 
+def _readd_recovery_status_scope(scope):
+    if scope == "rejected":
+        return ()
+    return (Lead.Status.NO_ANSWER,)
+
+
 def build_recovery_lead_payload():
     recovery_leads = (
         _recovery_lead_queryset()
@@ -6959,7 +7021,14 @@ def build_recovery_lead_payload():
 
 def reactivate_oldest_recovery_leads(count, *, scope="all", max_readd_count=None):
     count = max(1, int(count))
-    recovery_statuses = _recovery_status_scope(scope)
+    recovery_statuses = _readd_recovery_status_scope(scope)
+    if not recovery_statuses:
+        return {
+            "reactivated_count": 0,
+            "assigned_count": 0,
+            "remaining_unassigned_count": _lead_queue_queryset().filter(assigned_to=None).count(),
+            "scope_label": scope,
+        }
     recovery_queryset = Lead.objects.filter(status__in=recovery_statuses)
     if max_readd_count is not None:
         recovery_queryset = recovery_queryset.filter(readd_count__lte=max_readd_count)

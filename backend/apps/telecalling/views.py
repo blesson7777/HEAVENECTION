@@ -1895,8 +1895,11 @@ def recovery_leads_page(request):
                 scope=scope,
                 max_readd_count=max_readd_count,
             )
+            if scope == "rejected":
+                messages.warning(request, "Rejected leads can no longer be re-added to the calling queue.")
+                return redirect("recovery-leads-page")
             if summary["reactivated_count"] == 0:
-                messages.warning(request, "No rejected or no response leads were available for re-allocation.")
+                messages.warning(request, "No no-response leads were available for re-allocation.")
             else:
                 messages.success(
                     request,

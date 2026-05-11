@@ -144,8 +144,6 @@
                     <div class="col-lg-3 col-md-6">
                         <label class="form-label fw-semibold" for="readdScope">Lead type</label>
                         <select class="form-select" id="readdScope" name="readd_scope">
-                            <option value="all">Rejected and No Response</option>
-                            <option value="rejected">Rejected only</option>
                             <option value="no_response">No Response only</option>
                         </select>
                     </div>
@@ -154,7 +152,7 @@
                     </div>
                     <div class="col-12">
                         <div class="alert alert-light border mb-0">
-                            Re-adds the oldest matching leads and returns them to the active queue. Set max re-add count to 0 to pick only leads never re-added.
+                            Re-adds only no-response leads and returns them to the active queue. Rejected leads stay closed and cannot be re-added again. Set max re-add count to 0 to pick only leads never re-added.
                         </div>
                     </div>
                 </form>
