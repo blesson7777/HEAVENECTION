@@ -2736,7 +2736,7 @@ def _lead_management_queryset():
 
 
 def _oldest_manageable_leads_queryset():
-    return _lead_management_queryset().order_by("created_at", "id")
+    return _lead_management_queryset().filter(calls__isnull=False).distinct().order_by("created_at", "id")
 
 
 def delete_oldest_manageable_leads(*, older_than_days=None, oldest_count=None):

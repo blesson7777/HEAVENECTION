@@ -400,7 +400,7 @@
                                 </div>
                                 <div class="col-12">
                                     <div class="alert alert-light border mb-0">
-                                        This removes leads only from the main lead management list. Recovery leads stay in their own section.
+                                        This removes only leads from the main lead management list that have already been called at least once. Recovery leads stay in their own section.
                                     </div>
                                 </div>
                                 <div class="col-12 d-flex justify-content-end">
@@ -440,6 +440,11 @@
                                 <div class="col-12 js-lead-auto-count-field{% if lead_cleanup_settings.mode != 'oldest_count' %} d-none{% endif %}">
                                     <label class="form-label fw-semibold" for="leadAutoDeleteCount">Delete oldest lead count</label>
                                     <input type="number" min="1" class="form-control" id="leadAutoDeleteCount" name="lead_auto_delete_count" value="{{ lead_cleanup_settings.count }}">
+                                </div>
+                                <div class="col-12">
+                                    <div class="alert alert-light border mb-0">
+                                        Only leads that were already called at least once by any staff member are included in automatic cleanup.
+                                    </div>
                                 </div>
                                 <div class="col-12">
                                     <div class="alert alert-light border mb-0">
