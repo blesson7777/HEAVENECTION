@@ -33,6 +33,7 @@ urlpatterns = [
     path("salary/control/", views.salary_control_api, name="api-salary-control"),
     path("salary/control/<uuid:staff_id>/", views.salary_control_detail_api, name="api-salary-control-detail"),
     path("staff/today-summary/", views.staff_today_summary_api, name="api-staff-today-summary"),
+    path("staff/notifications/", views.staff_notifications_api, name="api-staff-notifications"),
     path("staff/followups/", views.staff_followups_api, name="api-staff-followups"),
     path("staff/leads/", views.assigned_leads_api, name="api-staff-leads"),
     path("staff/customers/", views.staff_customer_history_api, name="api-staff-customer-history"),

@@ -32,6 +32,13 @@
                     <form method="post" class="row g-3">
                         {% csrf_token %}
                         <input type="hidden" name="notification_action" value="send_notification">
+                        <div class="col-md-6">
+                            <label for="notificationDeliveryMode" class="form-label fw-semibold">Delivery</label>
+                            <select class="form-select" id="notificationDeliveryMode" name="delivery_mode">
+                                <option value="instant" selected>Send now</option>
+                                <option value="future">Schedule for later</option>
+                            </select>
+                        </div>
                         <div class="col-12">
                             <label for="notificationTitle" class="form-label fw-semibold">Title</label>
                             <input type="text" class="form-control" id="notificationTitle" name="title" maxlength="150" placeholder="Optional short title">
@@ -68,6 +75,10 @@
                         <div class="col-md-6">
                             <label for="notificationAutoDismiss" class="form-label fw-semibold">Auto Close Seconds</label>
                             <input type="number" class="form-control" id="notificationAutoDismiss" name="auto_dismiss_seconds" min="1" max="60" value="6">
+                        </div>
+                        <div class="col-md-6" id="notificationShowFromWrap" hidden>
+                            <label for="notificationShowFrom" class="form-label fw-semibold">Start Time</label>
+                            <input type="datetime-local" class="form-control" id="notificationShowFrom" name="show_from">
                         </div>
                         <div class="col-md-6">
                             <label for="notificationShowUntil" class="form-label fw-semibold">End Time</label>
@@ -197,7 +208,10 @@ document.addEventListener("DOMContentLoaded", function () {
     const audience = document.getElementById("notificationAudience");
     const wrap = document.getElementById("notificationTargetStaffWrap");
     const target = document.getElementById("notificationTargetStaff");
-    if (!audience || !wrap || !target) {
+    const deliveryMode = document.getElementById("notificationDeliveryMode");
+    const showFromWrap = document.getElementById("notificationShowFromWrap");
+    const showFrom = document.getElementById("notificationShowFrom");
+    if (!audience || !wrap || !target || !deliveryMode || !showFromWrap || !showFrom) {
         return;
     }
     const syncAudience = () => {
@@ -208,8 +222,18 @@ document.addEventListener("DOMContentLoaded", function () {
             target.value = "";
         }
     };
+    const syncDelivery = () => {
+        const future = deliveryMode.value === "future";
+        showFromWrap.hidden = !future;
+        showFrom.required = future;
+        if (!future) {
+            showFrom.value = "";
+        }
+    };
     audience.addEventListener("change", syncAudience);
+    deliveryMode.addEventListener("change", syncDelivery);
     syncAudience();
+    syncDelivery();
 });
 </script>
 {% endblock %}

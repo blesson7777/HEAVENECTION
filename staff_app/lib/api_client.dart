@@ -215,6 +215,19 @@ class ApiClient {
     return StaffTodayPayload.fromJson(_decodeMap(response.body));
   }
 
+  Future<List<AppNotificationItem>> fetchActiveNotifications() async {
+    final response = await _send('GET', '/api/staff/notifications/');
+    final payload = _decodeMap(response.body);
+    final rows = payload['notifications'];
+    if (rows is! List) {
+      return const [];
+    }
+    return rows
+        .whereType<Map<String, dynamic>>()
+        .map(AppNotificationItem.fromJson)
+        .toList();
+  }
+
   Future<List<LeadItem>> fetchAssignedLeads() async {
     final response = await _send('GET', '/api/staff/leads/');
     final payload = jsonDecode(response.body);

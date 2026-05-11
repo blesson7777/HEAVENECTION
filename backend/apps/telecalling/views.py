@@ -2160,8 +2160,10 @@ def app_notifications_page(request):
             message_text = request.POST.get("message", "").strip()
             severity = request.POST.get("severity", AppNotification.Severity.NORMAL).strip()
             audience = request.POST.get("audience", AppNotification.Audience.ALL_STAFF).strip()
+            delivery_mode = request.POST.get("delivery_mode", "instant").strip()
             target_staff_id = request.POST.get("target_staff_id", "").strip()
             auto_dismiss_value = request.POST.get("auto_dismiss_seconds", "6").strip()
+            show_from_value = request.POST.get("show_from", "").strip()
             show_until_value = request.POST.get("show_until", "").strip()
 
             if not message_text:
@@ -2191,6 +2193,30 @@ def app_notifications_page(request):
                 messages.error(request, "Auto close seconds must be between 1 and 60.")
                 return redirect("app-notifications-page")
 
+            show_from = timezone.now()
+            if delivery_mode == "future":
+                if not show_from_value:
+                    messages.error(request, "Enter a future start time for the scheduled notification.")
+                    return redirect("app-notifications-page")
+                parsed = parse_datetime(show_from_value)
+                if parsed is None:
+                    try:
+                        parsed = datetime.fromisoformat(show_from_value)
+                    except ValueError:
+                        parsed = None
+                if parsed is None:
+                    messages.error(request, "Enter a valid start time for this notification.")
+                    return redirect("app-notifications-page")
+                if timezone.is_naive(parsed):
+                    parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+                show_from = parsed
+                if show_from <= timezone.now():
+                    messages.error(request, "Scheduled notification start time must be in the future.")
+                    return redirect("app-notifications-page")
+            elif delivery_mode != "instant":
+                messages.error(request, "Choose send now or schedule for later.")
+                return redirect("app-notifications-page")
+
             show_until = None
             if show_until_value:
                 parsed = parse_datetime(show_until_value)
@@ -2205,8 +2231,8 @@ def app_notifications_page(request):
                 if timezone.is_naive(parsed):
                     parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
                 show_until = parsed
-                if show_until <= timezone.now():
-                    messages.error(request, "Notification end time must be in the future.")
+                if show_until <= show_from:
+                    messages.error(request, "Notification end time must be after the start time.")
                     return redirect("app-notifications-page")
 
             AppNotification.objects.create(
@@ -2217,10 +2243,14 @@ def app_notifications_page(request):
                 audience=audience,
                 target_staff=target_staff,
                 auto_dismiss_seconds=auto_dismiss_seconds,
+                show_from=show_from,
                 show_until=show_until,
                 created_by=current_user,
             )
-            messages.success(request, "Notification sent successfully.")
+            if delivery_mode == "future":
+                messages.success(request, "Future notification scheduled successfully.")
+            else:
+                messages.success(request, "Instant notification sent successfully.")
             return redirect("app-notifications-page")
 
         notification_id = request.POST.get("notification_id", "").strip()
@@ -3151,6 +3181,16 @@ def staff_actions_api(request):
 @permission_classes([IsCallingStaff])
 def staff_today_summary_api(request):
     return Response(build_staff_today_payload(request.user))
+
+
+@api_view(["GET"])
+@permission_classes([IsCallingStaff])
+def staff_notifications_api(request):
+    return Response(
+        {
+            "notifications": build_staff_active_notifications_payload(request.user),
+        }
+    )
 
 
 @api_view(["GET"])

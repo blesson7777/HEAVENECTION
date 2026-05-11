@@ -42,6 +42,7 @@ const Color kGreen = Color(0xFF2D9D68);
 const Color kOrange = Color(0xFFF0A53A);
 const Color kRed = Color(0xFFD76666);
 const Duration kHeartbeatInterval = Duration(seconds: 45);
+const Duration kNotificationPollInterval = Duration(seconds: 8);
 const Duration kIdleMonitorInterval = Duration(seconds: 15);
 const Duration kIdleWarningAfter = Duration(minutes: 5);
 const Duration kIdleWarningGrace = Duration(minutes: 5);
@@ -224,6 +225,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   Duration _elapsed = Duration.zero;
   Timer? _callTimer;
   Timer? _heartbeatTimer;
+  Timer? _notificationPollTimer;
   Timer? _idleMonitorTimer;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
@@ -234,6 +236,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   BuildContext? _callStatusDialogContext;
   bool _isIdleWarningVisible = false;
   bool _isHeartbeatRequestInFlight = false;
+  bool _isNotificationPollRequestInFlight = false;
   bool _isSyncingCallLog = false;
   bool _isCallStatusPromptVisible = false;
   bool _isCallScreenOpen = false;
@@ -286,6 +289,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _confirmPasswordController.dispose();
     _callTimer?.cancel();
     _heartbeatTimer?.cancel();
+    _notificationPollTimer?.cancel();
     _idleMonitorTimer?.cancel();
     _syncSolveCountdownTimer?.cancel();
     _networkErrorTimer?.cancel();
@@ -303,11 +307,13 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
 
     if (state == AppLifecycleState.resumed) {
+      _syncNotificationPolling();
       if (_pendingNetworkErrorMessage != null && !_hasConnection) {
         _scheduleNetworkError(_pendingNetworkErrorMessage!);
       }
       unawaited(_handleResumeState());
     } else if (_isBackgroundState(state)) {
+      _notificationPollTimer?.cancel();
       if (!_summary.workingNow) {
         return;
       }
@@ -2323,6 +2329,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   Future<void> _handleForcedLogout() async {
     _resetActiveCallTracking();
     _heartbeatTimer?.cancel();
+    _notificationPollTimer?.cancel();
     _idleMonitorTimer?.cancel();
     _dismissIdleWarning();
     _dismissPendingCallStatusPrompt();
@@ -2367,6 +2374,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   Future<void> _logout() async {
     _resetActiveCallTracking();
     _heartbeatTimer?.cancel();
+    _notificationPollTimer?.cancel();
     _idleMonitorTimer?.cancel();
     _dismissIdleWarning();
     _dismissPendingCallStatusPrompt();
@@ -4551,7 +4559,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
   void _syncPresenceMonitoring() {
     _heartbeatTimer?.cancel();
+    _notificationPollTimer?.cancel();
     _idleMonitorTimer?.cancel();
+    _syncNotificationPolling();
     if (!_summary.workingNow) {
       _lastInteractionAt = null;
       _backgroundedAt = null;
@@ -4570,6 +4580,41 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _idleMonitorTimer = Timer.periodic(kIdleMonitorInterval, (_) {
       _evaluateIdleState();
     });
+  }
+
+  void _syncNotificationPolling() {
+    _notificationPollTimer?.cancel();
+    if (_user == null || _lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+
+    unawaited(_pollNotifications());
+    _notificationPollTimer = Timer.periodic(kNotificationPollInterval, (_) {
+      if (_lifecycleState == AppLifecycleState.resumed) {
+        unawaited(_pollNotifications());
+      }
+    });
+  }
+
+  Future<void> _pollNotifications() async {
+    if (_user == null || _isNotificationPollRequestInFlight) {
+      return;
+    }
+
+    _isNotificationPollRequestInFlight = true;
+    try {
+      final notifications = await _apiClient.fetchActiveNotifications();
+      if (!mounted) {
+        return;
+      }
+      _applyStaffNotifications(notifications);
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+      }
+    } finally {
+      _isNotificationPollRequestInFlight = false;
+    }
   }
 
   Future<void> _handleResumeState() async {
