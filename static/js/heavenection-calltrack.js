@@ -543,8 +543,14 @@
         });
 
         document.querySelectorAll(".js-open-staff-profile").forEach((button) => {
-            button.addEventListener("click", () => {
-                playStaffActionAnimation(button, "profile");
+            button.addEventListener("click", async (event) => {
+                event.preventDefault();
+                const profileUrl = button.getAttribute("href");
+                if (!profileUrl) {
+                    return;
+                }
+                await playStaffActionAnimation(button, "profile");
+                window.location.href = profileUrl;
             });
         });
 
