@@ -3166,6 +3166,507 @@
         });
     }
 
+    function bindPerformanceMonitoringPage() {
+        const root = document.getElementById("heavenectionPerformanceMonitoringPage");
+        if (!root) {
+            return;
+        }
+
+        const apiUrl = root.dataset.apiUrl || window.heavenectionAdmin?.liveMonitoringUrl;
+        const profileUrlTemplate = root.dataset.profileUrlTemplate || "";
+        const graphWall = document.getElementById("performanceMonitoringGraphWall");
+        const alertEngine = document.getElementById("performanceMonitoringAlertEngine");
+        const timeline = document.getElementById("performanceMonitoringTimeline");
+        const queueHeatmap = document.getElementById("performanceMonitoringQueueHeatmap");
+        const outcomeFunnel = document.getElementById("performanceMonitoringOutcomeFunnel");
+        const compareRoster = document.getElementById("performanceMonitoringCompareRoster");
+        const compareDetail = document.getElementById("performanceMonitoringCompareDetail");
+        const generatedAtNode = document.getElementById("performanceMonitoringGeneratedAt");
+        const nextRefreshNode = document.getElementById("performanceMonitoringNextRefresh");
+        const refreshButton = document.getElementById("performanceMonitoringRefreshButton");
+        const syncBadge = document.getElementById("performanceMonitoringSyncBadge");
+        const syncStateNode = document.getElementById("performanceMonitoringSyncState");
+        const syncDetailNode = document.getElementById("performanceMonitoringSyncDetail");
+        const liveStaffNode = document.getElementById("performanceMonitoringLiveStaff");
+        const activeHoursNode = document.getElementById("performanceMonitoringActiveHours");
+        const reviewPressureNode = document.getElementById("performanceMonitoringReviewPressure");
+        const queueLoadNode = document.getElementById("performanceMonitoringQueueLoad");
+        const convertedNode = document.getElementById("performanceMonitoringConverted");
+        const refreshMs = 8000;
+        let refreshTimer = null;
+        let countdownTimer = null;
+        let nextRefreshAt = null;
+        let refreshInFlight = false;
+        let latestPayload = readJsonScript("heavenectionPerformanceMonitoringPayload") || {};
+        let latestStaffRows = Array.isArray(latestPayload?.staff_rows) ? latestPayload.staff_rows : [];
+        const selectedStaffIds = new Set();
+
+        function asNumber(value) {
+            const parsed = Number(value || 0);
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+
+        function parseDurationLabel(label) {
+            const text = String(label || "").trim().toLowerCase();
+            if (!text) {
+                return 0;
+            }
+            let totalMinutes = 0;
+            const hourMatch = text.match(/(\d+(?:\.\d+)?)\s*h/);
+            const minuteMatch = text.match(/(\d+(?:\.\d+)?)\s*m/);
+            const secondMatch = text.match(/(\d+(?:\.\d+)?)\s*s/);
+            if (hourMatch) {
+                totalMinutes += Number(hourMatch[1]) * 60;
+            }
+            if (minuteMatch) {
+                totalMinutes += Number(minuteMatch[1]);
+            }
+            if (secondMatch) {
+                totalMinutes += Number(secondMatch[1]) / 60;
+            }
+            if (!totalMinutes && /^\d+(?:\.\d+)?$/.test(text)) {
+                totalMinutes = Number(text);
+            }
+            return Number.isFinite(totalMinutes) ? totalMinutes : 0;
+        }
+
+        function withTemplateId(urlTemplate, staffId) {
+            if (!urlTemplate || !staffId) {
+                return "#";
+            }
+            return urlTemplate.replace("00000000-0000-0000-0000-000000000000", staffId);
+        }
+
+        function profileUrlForRow(row) {
+            return withTemplateId(profileUrlTemplate, String(row?.id || "").trim());
+        }
+
+        function clearScheduledRefresh() {
+            if (refreshTimer) {
+                window.clearTimeout(refreshTimer);
+                refreshTimer = null;
+            }
+            if (countdownTimer) {
+                window.clearInterval(countdownTimer);
+                countdownTimer = null;
+            }
+        }
+
+        function startCountdown() {
+            if (!nextRefreshNode) {
+                return;
+            }
+            if (countdownTimer) {
+                window.clearInterval(countdownTimer);
+            }
+            countdownTimer = window.setInterval(() => {
+                if (!nextRefreshAt) {
+                    nextRefreshNode.textContent = "--";
+                    return;
+                }
+                const seconds = Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000));
+                nextRefreshNode.textContent = `${seconds}s`;
+            }, 250);
+        }
+
+        function scheduleRefresh() {
+            clearScheduledRefresh();
+            nextRefreshAt = Date.now() + refreshMs;
+            startCountdown();
+            refreshTimer = window.setTimeout(() => {
+                refreshPayload({ silent: true });
+            }, refreshMs);
+        }
+
+        function setSyncState(state, detail) {
+            if (syncBadge) {
+                syncBadge.classList.remove("is-live", "is-warning", "is-danger");
+                if (state === "error") {
+                    syncBadge.classList.add("is-danger");
+                } else if (state === "syncing") {
+                    syncBadge.classList.add("is-warning");
+                } else {
+                    syncBadge.classList.add("is-live");
+                }
+            }
+            if (syncStateNode) {
+                syncStateNode.textContent = state === "error"
+                    ? "Sync Paused"
+                    : state === "syncing"
+                        ? "Refreshing Performance"
+                        : "Live Sync Active";
+            }
+            if (syncDetailNode) {
+                syncDetailNode.textContent = detail || "";
+            }
+        }
+
+        function buildPerformanceScore(row) {
+            const calls = asNumber(row?.calls_today);
+            const quality = asNumber(row?.quality_score);
+            const converted = asNumber(row?.converted_today);
+            const assigned = asNumber(row?.assigned_leads);
+            const workMinutes = parseDurationLabel(row?.active_hours_today);
+            return (calls * 1.7) + (quality * 0.85) + (converted * 8) + (workMinutes * 0.42) + Math.min(assigned, 16);
+        }
+
+        function buildRiskScore(row) {
+            const suspicious = asNumber(row?.suspicious_block_count);
+            const zeroOnly = asNumber(row?.zero_only_block_count);
+            const invalidShort = asNumber(row?.invalid_short_count);
+            const missed = asNumber(row?.missed_callbacks);
+            const reviewNeed = row?.needs_review ? 12 : 0;
+            return (suspicious * 9) + (zeroOnly * 7) + (invalidShort * 5) + (missed * 4) + reviewNeed;
+        }
+
+        function summarizeTeam(payload) {
+            const summary = payload?.summary || {};
+            if (liveStaffNode) {
+                liveStaffNode.textContent = summary.online_now ?? 0;
+            }
+            if (activeHoursNode) {
+                activeHoursNode.textContent = summary.active_hours_label || "0m";
+            }
+            if (reviewPressureNode) {
+                reviewPressureNode.textContent = summary.review_needed_now ?? 0;
+            }
+            if (queueLoadNode) {
+                queueLoadNode.textContent = summary.total_assigned ?? 0;
+            }
+            if (convertedNode) {
+                convertedNode.textContent = summary.total_converted_today ?? 0;
+            }
+            if (generatedAtNode) {
+                generatedAtNode.textContent = payload?.generated_at_label || "--";
+            }
+        }
+
+        function renderGraphWall(rows) {
+            if (!graphWall) {
+                return;
+            }
+            if (!rows.length) {
+                graphWall.innerHTML = '<div class="hc-work-review-empty-note">No worked staff found for today.</div>';
+                return;
+            }
+            const ranked = rows
+                .map((row) => ({
+                    ...row,
+                    performanceScore: buildPerformanceScore(row),
+                }))
+                .sort((left, right) => right.performanceScore - left.performanceScore)
+                .slice(0, 8);
+            const maxScore = Math.max(...ranked.map((row) => row.performanceScore), 1);
+            graphWall.innerHTML = ranked.map((row, index) => {
+                const width = Math.max(12, Math.round((row.performanceScore / maxScore) * 100));
+                const profileUrl = profileUrlForRow(row);
+                return `
+                    <article class="hc-performance-graph-card ${index === 0 ? "is-leading" : ""}">
+                        <div class="hc-performance-graph-head">
+                            <div>
+                                <strong>${escapeHtml(row.name || "Staff")}</strong>
+                                <span>${escapeHtml(row.online_label || row.status_note || "Tracking")}</span>
+                            </div>
+                            <a class="btn btn-outline-light btn-sm" href="${escapeHtml(profileUrl)}">Open Profile</a>
+                        </div>
+                        <div class="hc-performance-graph-meter">
+                            <span class="hc-performance-graph-fill" style="width:${width}%"></span>
+                        </div>
+                        <div class="hc-performance-graph-stats">
+                            <span><strong>${asNumber(row.calls_today)}</strong> calls</span>
+                            <span><strong>${escapeHtml(row.active_hours_today || "0m")}</strong> work</span>
+                            <span><strong>${asNumber(row.quality_score)}</strong> quality</span>
+                            <span><strong>${asNumber(row.converted_today)}</strong> converted</span>
+                        </div>
+                    </article>
+                `;
+            }).join("");
+        }
+
+        function renderAlertEngine(rows) {
+            if (!alertEngine) {
+                return;
+            }
+            const flagged = rows
+                .map((row) => ({
+                    ...row,
+                    riskScore: buildRiskScore(row),
+                }))
+                .filter((row) => row.riskScore > 0)
+                .sort((left, right) => right.riskScore - left.riskScore)
+                .slice(0, 8);
+            if (!flagged.length) {
+                alertEngine.innerHTML = '<div class="hc-work-review-empty-note">No active review pressure right now. The team looks steady.</div>';
+                return;
+            }
+            alertEngine.innerHTML = flagged.map((row) => `
+                <article class="hc-performance-alert-card">
+                    <div class="hc-performance-alert-top">
+                        <div>
+                            <strong>${escapeHtml(row.name || "Staff")}</strong>
+                            <span>${escapeHtml(row.quality_label || "Monitoring")}</span>
+                        </div>
+                        <em>${row.riskScore}</em>
+                    </div>
+                    <p>${escapeHtml(row.quality_note || row.status_note || "Review this staff activity for unusual performance pressure.")}</p>
+                    <div class="hc-performance-alert-meta">
+                        <span>${asNumber(row.suspicious_block_count)} suspicious</span>
+                        <span>${asNumber(row.zero_only_block_count)} zero blocks</span>
+                        <span>${asNumber(row.invalid_short_count)} invalid short</span>
+                        <span>${asNumber(row.missed_callbacks)} missed follow-up</span>
+                    </div>
+                </article>
+            `).join("");
+        }
+
+        function renderTimeline(rows) {
+            if (!timeline) {
+                return;
+            }
+            if (!rows.length) {
+                timeline.innerHTML = '<div class="hc-work-review-empty-note">No daily rhythm available yet.</div>';
+                return;
+            }
+            const ranked = rows
+                .map((row) => ({
+                    ...row,
+                    workMinutes: parseDurationLabel(row.active_hours_today),
+                }))
+                .sort((left, right) => buildPerformanceScore(right) - buildPerformanceScore(left))
+                .slice(0, 10);
+            const maxCalls = Math.max(...ranked.map((row) => asNumber(row.calls_today)), 1);
+            const maxWork = Math.max(...ranked.map((row) => row.workMinutes), 1);
+            const maxQuality = Math.max(...ranked.map((row) => asNumber(row.quality_score)), 1);
+            timeline.innerHTML = ranked.map((row) => `
+                <article class="hc-performance-lane">
+                    <div class="hc-performance-lane-head">
+                        <strong>${escapeHtml(row.name || "Staff")}</strong>
+                        <span>${escapeHtml(row.active_hours_today || "0m")} tracked</span>
+                    </div>
+                    <div class="hc-performance-lane-bars">
+                        <div class="hc-performance-lane-track is-calls"><span style="width:${Math.max(8, Math.round((asNumber(row.calls_today) / maxCalls) * 100))}%"></span></div>
+                        <div class="hc-performance-lane-track is-work"><span style="width:${Math.max(8, Math.round((row.workMinutes / maxWork) * 100))}%"></span></div>
+                        <div class="hc-performance-lane-track is-quality"><span style="width:${Math.max(8, Math.round((asNumber(row.quality_score) / maxQuality) * 100))}%"></span></div>
+                    </div>
+                    <div class="hc-performance-lane-meta">
+                        <span>${asNumber(row.calls_today)} calls</span>
+                        <span>${asNumber(row.assigned_leads)} queue</span>
+                        <span>${asNumber(row.converted_today)} converted</span>
+                    </div>
+                </article>
+            `).join("");
+        }
+
+        function renderQueueHeatmap(rows) {
+            if (!queueHeatmap) {
+                return;
+            }
+            if (!rows.length) {
+                queueHeatmap.innerHTML = '<div class="hc-work-review-empty-note">No queue data available yet.</div>';
+                return;
+            }
+            const ranked = rows
+                .slice()
+                .sort((left, right) => asNumber(right.assigned_leads) - asNumber(left.assigned_leads))
+                .slice(0, 12);
+            const maxQueue = Math.max(...ranked.map((row) => asNumber(row.assigned_leads)), 1);
+            queueHeatmap.innerHTML = ranked.map((row) => {
+                const load = asNumber(row.assigned_leads);
+                const heat = Math.round((load / maxQueue) * 100);
+                return `
+                    <article class="hc-performance-heat-card">
+                        <header>
+                            <strong>${escapeHtml(row.name || "Staff")}</strong>
+                            <span>${load} leads</span>
+                        </header>
+                        <div class="hc-performance-heat-bar"><span style="width:${Math.max(10, heat)}%"></span></div>
+                        <footer>
+                            <small>${escapeHtml(row.online_label || "Tracked")}</small>
+                            <small>${asNumber(row.calls_today)} calls today</small>
+                        </footer>
+                    </article>
+                `;
+            }).join("");
+        }
+
+        function renderOutcomeFunnel(payload) {
+            if (!outcomeFunnel) {
+                return;
+            }
+            const summary = payload?.summary || {};
+            const stages = [
+                ["Active Staff", summary.total_staff ?? 0],
+                ["Online Now", summary.online_now ?? 0],
+                ["On Call", summary.on_call_now ?? 0],
+                ["Calls Today", summary.total_calls_today ?? 0],
+                ["Queue Load", summary.total_assigned ?? 0],
+                ["Converted", summary.total_converted_today ?? 0],
+            ];
+            const maxValue = Math.max(...stages.map((stage) => asNumber(stage[1])), 1);
+            outcomeFunnel.innerHTML = stages.map(([label, value]) => {
+                const numericValue = asNumber(value);
+                return `
+                    <article class="hc-performance-funnel-step">
+                        <div class="hc-performance-funnel-copy">
+                            <span>${escapeHtml(label)}</span>
+                            <strong>${numericValue}</strong>
+                        </div>
+                        <div class="hc-performance-funnel-bar"><span style="width:${Math.max(8, Math.round((numericValue / maxValue) * 100))}%"></span></div>
+                    </article>
+                `;
+            }).join("");
+        }
+
+        function renderCompareRoster(rows) {
+            if (!compareRoster) {
+                return;
+            }
+            if (!rows.length) {
+                compareRoster.innerHTML = '<div class="hc-work-review-empty-note">No staff available for comparison.</div>';
+                return;
+            }
+            const ranked = rows
+                .slice()
+                .sort((left, right) => buildPerformanceScore(right) - buildPerformanceScore(left))
+                .slice(0, 18);
+            compareRoster.innerHTML = ranked.map((row) => {
+                const selected = selectedStaffIds.has(String(row.id || ""));
+                return `
+                    <button type="button" class="hc-performance-compare-chip ${selected ? "is-selected" : ""}" data-compare-staff="${escapeHtml(String(row.id || ""))}">
+                        <strong>${escapeHtml(row.name || "Staff")}</strong>
+                        <span>${asNumber(row.calls_today)} calls · ${escapeHtml(row.active_hours_today || "0m")}</span>
+                    </button>
+                `;
+            }).join("");
+        }
+
+        function renderCompareDetail(rows) {
+            if (!compareDetail) {
+                return;
+            }
+            const selectedRows = rows.filter((row) => selectedStaffIds.has(String(row.id || ""))).slice(0, 4);
+            if (!selectedRows.length) {
+                compareDetail.innerHTML = '<div class="hc-work-review-empty-note">Select up to four staff members to compare their live performance.</div>';
+                return;
+            }
+            compareDetail.innerHTML = `
+                <div class="hc-performance-compare-grid">
+                    ${selectedRows.map((row) => `
+                        <article class="hc-performance-compare-card">
+                            <div class="hc-performance-compare-head">
+                                <div>
+                                    <strong>${escapeHtml(row.name || "Staff")}</strong>
+                                    <span>${escapeHtml(row.online_label || row.status_note || "Tracking")}</span>
+                                </div>
+                                <a href="${escapeHtml(profileUrlForRow(row))}" class="btn btn-outline-light btn-sm">Profile</a>
+                            </div>
+                            <dl class="hc-performance-compare-metrics">
+                                <div><dt>Calls</dt><dd>${asNumber(row.calls_today)}</dd></div>
+                                <div><dt>Work</dt><dd>${escapeHtml(row.active_hours_today || "0m")}</dd></div>
+                                <div><dt>Quality</dt><dd>${asNumber(row.quality_score)}</dd></div>
+                                <div><dt>Queue</dt><dd>${asNumber(row.assigned_leads)}</dd></div>
+                                <div><dt>Converted</dt><dd>${asNumber(row.converted_today)}</dd></div>
+                                <div><dt>Real Calls</dt><dd>${asNumber(row.real_call_count)}</dd></div>
+                            </dl>
+                        </article>
+                    `).join("")}
+                </div>
+            `;
+        }
+
+        function renderPayload(payload) {
+            latestPayload = payload || {};
+            latestStaffRows = Array.isArray(latestPayload?.staff_rows) ? latestPayload.staff_rows : [];
+            for (const selectedId of Array.from(selectedStaffIds)) {
+                if (!latestStaffRows.some((row) => String(row?.id || "") === selectedId)) {
+                    selectedStaffIds.delete(selectedId);
+                }
+            }
+            summarizeTeam(latestPayload);
+            renderGraphWall(latestStaffRows);
+            renderAlertEngine(latestStaffRows);
+            renderTimeline(latestStaffRows);
+            renderQueueHeatmap(latestStaffRows);
+            renderOutcomeFunnel(latestPayload);
+            renderCompareRoster(latestStaffRows);
+            renderCompareDetail(latestStaffRows);
+        }
+
+        async function refreshPayload(options = {}) {
+            if (!apiUrl || refreshInFlight) {
+                return;
+            }
+            refreshInFlight = true;
+            setSyncState("syncing", options.silent ? "Refreshing live performance signals quietly in the background." : "Pulling the latest performance activity right now.");
+            try {
+                const payload = await requestJson(apiUrl, { method: "GET" });
+                renderPayload(payload);
+                setSyncState("live", "Performance board is synced and listening for the next refresh.");
+                scheduleRefresh();
+            } catch (error) {
+                setSyncState("error", error.message || "Performance board could not refresh right now.");
+                clearScheduledRefresh();
+            } finally {
+                refreshInFlight = false;
+            }
+        }
+
+        compareRoster?.addEventListener("click", (event) => {
+            const button = event.target.closest("[data-compare-staff]");
+            if (!button) {
+                return;
+            }
+            const staffId = String(button.dataset.compareStaff || "").trim();
+            if (!staffId) {
+                return;
+            }
+            if (selectedStaffIds.has(staffId)) {
+                selectedStaffIds.delete(staffId);
+            } else {
+                if (selectedStaffIds.size >= 4) {
+                    const firstSelected = selectedStaffIds.values().next().value;
+                    if (firstSelected) {
+                        selectedStaffIds.delete(firstSelected);
+                    }
+                }
+                selectedStaffIds.add(staffId);
+            }
+            renderCompareRoster(latestStaffRows);
+            renderCompareDetail(latestStaffRows);
+        });
+
+        refreshButton?.addEventListener("click", () => {
+            refreshPayload({ silent: false });
+        });
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+                clearScheduledRefresh();
+                setSyncState("syncing", "Performance board paused while this tab is hidden.");
+                return;
+            }
+            refreshPayload({ silent: true });
+        });
+
+        window.addEventListener("focus", () => {
+            if (!document.hidden) {
+                refreshPayload({ silent: true });
+            }
+        });
+
+        window.addEventListener("online", () => {
+            refreshPayload({ silent: false });
+        });
+
+        window.addEventListener("offline", () => {
+            clearScheduledRefresh();
+            setSyncState("error", "Network unavailable. Performance board will resume when the connection returns.");
+        });
+
+        renderPayload(latestPayload);
+        scheduleRefresh();
+    }
+
     function bindSidebarSections() {
         const sections = Array.from(document.querySelectorAll(".hc-sidebar-section"));
         if (!sections.length) {
@@ -3345,6 +3846,7 @@
     bindTrainingCrud();
     bindSalaryControlCrud();
     bindLiveMonitoringPage();
+    bindPerformanceMonitoringPage();
     bindSidebarSections();
     bindEmiCalculator();
 })();

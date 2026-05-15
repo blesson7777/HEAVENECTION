@@ -5969,6 +5969,471 @@ body.hc-live-monitoring-focus .hc-cc-shell-v3 .hc-cc-stage {
     box-shadow: 0 20px 40px rgba(22, 36, 65, 0.12);
 }
 
+.hc-performance-shell {
+    display: grid;
+    gap: 1.15rem;
+}
+
+.hc-performance-hero,
+.hc-performance-panel,
+.hc-performance-topcard {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(92, 112, 165, 0.2);
+    box-shadow: 0 24px 48px rgba(16, 23, 45, 0.12);
+}
+
+.hc-performance-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.8fr);
+    gap: 1.1rem;
+    padding: 1.55rem;
+    border-radius: 28px;
+    background:
+        radial-gradient(circle at top left, rgba(90, 130, 255, 0.24), transparent 36%),
+        radial-gradient(circle at bottom right, rgba(0, 209, 255, 0.18), transparent 28%),
+        linear-gradient(145deg, #091224, #101d39 52%, #16284d);
+    color: #f8fbff;
+}
+
+.hc-performance-hero-backdrop {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.hc-performance-orb,
+.hc-performance-gridline,
+.hc-performance-scan {
+    position: absolute;
+}
+
+.hc-performance-orb {
+    border-radius: 50%;
+    filter: blur(0.4rem);
+    opacity: 0.8;
+    animation: hcPerformanceFloat 10s ease-in-out infinite;
+}
+
+.hc-performance-orb-a {
+    width: 16rem;
+    height: 16rem;
+    top: -4rem;
+    right: 8%;
+    background: radial-gradient(circle, rgba(0, 225, 255, 0.32), rgba(0, 225, 255, 0.02) 70%);
+}
+
+.hc-performance-orb-b {
+    width: 10rem;
+    height: 10rem;
+    bottom: -2rem;
+    left: 34%;
+    background: radial-gradient(circle, rgba(122, 152, 255, 0.28), rgba(122, 152, 255, 0.02) 72%);
+    animation-duration: 8s;
+}
+
+.hc-performance-gridline {
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(142, 170, 255, 0.08) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(142, 170, 255, 0.08) 1px, transparent 1px);
+    background-size: 3rem 3rem;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 88%);
+}
+
+.hc-performance-scan {
+    inset: -20% 0 auto;
+    height: 55%;
+    background: linear-gradient(180deg, rgba(132, 201, 255, 0), rgba(132, 201, 255, 0.16), rgba(132, 201, 255, 0));
+    animation: hcPerformanceScan 8s linear infinite;
+}
+
+.hc-performance-hero-copy,
+.hc-performance-hero-actions {
+    position: relative;
+    z-index: 1;
+}
+
+.hc-performance-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 0.65rem;
+    padding: 0.38rem 0.82rem;
+    border-radius: 999px;
+    background: rgba(143, 173, 255, 0.16);
+    color: #dbe7ff;
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.hc-performance-hero h2 {
+    max-width: 52rem;
+    margin: 0 0 0.7rem;
+    font-size: clamp(1.75rem, 2vw, 2.3rem);
+    line-height: 1.15;
+}
+
+.hc-performance-hero p {
+    max-width: 44rem;
+    margin: 0;
+    color: rgba(232, 241, 255, 0.78);
+}
+
+.hc-performance-hero-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 1rem;
+}
+
+.hc-performance-hero-pills span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.58rem 0.82rem;
+    border-radius: 14px;
+    background: rgba(9, 19, 40, 0.46);
+    border: 1px solid rgba(177, 195, 255, 0.14);
+    color: #e7efff;
+}
+
+.hc-performance-hero-actions {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.hc-performance-topbar,
+.hc-performance-grid,
+.hc-performance-compare-grid {
+    display: grid;
+    gap: 1rem;
+}
+
+.hc-performance-topbar {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.hc-performance-topcard {
+    min-height: 7.25rem;
+    padding: 1rem;
+    border-radius: 22px;
+    background:
+        linear-gradient(180deg, rgba(12, 21, 40, 0.94), rgba(18, 30, 54, 0.96)),
+        linear-gradient(135deg, rgba(88, 116, 214, 0.2), transparent);
+    color: #edf4ff;
+}
+
+.hc-performance-topcard span,
+.hc-performance-panel-head small,
+.hc-performance-graph-head span,
+.hc-performance-alert-top span,
+.hc-performance-compare-head span,
+.hc-performance-heat-card footer,
+.hc-performance-lane-meta,
+.hc-performance-lane-head span,
+.hc-performance-funnel-copy span {
+    color: rgba(217, 229, 255, 0.7);
+}
+
+.hc-performance-topcard strong {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: clamp(1.5rem, 2vw, 2.2rem);
+    color: #ffffff;
+}
+
+.hc-performance-grid-main {
+    grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+}
+
+.hc-performance-grid-split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.hc-performance-panel {
+    padding: 1rem;
+    border-radius: 24px;
+    background:
+        linear-gradient(180deg, rgba(8, 16, 32, 0.96), rgba(15, 26, 48, 0.98)),
+        linear-gradient(135deg, rgba(98, 122, 214, 0.16), transparent 50%);
+    color: #edf4ff;
+}
+
+.hc-performance-panel::after,
+.hc-performance-topcard::after {
+    content: "";
+    position: absolute;
+    inset: auto -8% -40% auto;
+    width: 10rem;
+    height: 10rem;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(85, 193, 255, 0.12), transparent 72%);
+    pointer-events: none;
+}
+
+.hc-performance-panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.95rem;
+}
+
+.hc-performance-panel-head h5 {
+    margin: 0.18rem 0 0;
+    color: #ffffff;
+}
+
+.hc-performance-graph-wall,
+.hc-performance-alert-engine,
+.hc-performance-timeline,
+.hc-performance-heatmap,
+.hc-performance-funnel,
+.hc-performance-compare-roster,
+.hc-performance-compare-detail {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.hc-performance-graph-card,
+.hc-performance-alert-card,
+.hc-performance-lane,
+.hc-performance-heat-card,
+.hc-performance-funnel-step,
+.hc-performance-compare-card,
+.hc-performance-compare-chip {
+    border: 1px solid rgba(133, 157, 228, 0.16);
+    background: rgba(255, 255, 255, 0.04);
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.hc-performance-graph-card:hover,
+.hc-performance-alert-card:hover,
+.hc-performance-lane:hover,
+.hc-performance-heat-card:hover,
+.hc-performance-compare-card:hover,
+.hc-performance-compare-chip:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 20px 32px rgba(5, 10, 24, 0.22);
+    border-color: rgba(110, 197, 255, 0.34);
+}
+
+.hc-performance-graph-card {
+    padding: 0.9rem;
+    border-radius: 20px;
+}
+
+.hc-performance-graph-card.is-leading {
+    background: linear-gradient(135deg, rgba(42, 84, 176, 0.34), rgba(20, 50, 106, 0.22));
+}
+
+.hc-performance-graph-head,
+.hc-performance-alert-top,
+.hc-performance-lane-head,
+.hc-performance-heat-card header,
+.hc-performance-compare-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    align-items: center;
+}
+
+.hc-performance-graph-head strong,
+.hc-performance-alert-top strong,
+.hc-performance-lane-head strong,
+.hc-performance-heat-card strong,
+.hc-performance-compare-head strong,
+.hc-performance-funnel-copy strong {
+    color: #ffffff;
+}
+
+.hc-performance-graph-meter,
+.hc-performance-heat-bar,
+.hc-performance-funnel-bar {
+    position: relative;
+    height: 0.72rem;
+    margin: 0.8rem 0;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.hc-performance-graph-fill,
+.hc-performance-heat-bar span,
+.hc-performance-funnel-bar span,
+.hc-performance-lane-track span {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: inherit;
+}
+
+.hc-performance-graph-fill {
+    background: linear-gradient(90deg, #3bc8ff, #8ae6ff);
+    box-shadow: 0 0 18px rgba(59, 200, 255, 0.34);
+}
+
+.hc-performance-graph-stats,
+.hc-performance-alert-meta,
+.hc-performance-lane-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 0.9rem;
+    font-size: 0.85rem;
+}
+
+.hc-performance-alert-card,
+.hc-performance-heat-card,
+.hc-performance-funnel-step,
+.hc-performance-compare-card {
+    padding: 0.95rem;
+    border-radius: 18px;
+}
+
+.hc-performance-alert-top em {
+    min-width: 3.2rem;
+    padding: 0.35rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(255, 179, 59, 0.16);
+    color: #ffd57a;
+    text-align: center;
+    font-style: normal;
+    font-weight: 700;
+}
+
+.hc-performance-alert-card p {
+    margin: 0.7rem 0;
+    color: rgba(238, 244, 255, 0.84);
+}
+
+.hc-performance-lane {
+    padding: 0.9rem;
+    border-radius: 18px;
+}
+
+.hc-performance-lane-bars {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.7rem 0 0.55rem;
+}
+
+.hc-performance-lane-track {
+    position: relative;
+    height: 0.58rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.hc-performance-lane-track.is-calls span {
+    background: linear-gradient(90deg, #5aa2ff, #91bdff);
+}
+
+.hc-performance-lane-track.is-work span {
+    background: linear-gradient(90deg, #34d6a2, #7ef0c9);
+}
+
+.hc-performance-lane-track.is-quality span {
+    background: linear-gradient(90deg, #ffc05d, #ffe29d);
+}
+
+.hc-performance-heatmap {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.hc-performance-heat-card footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    margin-top: 0.65rem;
+    font-size: 0.8rem;
+}
+
+.hc-performance-heat-bar span {
+    background: linear-gradient(90deg, #8d6bff, #ff6dd8);
+    box-shadow: 0 0 16px rgba(141, 107, 255, 0.24);
+}
+
+.hc-performance-funnel-step {
+    display: grid;
+    grid-template-columns: minmax(135px, 0.6fr) minmax(0, 1fr);
+    gap: 1rem;
+    align-items: center;
+}
+
+.hc-performance-funnel-copy strong {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 1.2rem;
+}
+
+.hc-performance-funnel-bar span {
+    background: linear-gradient(90deg, #46c8ff, #6f8cff);
+}
+
+.hc-performance-compare-shell {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.hc-performance-compare-roster {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.hc-performance-compare-chip {
+    display: grid;
+    gap: 0.25rem;
+    padding: 0.85rem;
+    border-radius: 16px;
+    color: #edf4ff;
+    text-align: left;
+}
+
+.hc-performance-compare-chip.is-selected {
+    border-color: rgba(90, 196, 255, 0.4);
+    background: linear-gradient(180deg, rgba(46, 83, 173, 0.32), rgba(21, 46, 92, 0.34));
+}
+
+.hc-performance-compare-chip span {
+    color: rgba(220, 232, 255, 0.72);
+    font-size: 0.83rem;
+}
+
+.hc-performance-compare-grid {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.hc-performance-compare-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem;
+    margin: 0.9rem 0 0;
+}
+
+.hc-performance-compare-metrics div {
+    padding: 0.62rem 0.7rem;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.hc-performance-compare-metrics dt {
+    margin: 0;
+    color: rgba(214, 226, 255, 0.68);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.hc-performance-compare-metrics dd {
+    margin: 0.22rem 0 0;
+    color: #ffffff;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
 @keyframes hcCcV3Pulse {
     0%,
     100% {
@@ -6021,7 +6486,34 @@ body.hc-live-monitoring-focus .hc-cc-shell-v3 .hc-cc-stage {
     }
 }
 
+@keyframes hcPerformanceFloat {
+    0%,
+    100% {
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+        transform: translate3d(0, 0.8rem, 0) scale(1.08);
+    }
+}
+
+@keyframes hcPerformanceScan {
+    0% {
+        transform: translateY(-40%);
+    }
+    100% {
+        transform: translateY(180%);
+    }
+}
+
 @media (max-width: 1399.98px) {
+    .hc-performance-topbar {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .hc-performance-grid-main {
+        grid-template-columns: 1fr;
+    }
+
     .hc-cc-shell-v3 .hc-live-command-strip-v3 {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
@@ -6048,6 +6540,10 @@ body.hc-live-monitoring-focus .hc-cc-shell-v3 .hc-cc-stage {
 }
 
 @media (max-width: 1199.98px) {
+    .hc-performance-grid-split {
+        grid-template-columns: 1fr;
+    }
+
     .hc-cc-shell-v3 .hc-cc-stage,
     .hc-cc-shell-v3 .hc-cc-ops-grid,
     .hc-cc-shell-v3 .hc-cc-radar-layout,
@@ -6071,6 +6567,23 @@ body.hc-live-monitoring-focus .hc-cc-shell-v3 .hc-cc-stage {
 }
 
 @media (max-width: 991.98px) {
+    .hc-performance-hero {
+        grid-template-columns: 1fr;
+    }
+
+    .hc-performance-topbar {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .hc-performance-panel-head,
+    .hc-performance-graph-head,
+    .hc-performance-alert-top,
+    .hc-performance-heat-card header,
+    .hc-performance-compare-head {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
     .hc-cc-shell-v3 .hc-cc-band-head,
     .hc-cc-shell-v3 .hc-cc-column-title {
         flex-direction: column;
@@ -6109,6 +6622,25 @@ body.hc-live-monitoring-focus .hc-cc-shell-v3 .hc-cc-stage {
 }
 
 @media (max-width: 767.98px) {
+    .hc-performance-topbar,
+    .hc-performance-funnel-step,
+    .hc-performance-compare-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .hc-performance-hero,
+    .hc-performance-panel,
+    .hc-performance-topcard {
+        padding: 0.9rem;
+        border-radius: 20px;
+    }
+
+    .hc-performance-compare-roster,
+    .hc-performance-compare-grid,
+    .hc-performance-heatmap {
+        grid-template-columns: 1fr;
+    }
+
     .hc-cc-shell-v3 .hc-cc-stage,
     .hc-cc-shell-v3 .hc-cc-panel-v3,
     .hc-cc-shell-v3 .hc-cc-column-shell,

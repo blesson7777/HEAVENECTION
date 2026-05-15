@@ -72,13 +72,13 @@
         </div>
         <div class="mf-nav-group">Workspace Navigation</div>
         <nav class="hc-sidebar-nav" id="hcSidebarNav" aria-label="Sidebar Navigation">
-            <div class="hc-sidebar-section{% if active_page == 'dashboard' or active_page == 'live-monitoring' %} is-expanded{% endif %}">
+            <div class="hc-sidebar-section{% if active_page == 'dashboard' or active_page == 'live-monitoring' or active_page == 'performance-monitoring' %} is-expanded{% endif %}">
                 <button
                     type="button"
                     class="hc-sidebar-toggle"
                     data-bs-toggle="collapse"
                     data-bs-target="#hcSidebarOverview"
-                    aria-expanded="{% if active_page == 'dashboard' or active_page == 'live-monitoring' %}true{% else %}false{% endif %}"
+                    aria-expanded="{% if active_page == 'dashboard' or active_page == 'live-monitoring' or active_page == 'performance-monitoring' %}true{% else %}false{% endif %}"
                     aria-controls="hcSidebarOverview"
                 >
                     <span class="hc-sidebar-toggle-icon"><i class="bi bi-grid-1x2-fill"></i></span>
@@ -86,10 +86,10 @@
                         <strong>Overview</strong>
                         <small>Main dashboard and live command center</small>
                     </span>
-                    <span class="hc-sidebar-toggle-badge">2</span>
+                    <span class="hc-sidebar-toggle-badge">3</span>
                     <span class="hc-sidebar-toggle-caret"><i class="bi bi-chevron-down"></i></span>
                 </button>
-                <div class="collapse{% if active_page == 'dashboard' or active_page == 'live-monitoring' %} show{% endif %}" id="hcSidebarOverview" data-bs-parent="#hcSidebarNav">
+                <div class="collapse{% if active_page == 'dashboard' or active_page == 'live-monitoring' or active_page == 'performance-monitoring' %} show{% endif %}" id="hcSidebarOverview" data-bs-parent="#hcSidebarNav">
                     <div class="hc-sidebar-links">
                         <a href="{% url 'dashboard' %}" class="hc-sidebar-link{% if active_page == 'dashboard' %} active{% endif %}">
                             <i class="bi bi-speedometer2"></i>
@@ -98,6 +98,10 @@
                         <a href="{% url 'live-monitoring-page' %}" class="hc-sidebar-link{% if active_page == 'live-monitoring' %} active{% endif %}">
                             <i class="bi bi-activity"></i>
                             <span>Command Center</span>
+                        </a>
+                        <a href="{% url 'performance-monitoring-page' %}" class="hc-sidebar-link{% if active_page == 'performance-monitoring' %} active{% endif %}">
+                            <i class="bi bi-graph-up-arrow"></i>
+                            <span>Performance Monitor</span>
                         </a>
                     </div>
                 </div>

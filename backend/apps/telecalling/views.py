@@ -2118,6 +2118,32 @@ def live_monitoring_page(request):
     return render(request, "admin_live_monitoring.html", context)
 
 
+def performance_monitoring_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    payload = _safe_admin_payload(
+        build_live_monitoring_payload,
+        _fallback_live_monitoring_payload,
+        label="performance-monitoring-page",
+        request=request,
+    )
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="performance-monitoring",
+        page_title="Performance Monitoring",
+        page_heading="Performance Monitoring",
+        page_subtitle="Advanced performance watch with live motion, queue pressure, risk scoring, and staff comparison on one rich monitoring page.",
+        extra_context={
+            **payload,
+            "performance_monitoring_payload": payload,
+        },
+    )
+    return render(request, "admin_performance_monitoring.html", context)
+
+
 def referral_monitoring_page(request):
     current_user = _get_admin_user_or_redirect(request)
     if not current_user:

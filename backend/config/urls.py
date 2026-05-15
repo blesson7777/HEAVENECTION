@@ -33,6 +33,7 @@ urlpatterns = [
     path("learning/", views.learning_page, name="learning-page"),
     path("work-review/", views.work_review_page, name="work-review-page"),
     path("live-monitoring/", views.live_monitoring_page, name="live-monitoring-page"),
+    path("performance-monitoring/", views.performance_monitoring_page, name="performance-monitoring-page"),
     path("referrals/", views.referral_monitoring_page, name="referral-monitoring-page"),
     path("app-notifications/", views.app_notifications_page, name="app-notifications-page"),
     path("salary/", views.salary_page, name="salary-page"),
