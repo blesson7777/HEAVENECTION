@@ -10,6 +10,7 @@ from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
 from threading import Thread
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, close_old_connections, transaction
@@ -639,8 +640,8 @@ def build_app_notification_management_payload():
     }
 
 
-def build_admin_web_alert_payload(*, limit=10):
-    monitoring_payload = build_live_monitoring_payload()
+def build_admin_web_alert_payload(*, limit=10, monitoring_payload=None):
+    monitoring_payload = monitoring_payload or build_live_monitoring_payload()
     company_profile = get_company_profile()
     now = timezone.now()
     today = timezone.localdate()
@@ -955,6 +956,20 @@ def build_admin_web_alert_payload(*, limit=10):
         },
         "alerts": alerts,
     }
+
+
+def build_cached_admin_web_alert_payload(*, limit=10, cache_seconds=15, monitoring_payload=None):
+    if monitoring_payload is not None:
+        return build_admin_web_alert_payload(limit=limit, monitoring_payload=monitoring_payload)
+
+    cache_key = f"telecalling:admin-web-alerts:v1:{int(limit or 10)}"
+    cached_payload = cache.get(cache_key)
+    if cached_payload is not None:
+        return cached_payload
+
+    payload = build_admin_web_alert_payload(limit=limit)
+    cache.set(cache_key, payload, max(1, int(cache_seconds or 15)))
+    return payload
 
 
 def build_staff_document_url(staff, document_type, *, request=None, route_name="staff-document-page"):

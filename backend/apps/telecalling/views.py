@@ -76,6 +76,7 @@ from backend.apps.telecalling.serializers import (
 )
 from backend.apps.telecalling.services import (
     build_admin_web_alert_payload,
+    build_cached_admin_web_alert_payload,
     assign_selected_leads_to_staff_queue,
     auto_allocate_leads,
     authenticate_staff,
@@ -174,7 +175,17 @@ def _fallback_admin_alert_payload():
     }
 
 
-def _admin_web_context(request, current_user, *, active_page, page_title, page_heading, page_subtitle, extra_context=None):
+def _admin_web_context(
+    request,
+    current_user,
+    *,
+    active_page,
+    page_title,
+    page_heading,
+    page_subtitle,
+    extra_context=None,
+    admin_alert_payload=None,
+):
     mark_staff_seen(current_user)
     company_profile = get_company_profile()
     context = {
@@ -184,8 +195,9 @@ def _admin_web_context(request, current_user, *, active_page, page_title, page_h
         "page_title": page_title,
         "page_heading": page_heading,
         "page_subtitle": page_subtitle,
-        "admin_alert_payload": _safe_admin_payload(
-            build_admin_web_alert_payload,
+        "admin_alert_payload": admin_alert_payload
+        or _safe_admin_payload(
+            build_cached_admin_web_alert_payload,
             _fallback_admin_alert_payload,
             label="admin-alerts-context",
             request=request,
@@ -2122,6 +2134,13 @@ def live_monitoring_page(request):
         label="live-monitoring-page",
         request=request,
     )
+    admin_alert_payload = _safe_admin_payload(
+        build_admin_web_alert_payload,
+        _fallback_admin_alert_payload,
+        label="live-monitoring-alerts-context",
+        request=request,
+        monitoring_payload=payload,
+    )
     context = _admin_web_context(
         request,
         current_user,
@@ -2133,6 +2152,7 @@ def live_monitoring_page(request):
             **payload,
             "live_monitoring_payload": payload,
         },
+        admin_alert_payload=admin_alert_payload,
     )
     return render(request, "admin_live_monitoring.html", context)
 
@@ -2148,6 +2168,13 @@ def performance_monitoring_page(request):
         label="performance-monitoring-page",
         request=request,
     )
+    admin_alert_payload = _safe_admin_payload(
+        build_admin_web_alert_payload,
+        _fallback_admin_alert_payload,
+        label="performance-monitoring-alerts-context",
+        request=request,
+        monitoring_payload=payload,
+    )
     context = _admin_web_context(
         request,
         current_user,
@@ -2159,6 +2186,7 @@ def performance_monitoring_page(request):
             **payload,
             "performance_monitoring_payload": payload,
         },
+        admin_alert_payload=admin_alert_payload,
     )
     return render(request, "admin_performance_monitoring.html", context)
 
@@ -3137,7 +3165,7 @@ def live_monitoring_api(request):
 def admin_alerts_api(request):
     return Response(
         _safe_admin_payload(
-            build_admin_web_alert_payload,
+            build_cached_admin_web_alert_payload,
             _fallback_admin_alert_payload,
             label="admin-alerts-api",
             request=request,
