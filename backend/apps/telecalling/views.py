@@ -573,9 +573,9 @@ def _fallback_salary_payload():
     }
 
 
-def _safe_admin_payload(builder, fallback_factory, *, label, request=None):
+def _safe_admin_payload(builder, fallback_factory, *, label, request=None, **builder_kwargs):
     try:
-        return builder()
+        return builder(**builder_kwargs)
     except Exception as error:
         logger.exception("Admin payload build failed for %s", label)
         if request is not None:
