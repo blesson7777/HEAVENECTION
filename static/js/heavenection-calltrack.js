@@ -3686,10 +3686,43 @@
         let latestPayload = readJsonScript("heavenectionAdminAlertPayload") || { summary: {}, alerts: [] };
         let refreshTimer = null;
         let lastAlertSignature = "";
-        const shownFlashIds = new Set();
-        const shownDesktopIds = new Set();
         const refreshMs = 15000;
         const soundPreferenceKey = "heavenectionAdminAlertSoundEnabled";
+        const shownFlashIdsKey = "heavenectionAdminAlertShownFlashIds";
+        const shownDesktopIdsKey = "heavenectionAdminAlertShownDesktopIds";
+
+        function readStoredIdSet(storageKey) {
+            if (!window.sessionStorage) {
+                return new Set();
+            }
+            try {
+                const raw = window.sessionStorage.getItem(storageKey);
+                if (!raw) {
+                    return new Set();
+                }
+                const values = JSON.parse(raw);
+                if (!Array.isArray(values)) {
+                    return new Set();
+                }
+                return new Set(values.map((value) => String(value || "").trim()).filter(Boolean));
+            } catch (error) {
+                return new Set();
+            }
+        }
+
+        function writeStoredIdSet(storageKey, values) {
+            if (!window.sessionStorage) {
+                return;
+            }
+            try {
+                window.sessionStorage.setItem(storageKey, JSON.stringify(Array.from(values)));
+            } catch (error) {
+                // Ignore storage write failures.
+            }
+        }
+
+        const shownFlashIds = readStoredIdSet(shownFlashIdsKey);
+        const shownDesktopIds = readStoredIdSet(shownDesktopIdsKey);
 
         function isNotificationSupported() {
             return typeof window.Notification !== "undefined";
@@ -3788,6 +3821,7 @@
                 return;
             }
             shownDesktopIds.add(alert.id);
+            writeStoredIdSet(shownDesktopIdsKey, shownDesktopIds);
             const notification = new window.Notification(alert.title || "Admin Alert", {
                 body: alert.message || "",
                 tag: `heavenection-admin-alert-${alert.id}`,
@@ -3814,6 +3848,7 @@
                 return;
             }
             shownFlashIds.add(alert.id);
+            writeStoredIdSet(shownFlashIdsKey, shownFlashIds);
             const toneClass = alertToneClass(alert.severity);
             const stack = flashTarget.querySelector(".hc-page-flash-stack") || (() => {
                 const wrapper = document.createElement("div");
