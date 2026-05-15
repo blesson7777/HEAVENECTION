@@ -3895,7 +3895,10 @@
 
             listNode.innerHTML = alerts.length
                 ? alerts.map((alert) => `
-                    <article class="hc-admin-alert-item is-${escapeHtml(alert.severity || "normal")}">
+                    <article
+                        class="hc-admin-alert-item is-${escapeHtml(alert.severity || "normal")}${alert.target_url ? " is-openable" : ""}"
+                        ${alert.target_url ? `data-target-url="${escapeHtml(alert.target_url)}" data-target-label="${escapeHtml(alert.target_label || "Open")}" role="button" tabindex="0"` : ""}
+                    >
                         <div class="hc-admin-alert-item-head">
                             <span class="hc-admin-alert-chip is-${escapeHtml(alert.severity || "normal")}">${escapeHtml(alert.severity_label || "Normal")}</span>
                             <small>${escapeHtml(alert.meta_label || "")}</small>
@@ -3963,6 +3966,32 @@
         soundToggle?.addEventListener("change", () => {
             setSoundEnabled(Boolean(soundToggle.checked));
             syncNotificationControls();
+        });
+
+        listNode.addEventListener("click", (event) => {
+            const interactiveTarget = event.target.closest("a, button");
+            if (interactiveTarget) {
+                return;
+            }
+            const card = event.target.closest(".hc-admin-alert-item.is-openable");
+            const targetUrl = card?.dataset?.targetUrl;
+            if (!targetUrl) {
+                return;
+            }
+            window.location.href = targetUrl;
+        });
+
+        listNode.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") {
+                return;
+            }
+            const card = event.target.closest(".hc-admin-alert-item.is-openable");
+            const targetUrl = card?.dataset?.targetUrl;
+            if (!targetUrl) {
+                return;
+            }
+            event.preventDefault();
+            window.location.href = targetUrl;
         });
 
         window.addEventListener("focus", () => refreshPayload({ silent: true }));
