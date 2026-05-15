@@ -3690,6 +3690,7 @@
         const soundPreferenceKey = "heavenectionAdminAlertSoundEnabled";
         const shownFlashIdsKey = "heavenectionAdminAlertShownFlashIds";
         const shownDesktopIdsKey = "heavenectionAdminAlertShownDesktopIds";
+        const seenAlertIdsKey = "heavenectionAdminAlertSeenIds";
 
         function readStoredIdSet(storageKey) {
             if (!window.sessionStorage) {
@@ -3723,6 +3724,21 @@
 
         const shownFlashIds = readStoredIdSet(shownFlashIdsKey);
         const shownDesktopIds = readStoredIdSet(shownDesktopIdsKey);
+        const seenAlertIds = readStoredIdSet(seenAlertIdsKey);
+
+        function markAlertSeen(alertId) {
+            const normalizedId = String(alertId || "").trim();
+            if (!normalizedId) {
+                return;
+            }
+            seenAlertIds.add(normalizedId);
+            writeStoredIdSet(seenAlertIdsKey, seenAlertIds);
+        }
+
+        function isAlertSeen(alertId) {
+            const normalizedId = String(alertId || "").trim();
+            return normalizedId ? seenAlertIds.has(normalizedId) : false;
+        }
 
         function isNotificationSupported() {
             return typeof window.Notification !== "undefined";
@@ -3825,7 +3841,8 @@
             }
         }
 
-        function openAdminAlertTarget(targetUrl) {
+        function openAdminAlertTarget(targetUrl, alertId = "") {
+            markAlertSeen(alertId);
             const resolvedUrl = resolveAdminAlertUrl(targetUrl);
             if (!resolvedUrl) {
                 return;
@@ -3863,7 +3880,7 @@
                     // Ignore focus issues.
                 }
                 if (alert.target_url) {
-                    openAdminAlertTarget(alert.target_url);
+                    openAdminAlertTarget(alert.target_url, alert.id);
                 }
                 notification.close();
             };
@@ -3906,16 +3923,20 @@
             const summary = latestPayload.summary || {};
             const alerts = Array.isArray(latestPayload.alerts) ? latestPayload.alerts : [];
             const totalAlerts = Number(summary.total_alerts || alerts.length || 0);
+            const unreadAlerts = alerts.filter((alert) => !isAlertSeen(alert.id));
+            const unreadCount = unreadAlerts.length;
             const criticalAlerts = Number(summary.critical_alerts || 0);
 
             if (badge) {
-                badge.textContent = String(totalAlerts);
-                badge.classList.toggle("d-none", totalAlerts <= 0);
+                badge.textContent = String(unreadCount);
+                badge.classList.toggle("d-none", unreadCount <= 0);
             }
             if (statusNode) {
-                statusNode.textContent = totalAlerts > 0
-                    ? `${totalAlerts} active alert${totalAlerts === 1 ? "" : "s"}`
-                    : "No active alerts";
+                statusNode.textContent = totalAlerts <= 0
+                    ? "No active alerts"
+                    : unreadCount > 0
+                        ? `${unreadCount} unopened alert${unreadCount === 1 ? "" : "s"}`
+                        : "All active alerts opened";
             }
             if (generatedAtNode) {
                 generatedAtNode.textContent = summary.generated_at_label || "--";
@@ -3923,14 +3944,14 @@
 
             listNode.innerHTML = alerts.length
                 ? alerts.map((alert) => `
-                    <article class="hc-admin-alert-item is-${escapeHtml(alert.severity || "normal")}">
+                    <article class="hc-admin-alert-item is-${escapeHtml(alert.severity || "normal")}${isAlertSeen(alert.id) ? " is-read" : ""}" data-alert-id="${escapeHtml(alert.id || "")}">
                         <div class="hc-admin-alert-item-head">
                             <span class="hc-admin-alert-chip is-${escapeHtml(alert.severity || "normal")}">${escapeHtml(alert.severity_label || "Normal")}</span>
                             <small>${escapeHtml(alert.meta_label || "")}</small>
                         </div>
                         <strong>${escapeHtml(alert.title || "Alert")}</strong>
                         <p>${escapeHtml(alert.message || "")}</p>
-                        ${alert.target_url ? `<a href="${escapeHtml(alert.target_url)}" class="btn btn-sm btn-outline-primary hc-admin-alert-open-link" data-alert-open="1">${escapeHtml(alert.target_label || "Open")}</a>` : ""}
+                        ${alert.target_url ? `<a href="${escapeHtml(alert.target_url)}" class="btn btn-sm btn-outline-primary hc-admin-alert-open-link" data-alert-open="1" data-alert-id="${escapeHtml(alert.id || "")}">${escapeHtml(alert.target_label || "Open")}</a>` : ""}
                     </article>
                 `).join("")
                 : '<div class="hc-admin-alert-empty">No alert signals are active right now.</div>';
@@ -4003,7 +4024,8 @@
                 return;
             }
             event.preventDefault();
-            openAdminAlertTarget(href);
+            openAdminAlertTarget(href, openLink.dataset.alertId || "");
+            renderPayload(latestPayload);
         });
 
         window.addEventListener("focus", () => refreshPayload({ silent: true }));

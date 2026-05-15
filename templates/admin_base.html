@@ -331,7 +331,7 @@
                         <div class="hc-admin-alert-permission-note" id="heavenectionAdminAlertPermissionNote">Browser notifications are not enabled yet.</div>
                         <div class="hc-admin-alert-list" id="heavenectionAdminAlertList">
                             {% for alert in admin_alert_payload.alerts %}
-                            <article class="hc-admin-alert-item is-{{ alert.severity }}">
+                            <article class="hc-admin-alert-item is-{{ alert.severity }}" data-alert-id="{{ alert.id }}">
                                 <div class="hc-admin-alert-item-head">
                                     <span class="hc-admin-alert-chip is-{{ alert.severity }}">{{ alert.severity_label }}</span>
                                     <small>{{ alert.meta_label }}</small>
@@ -339,7 +339,7 @@
                                 <strong>{{ alert.title }}</strong>
                                 <p>{{ alert.message }}</p>
                                 {% if alert.target_url %}
-                                <a href="{{ alert.target_url }}" class="btn btn-sm btn-outline-primary hc-admin-alert-open-link" data-alert-open="1">{{ alert.target_label }}</a>
+                                <a href="{{ alert.target_url }}" class="btn btn-sm btn-outline-primary hc-admin-alert-open-link" data-alert-open="1" data-alert-id="{{ alert.id }}">{{ alert.target_label }}</a>
                                 {% endif %}
                             </article>
                             {% empty %}

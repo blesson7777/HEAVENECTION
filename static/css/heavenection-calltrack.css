@@ -686,6 +686,17 @@
     background: rgba(255, 255, 255, 0.82);
 }
 
+.hc-admin-alert-item.is-read {
+    opacity: 0.68;
+    filter: saturate(0.82);
+}
+
+.hc-admin-alert-item.is-read strong,
+.hc-admin-alert-item.is-read p,
+.hc-admin-alert-item.is-read small {
+    color: #73829b;
+}
+
 .hc-admin-alert-item.is-critical {
     border-color: rgba(217, 72, 95, 0.24);
     background: linear-gradient(180deg, rgba(255, 236, 239, 0.96), rgba(255, 247, 248, 0.98));
