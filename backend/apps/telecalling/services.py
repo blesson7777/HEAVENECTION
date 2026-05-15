@@ -641,7 +641,7 @@ def build_admin_web_alert_payload(*, limit=10):
     company_profile = get_company_profile()
     now = timezone.now()
     today = timezone.localdate()
-    today_start, today_end = _today_range(now)
+    _, today_start, today_end = _today_range()
     alerts = []
     staff_rows = monitoring_payload.get("staff_rows", [])
 
