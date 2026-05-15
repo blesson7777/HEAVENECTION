@@ -636,6 +636,98 @@ def build_app_notification_management_payload():
     }
 
 
+def build_admin_web_alert_payload(*, limit=10):
+    monitoring_payload = build_live_monitoring_payload()
+    alerts = []
+    for row in monitoring_payload.get("staff_rows", []):
+        staff_id = str(row.get("id") or "").strip()
+        if not staff_id:
+            continue
+        staff_name = row.get("name") or "Staff member"
+        profile_url = f"/staff/{staff_id}/"
+        work_review_url = "/work-review/"
+        quality_label = row.get("quality_label") or ""
+        quality_note = row.get("quality_note") or row.get("status_note") or ""
+        suspicious_blocks = int(row.get("suspicious_block_count") or 0)
+        zero_only_blocks = int(row.get("zero_only_block_count") or 0)
+        missed_callbacks = int(row.get("missed_callbacks") or 0)
+        invalid_short_count = int(row.get("invalid_short_count") or 0)
+        zero_second_count = int(row.get("zero_second_attempt_count") or 0)
+
+        if quality_label == "Review Needed" or suspicious_blocks > 0 or zero_only_blocks > 0:
+            review_message = quality_note or "Call patterns need supervisor review."
+            alerts.append(
+                {
+                    "id": f"review-{staff_id}",
+                    "severity": "critical",
+                    "severity_label": "Critical",
+                    "title": f"{staff_name} needs review",
+                    "message": review_message,
+                    "staff_name": staff_name,
+                    "target_url": work_review_url,
+                    "target_label": "Open Work Review",
+                    "meta_label": row.get("attempt_review_label") or row.get("online_label") or "Needs review",
+                    "sort_score": 100 + suspicious_blocks * 10 + zero_only_blocks * 8 + missed_callbacks * 4,
+                }
+            )
+
+        if missed_callbacks > 0:
+            alerts.append(
+                {
+                    "id": f"callback-{staff_id}",
+                    "severity": "warning",
+                    "severity_label": "Warning",
+                    "title": f"{staff_name} has missed follow-ups",
+                    "message": f"{missed_callbacks} scheduled follow-up lead(s) now need attention.",
+                    "staff_name": staff_name,
+                    "target_url": "/followups/",
+                    "target_label": "Open Follow-Ups",
+                    "meta_label": row.get("online_label") or "Follow-up delay",
+                    "sort_score": 70 + missed_callbacks * 6,
+                }
+            )
+
+        if quality_label == "Needs Attention" or invalid_short_count > 0 or zero_second_count > 0:
+            alerts.append(
+                {
+                    "id": f"attention-{staff_id}",
+                    "severity": "normal",
+                    "severity_label": "Normal",
+                    "title": f"{staff_name} shows lighter warning signals",
+                    "message": quality_note or "Some empty or short call attempts should be reviewed.",
+                    "staff_name": staff_name,
+                    "target_url": profile_url,
+                    "target_label": "Open Staff Profile",
+                    "meta_label": (
+                        f"{invalid_short_count} invalid short · {zero_second_count} zero-second"
+                        if invalid_short_count or zero_second_count
+                        else (row.get("online_label") or "Attention")
+                    ),
+                    "sort_score": 40 + invalid_short_count * 4 + zero_second_count,
+                }
+            )
+
+    alerts.sort(
+        key=lambda item: (
+            APP_NOTIFICATION_SEVERITY_ORDER.get(item["severity"], 99),
+            -int(item.get("sort_score") or 0),
+            item.get("title") or "",
+        )
+    )
+    alerts = alerts[: max(1, int(limit or 10))]
+    critical_count = sum(1 for item in alerts if item["severity"] == "critical")
+    warning_count = sum(1 for item in alerts if item["severity"] == "warning")
+    return {
+        "summary": {
+            "total_alerts": len(alerts),
+            "critical_alerts": critical_count,
+            "warning_alerts": warning_count,
+            "generated_at_label": monitoring_payload.get("generated_at_label", _format_datetime(timezone.now())),
+        },
+        "alerts": alerts,
+    }
+
+
 def build_staff_document_url(staff, document_type, *, request=None, route_name="staff-document-page"):
     field_name = f"{document_type}_photo"
     file_field = getattr(staff, field_name, None)

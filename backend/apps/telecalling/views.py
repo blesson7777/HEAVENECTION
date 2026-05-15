@@ -75,6 +75,7 @@ from backend.apps.telecalling.serializers import (
     UpdateTrainingLessonSerializer,
 )
 from backend.apps.telecalling.services import (
+    build_admin_web_alert_payload,
     assign_selected_leads_to_staff_queue,
     auto_allocate_leads,
     authenticate_staff,
@@ -161,6 +162,18 @@ from backend.apps.telecalling.services import (
 logger = logging.getLogger(__name__)
 
 
+def _fallback_admin_alert_payload():
+    return {
+        "summary": {
+            "total_alerts": 0,
+            "critical_alerts": 0,
+            "warning_alerts": 0,
+            "generated_at_label": _format_datetime(timezone.now()),
+        },
+        "alerts": [],
+    }
+
+
 def _admin_web_context(request, current_user, *, active_page, page_title, page_heading, page_subtitle, extra_context=None):
     mark_staff_seen(current_user)
     company_profile = get_company_profile()
@@ -171,6 +184,12 @@ def _admin_web_context(request, current_user, *, active_page, page_title, page_h
         "page_title": page_title,
         "page_heading": page_heading,
         "page_subtitle": page_subtitle,
+        "admin_alert_payload": _safe_admin_payload(
+            build_admin_web_alert_payload,
+            _fallback_admin_alert_payload,
+            label="admin-alerts-context",
+            request=request,
+        ),
     }
     if extra_context:
         context.update(extra_context)
@@ -3109,6 +3128,19 @@ def live_monitoring_api(request):
             build_live_monitoring_payload,
             _fallback_live_monitoring_payload,
             label="live-monitoring-api",
+        )
+    )
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAdminStaff])
+def admin_alerts_api(request):
+    return Response(
+        _safe_admin_payload(
+            build_admin_web_alert_payload,
+            _fallback_admin_alert_payload,
+            label="admin-alerts-api",
+            request=request,
         )
     )
 

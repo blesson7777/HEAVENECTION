@@ -3667,6 +3667,139 @@
         scheduleRefresh();
     }
 
+    function bindAdminAlertCenter() {
+        const button = document.getElementById("heavenectionAdminAlertButton");
+        const badge = document.getElementById("heavenectionAdminAlertBadge");
+        const statusNode = document.getElementById("heavenectionAdminAlertStatus");
+        const generatedAtNode = document.getElementById("heavenectionAdminAlertGeneratedAt");
+        const listNode = document.getElementById("heavenectionAdminAlertList");
+        const flashTarget = document.getElementById("heavenectionClientFlash");
+        const apiUrl = window.heavenectionAdmin?.adminAlertsUrl || "";
+        if (!button || !listNode) {
+            return;
+        }
+
+        let latestPayload = readJsonScript("heavenectionAdminAlertPayload") || { summary: {}, alerts: [] };
+        let refreshTimer = null;
+        let lastAlertSignature = "";
+        const shownFlashIds = new Set();
+        const refreshMs = 15000;
+
+        function alertToneClass(severity) {
+            if (severity === "critical") {
+                return "danger";
+            }
+            if (severity === "warning") {
+                return "warning";
+            }
+            if (severity === "good") {
+                return "success";
+            }
+            return "primary";
+        }
+
+        function renderFlashAlert(alert) {
+            if (!flashTarget || !alert?.id || shownFlashIds.has(alert.id)) {
+                return;
+            }
+            shownFlashIds.add(alert.id);
+            const toneClass = alertToneClass(alert.severity);
+            const stack = flashTarget.querySelector(".hc-page-flash-stack") || (() => {
+                const wrapper = document.createElement("div");
+                wrapper.className = "hc-page-flash-stack";
+                flashTarget.prepend(wrapper);
+                return wrapper;
+            })();
+            const node = document.createElement("div");
+            node.className = `alert alert-${toneClass} alert-dismissible fade show`;
+            node.setAttribute("role", "alert");
+            node.innerHTML = `
+                <strong>${escapeHtml(alert.title || "Alert")}</strong>
+                <span class="ms-1">${escapeHtml(alert.message || "")}</span>
+                ${alert.target_url ? `<a href="${escapeHtml(alert.target_url)}" class="alert-link ms-2">${escapeHtml(alert.target_label || "Open")}</a>` : ""}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            stack.prepend(node);
+            window.setTimeout(() => {
+                if (node && node.parentNode) {
+                    node.remove();
+                }
+            }, alert.severity === "critical" ? 12000 : 8000);
+        }
+
+        function renderPayload(payload) {
+            latestPayload = payload || { summary: {}, alerts: [] };
+            const summary = latestPayload.summary || {};
+            const alerts = Array.isArray(latestPayload.alerts) ? latestPayload.alerts : [];
+            const totalAlerts = Number(summary.total_alerts || alerts.length || 0);
+            const criticalAlerts = Number(summary.critical_alerts || 0);
+
+            if (badge) {
+                badge.textContent = String(totalAlerts);
+                badge.classList.toggle("d-none", totalAlerts <= 0);
+            }
+            if (statusNode) {
+                statusNode.textContent = totalAlerts > 0
+                    ? `${totalAlerts} active alert${totalAlerts === 1 ? "" : "s"}`
+                    : "No active alerts";
+            }
+            if (generatedAtNode) {
+                generatedAtNode.textContent = summary.generated_at_label || "--";
+            }
+
+            listNode.innerHTML = alerts.length
+                ? alerts.map((alert) => `
+                    <article class="hc-admin-alert-item is-${escapeHtml(alert.severity || "normal")}">
+                        <div class="hc-admin-alert-item-head">
+                            <span class="hc-admin-alert-chip is-${escapeHtml(alert.severity || "normal")}">${escapeHtml(alert.severity_label || "Normal")}</span>
+                            <small>${escapeHtml(alert.meta_label || "")}</small>
+                        </div>
+                        <strong>${escapeHtml(alert.title || "Alert")}</strong>
+                        <p>${escapeHtml(alert.message || "")}</p>
+                        ${alert.target_url ? `<a href="${escapeHtml(alert.target_url)}" class="btn btn-sm btn-outline-primary">${escapeHtml(alert.target_label || "Open")}</a>` : ""}
+                    </article>
+                `).join("")
+                : '<div class="hc-admin-alert-empty">No alert signals are active right now.</div>';
+
+            button.classList.toggle("btn-outline-danger", criticalAlerts > 0);
+            button.classList.toggle("btn-outline-primary", criticalAlerts <= 0);
+        }
+
+        async function refreshPayload(options = {}) {
+            if (!apiUrl) {
+                return;
+            }
+            try {
+                const payload = await requestJson(apiUrl, { method: "GET" });
+                renderPayload(payload);
+                const signature = JSON.stringify((payload.alerts || []).map((alert) => [alert.id, alert.severity]));
+                if (signature !== lastAlertSignature) {
+                    (payload.alerts || [])
+                        .filter((alert) => alert.severity === "critical" || alert.severity === "warning")
+                        .slice(0, 2)
+                        .forEach(renderFlashAlert);
+                }
+                lastAlertSignature = signature;
+            } catch (error) {
+                if (!options.silent && statusNode) {
+                    statusNode.textContent = "Alert refresh delayed";
+                }
+            } finally {
+                if (refreshTimer) {
+                    window.clearTimeout(refreshTimer);
+                }
+                refreshTimer = window.setTimeout(() => refreshPayload({ silent: true }), refreshMs);
+            }
+        }
+
+        renderPayload(latestPayload);
+        lastAlertSignature = JSON.stringify((latestPayload.alerts || []).map((alert) => [alert.id, alert.severity]));
+        refreshPayload({ silent: true });
+
+        window.addEventListener("focus", () => refreshPayload({ silent: true }));
+        window.addEventListener("online", () => refreshPayload({ silent: false }));
+    }
+
     function bindSidebarSections() {
         const sections = Array.from(document.querySelectorAll(".hc-sidebar-section"));
         if (!sections.length) {
@@ -3847,6 +3980,7 @@
     bindSalaryControlCrud();
     bindLiveMonitoringPage();
     bindPerformanceMonitoringPage();
+    bindAdminAlertCenter();
     bindSidebarSections();
     bindEmiCalculator();
 })();

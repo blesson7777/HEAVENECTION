@@ -26,6 +26,7 @@ urlpatterns = [
     path("working-hours/", views.working_hours_api, name="api-working-hours"),
     path("staff/live/", views.live_staff_api, name="api-live-staff"),
     path("monitoring/live/", views.live_monitoring_api, name="api-live-monitoring"),
+    path("monitoring/alerts/", views.admin_alerts_api, name="api-admin-alerts"),
     path("staff/manage/", views.team_members_api, name="api-team-members"),
     path("staff/manage/<uuid:staff_id>/", views.team_member_detail_api, name="api-team-member-detail"),
     path("staff/actions/", views.staff_actions_api, name="api-staff-actions"),

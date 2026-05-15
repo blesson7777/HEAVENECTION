@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="{% static 'css/heavenection-calltrack.css' %}?v=20260427d">
 </head>
 <body class="mf-theme-admin hc-admin-web">
+{{ admin_alert_payload|json_script:"heavenectionAdminAlertPayload" }}
 <div class="hc-network-overlay" id="heavenectionNetworkOverlay" hidden>
     <div class="hc-network-card">
         <div class="hc-network-animation">
@@ -291,6 +292,55 @@
                 <div class="dropdown">
                     <button
                         type="button"
+                        class="btn btn-outline-primary hc-admin-alert-trigger dropdown-toggle"
+                        id="heavenectionAdminAlertButton"
+                        data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside"
+                        aria-expanded="false"
+                    >
+                        <span class="hc-admin-alert-icon">
+                            <i class="bi bi-bell-fill"></i>
+                            <span class="hc-admin-alert-badge{% if not admin_alert_payload.summary.total_alerts %} d-none{% endif %}" id="heavenectionAdminAlertBadge">{{ admin_alert_payload.summary.total_alerts }}</span>
+                        </span>
+                        <span class="hc-admin-alert-copy">
+                            <strong>Alerts</strong>
+                            <small id="heavenectionAdminAlertStatus">
+                                {% if admin_alert_payload.summary.total_alerts %}
+                                    {{ admin_alert_payload.summary.total_alerts }} active warning{{ admin_alert_payload.summary.total_alerts|pluralize }}
+                                {% else %}
+                                    No active alerts
+                                {% endif %}
+                            </small>
+                        </span>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end hc-admin-alert-menu">
+                        <div class="hc-admin-alert-head">
+                            <div>
+                                <strong>Admin Alerts</strong>
+                                <small id="heavenectionAdminAlertGeneratedAt">{{ admin_alert_payload.summary.generated_at_label }}</small>
+                            </div>
+                            <a href="{% url 'work-review-page' %}" class="btn btn-outline-primary btn-sm">Work Review</a>
+                        </div>
+                        <div class="hc-admin-alert-list" id="heavenectionAdminAlertList">
+                            {% for alert in admin_alert_payload.alerts %}
+                            <article class="hc-admin-alert-item is-{{ alert.severity }}">
+                                <div class="hc-admin-alert-item-head">
+                                    <span class="hc-admin-alert-chip is-{{ alert.severity }}">{{ alert.severity_label }}</span>
+                                    <small>{{ alert.meta_label }}</small>
+                                </div>
+                                <strong>{{ alert.title }}</strong>
+                                <p>{{ alert.message }}</p>
+                                <a href="{{ alert.target_url }}" class="btn btn-sm btn-outline-primary">{{ alert.target_label }}</a>
+                            </article>
+                            {% empty %}
+                            <div class="hc-admin-alert-empty">No alert signals are active right now.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="dropdown">
+                    <button
+                        type="button"
                         class="btn hc-profile-trigger dropdown-toggle"
                         data-bs-toggle="dropdown"
                         aria-expanded="false"
@@ -442,6 +492,7 @@ window.heavenectionAdmin = {
     callsUrl: "{% url 'api-calls' %}",
     workingHoursUrl: "{% url 'api-working-hours' %}",
     liveMonitoringUrl: "{% url 'api-live-monitoring' %}",
+    adminAlertsUrl: "{% url 'api-admin-alerts' %}",
     salarySummaryUrl: "{% url 'api-salary-summary' %}",
     salaryControlUrl: "{% url 'api-salary-control' %}"
 };
