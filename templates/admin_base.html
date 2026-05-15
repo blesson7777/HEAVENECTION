@@ -508,13 +508,15 @@ window.heavenectionAdmin = {
     salaryControlUrl: "{% url 'api-salary-control' %}"
 };
 </script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="{% static 'js/heavenection-network.js' %}?v=20260402c"></script>
-<script src="{% static 'js/dashboard-ux.js' %}?v=20260402c"></script>
-<script src="{% static 'js/heavenection-confirm.js' %}?v=20260410d"></script>
-  <script src="{% static 'js/heavenection-calltrack.js' %}?v=20260423c"></script>
-<script src="{% static 'js/heavenection-pwa.js' %}?v=20260402c"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+{% if active_page == 'dashboard' %}
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endif %}
+<script defer src="{% static 'js/heavenection-network.js' %}?v=20260402c"></script>
+<script defer src="{% static 'js/dashboard-ux.js' %}?v=20260402c"></script>
+<script defer src="{% static 'js/heavenection-confirm.js' %}?v=20260410d"></script>
+<script defer src="{% static 'js/heavenection-calltrack.js' %}?v=20260515a"></script>
+<script defer src="{% static 'js/heavenection-pwa.js' %}?v=20260402c"></script>
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>
