@@ -621,6 +621,56 @@
     color: #70809a;
 }
 
+.hc-admin-alert-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.hc-admin-alert-sound-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2rem;
+    padding: 0.35rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid rgba(77, 92, 144, 0.14);
+    background: rgba(255, 255, 255, 0.84);
+    color: #425179;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.hc-admin-alert-sound-toggle input {
+    width: 0.95rem;
+    height: 0.95rem;
+    accent-color: #4d5c90;
+}
+
+.hc-admin-alert-permission-note {
+    margin-bottom: 0.75rem;
+    padding: 0.68rem 0.8rem;
+    border-radius: 14px;
+    border: 1px solid rgba(77, 92, 144, 0.12);
+    background: rgba(242, 246, 255, 0.9);
+    color: #5f6f8a;
+    font-size: 0.84rem;
+}
+
+.hc-admin-alert-permission-note.is-granted {
+    border-color: rgba(46, 154, 95, 0.18);
+    background: rgba(235, 249, 241, 0.92);
+    color: #2f7b51;
+}
+
+.hc-admin-alert-permission-note.is-denied {
+    border-color: rgba(217, 72, 95, 0.18);
+    background: rgba(255, 241, 244, 0.94);
+    color: #a84358;
+}
+
 .hc-admin-alert-list {
     display: grid;
     gap: 0.7rem;

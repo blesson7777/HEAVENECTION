@@ -319,8 +319,16 @@
                                 <strong>Admin Alerts</strong>
                                 <small id="heavenectionAdminAlertGeneratedAt">{{ admin_alert_payload.summary.generated_at_label }}</small>
                             </div>
-                            <a href="{% url 'work-review-page' %}" class="btn btn-outline-primary btn-sm">Work Review</a>
+                            <div class="hc-admin-alert-tools">
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="heavenectionAdminAlertPermissionButton">Enable Browser Alerts</button>
+                                <label class="hc-admin-alert-sound-toggle" for="heavenectionAdminAlertSoundToggle">
+                                    <input type="checkbox" id="heavenectionAdminAlertSoundToggle">
+                                    <span>Sound</span>
+                                </label>
+                                <a href="{% url 'work-review-page' %}" class="btn btn-outline-primary btn-sm">Work Review</a>
+                            </div>
                         </div>
+                        <div class="hc-admin-alert-permission-note" id="heavenectionAdminAlertPermissionNote">Browser notifications are not enabled yet.</div>
                         <div class="hc-admin-alert-list" id="heavenectionAdminAlertList">
                             {% for alert in admin_alert_payload.alerts %}
                             <article class="hc-admin-alert-item is-{{ alert.severity }}">
@@ -493,6 +501,7 @@ window.heavenectionAdmin = {
     workingHoursUrl: "{% url 'api-working-hours' %}",
     liveMonitoringUrl: "{% url 'api-live-monitoring' %}",
     adminAlertsUrl: "{% url 'api-admin-alerts' %}",
+    notificationIconUrl: "{% static 'pwa/icon-192.png' %}",
     salarySummaryUrl: "{% url 'api-salary-summary' %}",
     salaryControlUrl: "{% url 'api-salary-control' %}"
 };

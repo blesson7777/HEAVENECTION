@@ -3674,7 +3674,11 @@
         const generatedAtNode = document.getElementById("heavenectionAdminAlertGeneratedAt");
         const listNode = document.getElementById("heavenectionAdminAlertList");
         const flashTarget = document.getElementById("heavenectionClientFlash");
+        const permissionButton = document.getElementById("heavenectionAdminAlertPermissionButton");
+        const permissionNote = document.getElementById("heavenectionAdminAlertPermissionNote");
+        const soundToggle = document.getElementById("heavenectionAdminAlertSoundToggle");
         const apiUrl = window.heavenectionAdmin?.adminAlertsUrl || "";
+        const notificationIconUrl = window.heavenectionAdmin?.notificationIconUrl || "";
         if (!button || !listNode) {
             return;
         }
@@ -3683,7 +3687,56 @@
         let refreshTimer = null;
         let lastAlertSignature = "";
         const shownFlashIds = new Set();
+        const shownDesktopIds = new Set();
         const refreshMs = 15000;
+        const soundPreferenceKey = "heavenectionAdminAlertSoundEnabled";
+
+        function isNotificationSupported() {
+            return typeof window.Notification !== "undefined";
+        }
+
+        function isSoundEnabled() {
+            if (!window.localStorage) {
+                return false;
+            }
+            return window.localStorage.getItem(soundPreferenceKey) === "1";
+        }
+
+        function setSoundEnabled(enabled) {
+            if (!window.localStorage) {
+                return;
+            }
+            window.localStorage.setItem(soundPreferenceKey, enabled ? "1" : "0");
+        }
+
+        function syncNotificationControls() {
+            const supported = isNotificationSupported();
+            const permission = supported ? window.Notification.permission : "unsupported";
+            if (permissionButton) {
+                permissionButton.hidden = !supported || permission === "granted";
+                permissionButton.disabled = permission === "denied";
+                permissionButton.textContent = permission === "denied"
+                    ? "Browser Alerts Blocked"
+                    : "Enable Browser Alerts";
+            }
+            if (permissionNote) {
+                permissionNote.classList.remove("is-granted", "is-denied");
+                if (!supported) {
+                    permissionNote.textContent = "This browser does not support desktop notifications.";
+                } else if (permission === "granted") {
+                    permissionNote.classList.add("is-granted");
+                    permissionNote.textContent = "Browser notifications are enabled. New warning and critical alerts can appear as desktop notifications.";
+                } else if (permission === "denied") {
+                    permissionNote.classList.add("is-denied");
+                    permissionNote.textContent = "Browser notifications are blocked. Allow notifications in browser settings to receive desktop alerts.";
+                } else {
+                    permissionNote.textContent = "Browser notifications are not enabled yet.";
+                }
+            }
+            if (soundToggle) {
+                soundToggle.checked = isSoundEnabled();
+            }
+        }
 
         function alertToneClass(severity) {
             if (severity === "critical") {
@@ -3696,6 +3749,64 @@
                 return "success";
             }
             return "primary";
+        }
+
+        function playAlertSound(severity) {
+            if (!isSoundEnabled()) {
+                return;
+            }
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContextClass) {
+                return;
+            }
+            try {
+                const audioContext = new AudioContextClass();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                oscillator.type = "sine";
+                oscillator.frequency.value = severity === "critical" ? 880 : 660;
+                gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.08, audioContext.currentTime + 0.02);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.32);
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                oscillator.start();
+                oscillator.stop(audioContext.currentTime + 0.34);
+                oscillator.onended = () => {
+                    audioContext.close().catch(() => {});
+                };
+            } catch (error) {
+                // Ignore sound playback failures quietly.
+            }
+        }
+
+        function showDesktopNotification(alert) {
+            if (!alert?.id || shownDesktopIds.has(alert.id)) {
+                return;
+            }
+            if (!isNotificationSupported() || window.Notification.permission !== "granted") {
+                return;
+            }
+            shownDesktopIds.add(alert.id);
+            const notification = new window.Notification(alert.title || "Admin Alert", {
+                body: alert.message || "",
+                tag: `heavenection-admin-alert-${alert.id}`,
+                icon: notificationIconUrl || undefined,
+                requireInteraction: alert.severity === "critical",
+            });
+            notification.onclick = () => {
+                try {
+                    window.focus();
+                } catch (error) {
+                    // Ignore focus issues.
+                }
+                if (alert.target_url) {
+                    window.location.href = alert.target_url;
+                }
+                notification.close();
+            };
+            window.setTimeout(() => notification.close(), alert.severity === "critical" ? 15000 : 9000);
+            playAlertSound(alert.severity);
         }
 
         function renderFlashAlert(alert) {
@@ -3763,6 +3874,7 @@
 
             button.classList.toggle("btn-outline-danger", criticalAlerts > 0);
             button.classList.toggle("btn-outline-primary", criticalAlerts <= 0);
+            syncNotificationControls();
         }
 
         async function refreshPayload(options = {}) {
@@ -3776,8 +3888,11 @@
                 if (signature !== lastAlertSignature) {
                     (payload.alerts || [])
                         .filter((alert) => alert.severity === "critical" || alert.severity === "warning")
-                        .slice(0, 2)
-                        .forEach(renderFlashAlert);
+                        .slice(0, 3)
+                        .forEach((alert) => {
+                            renderFlashAlert(alert);
+                            showDesktopNotification(alert);
+                        });
                 }
                 lastAlertSignature = signature;
             } catch (error) {
@@ -3795,6 +3910,25 @@
         renderPayload(latestPayload);
         lastAlertSignature = JSON.stringify((latestPayload.alerts || []).map((alert) => [alert.id, alert.severity]));
         refreshPayload({ silent: true });
+        syncNotificationControls();
+
+        permissionButton?.addEventListener("click", async () => {
+            if (!isNotificationSupported()) {
+                syncNotificationControls();
+                return;
+            }
+            try {
+                await window.Notification.requestPermission();
+            } catch (error) {
+                // Ignore permission request failures.
+            }
+            syncNotificationControls();
+        });
+
+        soundToggle?.addEventListener("change", () => {
+            setSoundEnabled(Boolean(soundToggle.checked));
+            syncNotificationControls();
+        });
 
         window.addEventListener("focus", () => refreshPayload({ silent: true }));
         window.addEventListener("online", () => refreshPayload({ silent: false }));
