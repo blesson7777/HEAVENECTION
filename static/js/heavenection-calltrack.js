@@ -3813,6 +3813,34 @@
             }
         }
 
+        function resolveAdminAlertUrl(targetUrl) {
+            const raw = String(targetUrl || "").trim();
+            if (!raw) {
+                return "";
+            }
+            try {
+                return new URL(raw, window.location.origin).href;
+            } catch (error) {
+                return raw;
+            }
+        }
+
+        function openAdminAlertTarget(targetUrl) {
+            const resolvedUrl = resolveAdminAlertUrl(targetUrl);
+            if (!resolvedUrl) {
+                return;
+            }
+            try {
+                const opened = window.open(resolvedUrl, "_self");
+                if (opened) {
+                    return;
+                }
+            } catch (error) {
+                // Fall back to direct navigation below.
+            }
+            window.location.assign(resolvedUrl);
+        }
+
         function showDesktopNotification(alert) {
             if (!alert?.id || shownDesktopIds.has(alert.id)) {
                 return;
@@ -3835,7 +3863,7 @@
                     // Ignore focus issues.
                 }
                 if (alert.target_url) {
-                    window.location.href = alert.target_url;
+                    openAdminAlertTarget(alert.target_url);
                 }
                 notification.close();
             };
@@ -3902,7 +3930,7 @@
                         </div>
                         <strong>${escapeHtml(alert.title || "Alert")}</strong>
                         <p>${escapeHtml(alert.message || "")}</p>
-                        ${alert.target_url ? `<a href="${escapeHtml(alert.target_url)}" class="btn btn-sm btn-outline-primary">${escapeHtml(alert.target_label || "Open")}</a>` : ""}
+                        ${alert.target_url ? `<a href="${escapeHtml(alert.target_url)}" class="btn btn-sm btn-outline-primary hc-admin-alert-open-link" data-alert-open="1">${escapeHtml(alert.target_label || "Open")}</a>` : ""}
                     </article>
                 `).join("")
                 : '<div class="hc-admin-alert-empty">No alert signals are active right now.</div>';
@@ -3963,6 +3991,19 @@
         soundToggle?.addEventListener("change", () => {
             setSoundEnabled(Boolean(soundToggle.checked));
             syncNotificationControls();
+        });
+
+        listNode.addEventListener("click", (event) => {
+            const openLink = event.target.closest("a[data-alert-open='1']");
+            if (!openLink) {
+                return;
+            }
+            const href = openLink.getAttribute("href");
+            if (!href) {
+                return;
+            }
+            event.preventDefault();
+            openAdminAlertTarget(href);
         });
 
         window.addEventListener("focus", () => refreshPayload({ silent: true }));

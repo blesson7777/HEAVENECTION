@@ -339,7 +339,7 @@
                                 <strong>{{ alert.title }}</strong>
                                 <p>{{ alert.message }}</p>
                                 {% if alert.target_url %}
-                                <a href="{{ alert.target_url }}" class="btn btn-sm btn-outline-primary">{{ alert.target_label }}</a>
+                                <a href="{{ alert.target_url }}" class="btn btn-sm btn-outline-primary hc-admin-alert-open-link" data-alert-open="1">{{ alert.target_label }}</a>
                                 {% endif %}
                             </article>
                             {% empty %}
