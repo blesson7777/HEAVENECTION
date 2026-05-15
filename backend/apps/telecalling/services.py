@@ -206,8 +206,11 @@ def get_lead_queue_limit():
     return max(1, int(profile.lead_queue_target_per_staff or DEFAULT_LEAD_QUEUE_LIMIT))
 
 
-def _today_range():
-    today = timezone.localdate()
+def _today_range(now=None):
+    if now is None:
+        now = timezone.now()
+    local_now = timezone.localtime(now)
+    today = local_now.date()
     start = timezone.make_aware(timezone.datetime.combine(today, timezone.datetime.min.time()))
     end = timezone.make_aware(timezone.datetime.combine(today, timezone.datetime.max.time()))
     return today, start, end
