@@ -638,11 +638,130 @@ def build_app_notification_management_payload():
 
 def build_admin_web_alert_payload(*, limit=10):
     monitoring_payload = build_live_monitoring_payload()
+    company_profile = get_company_profile()
+    now = timezone.now()
+    today = timezone.localdate()
+    today_start, today_end = _today_range(now)
     alerts = []
-    for row in monitoring_payload.get("staff_rows", []):
+    staff_rows = monitoring_payload.get("staff_rows", [])
+
+    def _minutes_from_duration_label(label):
+        text = str(label or "").strip().lower()
+        if not text:
+            return 0
+        total_minutes = Decimal("0")
+        hour_match = re.search(r"(\d+(?:\.\d+)?)\s*h", text)
+        minute_match = re.search(r"(\d+(?:\.\d+)?)\s*m", text)
+        second_match = re.search(r"(\d+(?:\.\d+)?)\s*s", text)
+        if hour_match:
+            total_minutes += Decimal(hour_match.group(1)) * Decimal("60")
+        if minute_match:
+            total_minutes += Decimal(minute_match.group(1))
+        if second_match:
+            total_minutes += Decimal(second_match.group(1)) / Decimal("60")
+        if total_minutes <= 0 and re.fullmatch(r"\d+(?:\.\d+)?", text):
+            total_minutes = Decimal(text)
+        return int(total_minutes)
+
+    staff_ids = [uuid.UUID(str(row["id"])) for row in staff_rows if row.get("id")]
+    pending_status_by_staff = {}
+    repeated_sync_issue_counts = {}
+    if staff_ids:
+        pending_calls = (
+            Call.objects.filter(
+                staff_id__in=staff_ids,
+                status=Call.Status.STARTED,
+                end_time__isnull=False,
+            )
+            .select_related("lead", "staff")
+            .order_by("-end_time", "-updated_at")
+        )
+        for call in pending_calls:
+            pending_status_by_staff.setdefault(call.staff_id, call)
+
+        repeated_sync_issue_counts = {
+            row["staff"]: int(row["total"] or 0)
+            for row in (
+                Call.objects.filter(
+                    staff_id__in=staff_ids,
+                    auto_skipped_sync_issue=True,
+                    start_time__gte=today_start,
+                    start_time__lte=today_end,
+                )
+                .values("staff")
+                .annotate(total=Count("id"))
+            )
+        }
+
+    followup_due_now_count = Lead.objects.filter(
+        status=Lead.Status.INTERESTED,
+        callback_date=today,
+    ).count()
+    followup_overdue_count = Lead.objects.filter(
+        status=Lead.Status.INTERESTED,
+        callback_date__lt=today,
+    ).count()
+    unassigned_new_lead_count = Lead.objects.filter(
+        status=Lead.Status.NEW,
+        assigned_to__isnull=True,
+    ).count()
+
+    threshold_per_hour = int(company_profile.hourly_call_bonus_threshold or 0)
+    bonus_enabled = bool(company_profile.hourly_call_bonus_enabled and threshold_per_hour > 0)
+
+    if followup_overdue_count > 0:
+        alerts.append(
+            {
+                "id": "followup-overdue-global",
+                "severity": "critical",
+                "severity_label": "Critical",
+                "title": "Overdue follow-ups need attention",
+                "message": f"{followup_overdue_count} follow-up lead(s) are now overdue and should be reviewed immediately.",
+                "staff_name": "",
+                "target_url": "/followups/",
+                "target_label": "Open Follow-Ups",
+                "meta_label": "Overdue queue pressure",
+                "sort_score": 220 + (followup_overdue_count * 3),
+            }
+        )
+
+    if followup_due_now_count > 0:
+        alerts.append(
+            {
+                "id": "followup-due-global",
+                "severity": "warning",
+                "severity_label": "Warning",
+                "title": "Follow-ups are due today",
+                "message": f"{followup_due_now_count} follow-up lead(s) are scheduled for today and should stay visible to the team.",
+                "staff_name": "",
+                "target_url": "/followups/",
+                "target_label": "Open Follow-Ups",
+                "meta_label": "Due today",
+                "sort_score": 145 + (followup_due_now_count * 2),
+            }
+        )
+
+    if unassigned_new_lead_count > 0:
+        alerts.append(
+            {
+                "id": "new-leads-unassigned-global",
+                "severity": "warning",
+                "severity_label": "Warning",
+                "title": "Fresh leads are waiting for allocation",
+                "message": f"{unassigned_new_lead_count} new lead(s) are still unassigned and can be allocated now.",
+                "staff_name": "",
+                "target_url": "/leads/",
+                "target_label": "Open Lead Management",
+                "meta_label": "Allocation pending",
+                "sort_score": 120 + min(unassigned_new_lead_count, 25),
+            }
+        )
+
+    for row in staff_rows:
         staff_id = str(row.get("id") or "").strip()
         if not staff_id:
             continue
+        staff_uuid = uuid.UUID(staff_id)
         staff_name = row.get("name") or "Staff member"
         profile_url = f"/staff/{staff_id}/"
         work_review_url = "/work-review/"
@@ -653,6 +772,62 @@ def build_admin_web_alert_payload(*, limit=10):
         missed_callbacks = int(row.get("missed_callbacks") or 0)
         invalid_short_count = int(row.get("invalid_short_count") or 0)
         zero_second_count = int(row.get("zero_second_attempt_count") or 0)
+        calls_today = int(row.get("calls_today") or 0)
+        assigned_leads = int(row.get("assigned_leads") or 0)
+        online_label = row.get("online_label") or ""
+        is_active_account = bool(row.get("is_active", True))
+        work_minutes = _minutes_from_duration_label(row.get("active_hours_today"))
+        pending_status_call = pending_status_by_staff.get(staff_uuid)
+        sync_issue_count = int(repeated_sync_issue_counts.get(staff_uuid, 0) or 0)
+
+        if sync_issue_count >= 2:
+            alerts.append(
+                {
+                    "id": f"sync-issues-{staff_id}",
+                    "severity": "critical",
+                    "severity_label": "Critical",
+                    "title": f"{staff_name} has repeated call sync issues",
+                    "message": f"{sync_issue_count} call(s) were auto-skipped for sync issues today. This device or workflow needs review.",
+                    "staff_name": staff_name,
+                    "target_url": "/calls/",
+                    "target_label": "Open Call Details",
+                    "meta_label": "Repeated sync issue",
+                    "sort_score": 185 + (sync_issue_count * 8),
+                }
+            )
+
+        if pending_status_call:
+            duration_label = _format_work_duration_label(pending_status_call.duration_seconds or 0)
+            alerts.append(
+                {
+                    "id": f"pending-remark-{staff_id}",
+                    "severity": "critical",
+                    "severity_label": "Critical",
+                    "title": f"{staff_name} has a call without final remark",
+                    "message": f"The call with {pending_status_call.lead.name} ended at { _format_datetime(pending_status_call.end_time) } and still needs a final status update.",
+                    "staff_name": staff_name,
+                    "target_url": profile_url,
+                    "target_label": "Open Staff Profile",
+                    "meta_label": f"{duration_label} call pending",
+                    "sort_score": 176 + int(pending_status_call.duration_seconds or 0),
+                }
+            )
+
+        if is_active_account and online_label in {"Online", "Away", "Warning"} and assigned_leads <= 0 and not row.get("is_on_call"):
+            alerts.append(
+                {
+                    "id": f"queue-empty-{staff_id}",
+                    "severity": "warning",
+                    "severity_label": "Warning",
+                    "title": f"{staff_name} has no leads in queue",
+                    "message": "This staff account is active in the app but does not currently have queue leads to work on.",
+                    "staff_name": staff_name,
+                    "target_url": "/leads/",
+                    "target_label": "Open Lead Management",
+                    "meta_label": online_label,
+                    "sort_score": 92,
+                }
+            )
 
         if quality_label == "Review Needed" or suspicious_blocks > 0 or zero_only_blocks > 0:
             review_message = quality_note or "Call patterns need supervisor review."
@@ -687,6 +862,22 @@ def build_admin_web_alert_payload(*, limit=10):
                 }
             )
 
+        if invalid_short_count >= 3:
+            alerts.append(
+                {
+                    "id": f"invalid-short-{staff_id}",
+                    "severity": "warning",
+                    "severity_label": "Warning",
+                    "title": f"{staff_name} has too many invalid short calls",
+                    "message": f"{invalid_short_count} invalid short call(s) were recorded today. Review the calling pattern before it grows further.",
+                    "staff_name": staff_name,
+                    "target_url": "/calls/",
+                    "target_label": "Open Call Details",
+                    "meta_label": "Invalid short spike",
+                    "sort_score": 88 + (invalid_short_count * 4),
+                }
+            )
+
         if quality_label == "Needs Attention" or invalid_short_count > 0 or zero_second_count > 0:
             alerts.append(
                 {
@@ -706,6 +897,41 @@ def build_admin_web_alert_payload(*, limit=10):
                     "sort_score": 40 + invalid_short_count * 4 + zero_second_count,
                 }
             )
+
+        if bonus_enabled and work_minutes >= 60:
+            completed_hours = work_minutes // 60
+            threshold_calls = completed_hours * threshold_per_hour
+            remaining_calls = threshold_calls - calls_today
+            if remaining_calls > 0 and remaining_calls <= 5:
+                alerts.append(
+                    {
+                        "id": f"bonus-near-{staff_id}",
+                        "severity": "good",
+                        "severity_label": "Good",
+                        "title": f"{staff_name} is close to hourly bonus",
+                        "message": f"Only {remaining_calls} more call(s) are needed to reach the current hourly bonus threshold.",
+                        "staff_name": staff_name,
+                        "target_url": profile_url,
+                        "target_label": "Open Staff Profile",
+                        "meta_label": f"{calls_today}/{threshold_calls} calls",
+                        "sort_score": 18 + (5 - remaining_calls),
+                    }
+                )
+            elif remaining_calls <= 0 and threshold_calls > 0:
+                alerts.append(
+                    {
+                        "id": f"bonus-hit-{staff_id}",
+                        "severity": "good",
+                        "severity_label": "Good",
+                        "title": f"{staff_name} reached hourly bonus pace",
+                        "message": "This staff member has crossed the current hourly call threshold and is now earning extra call bonus for this completed hour block.",
+                        "staff_name": staff_name,
+                        "target_url": profile_url,
+                        "target_label": "Open Staff Profile",
+                        "meta_label": f"{calls_today} calls today",
+                        "sort_score": 22,
+                    }
+                )
 
     alerts.sort(
         key=lambda item: (
