@@ -686,19 +686,6 @@
     background: rgba(255, 255, 255, 0.82);
 }
 
-.hc-admin-alert-item.is-openable {
-    cursor: pointer;
-    transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
-}
-
-.hc-admin-alert-item.is-openable:hover,
-.hc-admin-alert-item.is-openable:focus-visible {
-    transform: translateY(-1px);
-    box-shadow: 0 14px 24px rgba(31, 47, 79, 0.12);
-    border-color: rgba(77, 92, 144, 0.28);
-    outline: none;
-}
-
 .hc-admin-alert-item.is-critical {
     border-color: rgba(217, 72, 95, 0.24);
     background: linear-gradient(180deg, rgba(255, 236, 239, 0.96), rgba(255, 247, 248, 0.98));
