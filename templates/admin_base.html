@@ -20,7 +20,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260327k">
     <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=20260410b">
-    <link rel="stylesheet" href="{% static 'css/heavenection-calltrack.css' %}?v=20260427d">
+    <link rel="stylesheet" href="{% static 'css/heavenection-calltrack.css' %}?v=20260518a">
 </head>
 <body class="mf-theme-admin hc-admin-web">
 {{ admin_alert_payload|json_script:"heavenectionAdminAlertPayload" }}
@@ -41,6 +41,29 @@
         <button type="button" class="btn btn-primary" id="heavenectionNetworkRetry">Try Again</button>
     </div>
 </div>
+{% if show_admin_welcome %}
+<div class="hc-admin-welcome-overlay" id="heavenectionAdminWelcome" aria-hidden="true">
+    <div class="hc-admin-welcome-grid">
+        <div class="hc-admin-welcome-orbit hc-admin-welcome-orbit-one"></div>
+        <div class="hc-admin-welcome-orbit hc-admin-welcome-orbit-two"></div>
+        <div class="hc-admin-welcome-card">
+            <div class="hc-admin-welcome-logo-shell">
+                {% if company_profile.logo %}
+                <img src="{% url 'company-logo' %}" alt="{{ company_profile.company_name }}" class="hc-admin-welcome-logo">
+                {% else %}
+                <img src="{% static 'images/heavenection-logo.png' %}" alt="{{ company_profile.company_name|default:'Heavenection' }}" class="hc-admin-welcome-logo">
+                {% endif %}
+            </div>
+            <span class="hc-admin-welcome-kicker">Welcome Back</span>
+            <h1>{{ company_profile.company_name|default:"Heavenection" }}</h1>
+            <p>{{ admin_user.name }}, your admin workspace is powering up.</p>
+            <div class="hc-admin-welcome-progress">
+                <span></span>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 <div class="mf-shell">
     <div class="mf-overlay" id="mfOverlay"></div>
     <aside class="mf-sidebar" id="mfSidebar">
@@ -507,6 +530,9 @@ window.heavenectionAdmin = {
     salarySummaryUrl: "{% url 'api-salary-summary' %}",
     salaryControlUrl: "{% url 'api-salary-control' %}"
 };
+window.heavenectionAdminWelcome = {
+    enabled: {% if show_admin_welcome %}true{% else %}false{% endif %}
+};
 </script>
 <script defer src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 {% if active_page == 'dashboard' %}
@@ -517,6 +543,25 @@ window.heavenectionAdmin = {
 <script defer src="{% static 'js/heavenection-confirm.js' %}?v=20260410d"></script>
 <script defer src="{% static 'js/heavenection-calltrack.js' %}?v=20260515a"></script>
 <script defer src="{% static 'js/heavenection-pwa.js' %}?v=20260402c"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (!window.heavenectionAdminWelcome || !window.heavenectionAdminWelcome.enabled) {
+        return;
+    }
+    const welcomeOverlay = document.getElementById('heavenectionAdminWelcome');
+    if (!welcomeOverlay) {
+        return;
+    }
+    document.body.classList.add('hc-admin-welcome-open');
+    window.setTimeout(function () {
+        welcomeOverlay.classList.add('is-exiting');
+    }, 2300);
+    window.setTimeout(function () {
+        welcomeOverlay.remove();
+        document.body.classList.remove('hc-admin-welcome-open');
+    }, 3200);
+});
+</script>
 {% block extra_scripts %}{% endblock %}
 </body>
 </html>

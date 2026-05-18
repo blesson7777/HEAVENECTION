@@ -16,6 +16,194 @@
     overflow: hidden;
 }
 
+.hc-admin-welcome-open {
+    overflow: hidden;
+}
+
+.hc-admin-welcome-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 5000;
+    display: grid;
+    place-items: center;
+    padding: 1.5rem;
+    background:
+        radial-gradient(circle at 18% 18%, rgba(140, 162, 230, 0.34) 0, rgba(140, 162, 230, 0) 28%),
+        radial-gradient(circle at 82% 14%, rgba(122, 241, 255, 0.26) 0, rgba(122, 241, 255, 0) 26%),
+        linear-gradient(155deg, rgba(16, 24, 49, 0.98) 0%, rgba(34, 48, 88, 0.97) 52%, rgba(77, 92, 144, 0.96) 100%);
+    backdrop-filter: blur(12px);
+    animation: hc-admin-welcome-fade-in 0.42s ease-out;
+}
+
+.hc-admin-welcome-overlay.is-exiting {
+    animation: hc-admin-welcome-fade-out 0.72s ease forwards;
+}
+
+.hc-admin-welcome-grid {
+    position: relative;
+    width: min(100%, 680px);
+    min-height: 420px;
+    display: grid;
+    place-items: center;
+}
+
+.hc-admin-welcome-orbit {
+    position: absolute;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 0 0 1px rgba(108, 223, 255, 0.06) inset;
+}
+
+.hc-admin-welcome-orbit-one {
+    inset: 4% 8%;
+    animation: hc-admin-welcome-spin 8s linear infinite;
+}
+
+.hc-admin-welcome-orbit-two {
+    inset: 15% 16%;
+    border-style: dashed;
+    animation: hc-admin-welcome-spin-reverse 12s linear infinite;
+}
+
+.hc-admin-welcome-card {
+    position: relative;
+    z-index: 1;
+    width: min(100%, 430px);
+    padding: 2rem 1.8rem 1.7rem;
+    border-radius: 30px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+    box-shadow:
+        0 34px 80px rgba(9, 14, 31, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    text-align: center;
+    color: #f7f9ff;
+    overflow: hidden;
+    animation: hc-admin-welcome-card-rise 0.75s cubic-bezier(.2,.9,.2,1);
+}
+
+.hc-admin-welcome-card::after {
+    content: "";
+    position: absolute;
+    inset: auto -18% -42% -18%;
+    height: 170px;
+    background: radial-gradient(circle, rgba(110, 228, 255, 0.2) 0, rgba(110, 228, 255, 0) 70%);
+    pointer-events: none;
+}
+
+.hc-admin-welcome-logo-shell {
+    width: 118px;
+    height: 118px;
+    margin: 0 auto 1rem;
+    padding: 0.9rem;
+    display: grid;
+    place-items: center;
+    border-radius: 32px;
+    background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08)),
+        linear-gradient(145deg, rgba(77, 92, 144, 0.88), rgba(100, 119, 187, 0.68));
+    box-shadow:
+        0 20px 38px rgba(0, 0, 0, 0.24),
+        inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    animation: hc-admin-welcome-logo-float 2.4s ease-in-out infinite;
+}
+
+.hc-admin-welcome-logo {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.24));
+}
+
+.hc-admin-welcome-kicker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(236, 244, 255, 0.88);
+    font-size: 0.76rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.hc-admin-welcome-card h1 {
+    margin: 1rem 0 0.55rem;
+    color: #ffffff;
+    font-size: clamp(1.9rem, 4.1vw, 2.7rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+}
+
+.hc-admin-welcome-card p {
+    margin: 0;
+    color: rgba(232, 239, 255, 0.82);
+    font-size: 1rem;
+    line-height: 1.6;
+}
+
+.hc-admin-welcome-progress {
+    width: 100%;
+    height: 8px;
+    margin-top: 1.4rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+}
+
+.hc-admin-welcome-progress span {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform-origin: left center;
+    background: linear-gradient(90deg, #86d7ff 0%, #ffffff 44%, #7ceeff 100%);
+    animation: hc-admin-welcome-progress 2.5s linear forwards;
+}
+
+@keyframes hc-admin-welcome-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes hc-admin-welcome-fade-out {
+    0% { opacity: 1; }
+    100% { opacity: 0; visibility: hidden; }
+}
+
+@keyframes hc-admin-welcome-card-rise {
+    from {
+        transform: translateY(34px) scale(0.96);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0) scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes hc-admin-welcome-logo-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-7px); }
+}
+
+@keyframes hc-admin-welcome-progress {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+}
+
+@keyframes hc-admin-welcome-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes hc-admin-welcome-spin-reverse {
+    from { transform: rotate(360deg); }
+    to { transform: rotate(0deg); }
+}
+
 .hc-network-overlay,
 .hc-offline-page-shell {
     background:

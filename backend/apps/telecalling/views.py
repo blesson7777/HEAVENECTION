@@ -187,6 +187,7 @@ def _admin_web_context(
 ):
     mark_staff_seen(current_user)
     company_profile = get_company_profile()
+    show_admin_welcome = bool(request.session.pop("show_admin_welcome", False))
     context = {
         "admin_user": current_user,
         "company_profile": company_profile,
@@ -194,6 +195,7 @@ def _admin_web_context(
         "page_title": page_title,
         "page_heading": page_heading,
         "page_subtitle": page_subtitle,
+        "show_admin_welcome": show_admin_welcome,
         # Let the page render immediately and hydrate alerts asynchronously
         # from the admin alerts API instead of blocking every admin page load.
         "admin_alert_payload": admin_alert_payload or _fallback_admin_alert_payload(),
@@ -711,6 +713,7 @@ def web_login_page(request):
 
     mark_staff_seen(staff)
     tokens = issue_tokens_for_user(staff)
+    request.session["show_admin_welcome"] = True
     response = redirect("dashboard")
     set_auth_cookies(response, tokens["refresh_token"])
     return response
