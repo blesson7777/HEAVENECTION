@@ -80,10 +80,11 @@
 
     <div class="col-xl-8">
         <div class="hc-surface-card h-100">
+            {% if page_flags.show_previous_due_card %}
             <div class="mf-db2-panel-head mb-3">
                 <div>
-                    <span class="mf-db2-kicker">Due Salary Details</span>
-                    <h5>Completed payout period ready for payment</h5>
+                    <span class="mf-db2-kicker">Previous Pending Salary</span>
+                    <h5>Closed payout period still waiting for payment</h5>
                 </div>
                 <span class="hc-sync-pill"><i class="bi bi-calendar2-check"></i> {{ due_snapshot.cycle_label }}</span>
             </div>
@@ -109,14 +110,14 @@
                         <p class="mb-0 text-muted">Total calculated earnings</p>
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <div class="hc-summary-card h-100">
-                        <span class="mf-db2-kicker">Balance</span>
-                        <h3 class="mb-1">{{ due_snapshot.balance_label }}</h3>
-                        <p class="mb-0 text-muted">Available to pay now</p>
+                    <div class="col-md-3">
+                        <div class="hc-summary-card h-100">
+                            <span class="mf-db2-kicker">Balance</span>
+                            <h3 class="mb-1">{{ due_snapshot.balance_label }}</h3>
+                            <p class="mb-0 text-muted">Pending amount from the closed period</p>
+                        </div>
                     </div>
                 </div>
-            </div>
             <div class="hc-profile-meta-grid mt-3">
                 <div class="hc-profile-meta-card">
                     <span class="hc-profile-meta-label">Base Pay</span>
@@ -199,8 +200,55 @@
                     <button type="submit" class="btn btn-primary">Pay Due Salary</button>
                 </div>
             </form>
+            {% endif %}
             {% else %}
-            <div class="hc-document-empty mt-4">No due salary is waiting for this completed payout period.</div>
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Last 12 Salary Payments</span>
+                    <h5>No older salary is pending right now</h5>
+                </div>
+                <span class="hc-sync-pill"><i class="bi bi-clock-history"></i> Payment History</span>
+            </div>
+            <div class="text-muted small mb-3">All previous closed salary periods are already settled. Showing the latest recorded salary and advance payouts here.</div>
+            <div class="table-responsive">
+                <table class="table hc-table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th>Type</th>
+                            <th>Hours</th>
+                            <th>Credited</th>
+                            <th>Method</th>
+                            <th>Paid At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in recent_salary_history_rows %}
+                        <tr>
+                            <td>
+                                <strong>{{ row.period_label }}</strong>
+                                <div class="text-muted small">Calculated {{ row.final_salary }}</div>
+                            </td>
+                            <td>
+                                <div>{{ row.payment_kind_label }}</div>
+                                <div class="text-muted small">{{ row.payout_cycle_label }}</div>
+                            </td>
+                            <td>{{ row.total_hours_label }}</td>
+                            <td>
+                                <strong>{{ row.paid_amount }}</strong>
+                                <div class="text-muted small">{{ row.payment_reference }}</div>
+                            </td>
+                            <td>{{ row.payment_method_label }}</td>
+                            <td>{{ row.paid_at }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-4">No previous payment entries have been recorded yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
             {% endif %}
         </div>
     </div>

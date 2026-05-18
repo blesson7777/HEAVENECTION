@@ -6467,6 +6467,8 @@ def build_salary_detail_payload(staff):
         due_snapshot["period_start"] == running_snapshot["period_start"]
         and due_snapshot["period_end"] == running_snapshot["period_end"]
     )
+    due_period_closed = due_snapshot["period_end"] < today
+    show_previous_due_card = due_period_closed and due_snapshot["balance"] > Decimal("0.00")
     advance_available = Decimal("0.00") if same_period_as_due else running_snapshot["balance"]
     pending_referral_rewards = list(
         ReferralReward.objects.filter(referrer=staff, is_paid=False)
@@ -6503,7 +6505,8 @@ def build_salary_detail_payload(staff):
             "period_start_value": due_snapshot["period_start"].isoformat(),
             "period_end_value": due_snapshot["period_end"].isoformat(),
             "balance_raw": f"{due_snapshot['balance']:.2f}",
-            "is_payable": due_snapshot["balance"] > Decimal("0.00"),
+            "is_payable": show_previous_due_card,
+            "is_closed_period": due_period_closed,
             "cycle_label": Salary.PayoutCycle(due_snapshot["payout_cycle"]).label,
         },
         "running_snapshot": {
@@ -6523,6 +6526,9 @@ def build_salary_detail_payload(staff):
         },
         "company_flags": {
             "referral_enabled": company_profile.referral_program_enabled,
+        },
+        "page_flags": {
+            "show_previous_due_card": show_previous_due_card,
         },
         "pending_referral_rewards": [
             {
@@ -6549,6 +6555,7 @@ def build_salary_detail_payload(staff):
             for value, label in Salary.PaymentMethod.choices
         ],
         "salary_history_rows": salary_history,
+        "recent_salary_history_rows": salary_history[:12],
     }
 
 
