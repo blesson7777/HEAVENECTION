@@ -20,9 +20,9 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'css/style.css' %}?v=20260327k">
     <link rel="stylesheet" href="{% static 'css/dashboard.css' %}?v=20260410b">
-    <link rel="stylesheet" href="{% static 'css/heavenection-calltrack.css' %}?v=20260518a">
+    <link rel="stylesheet" href="{% static 'css/heavenection-calltrack.css' %}?v=20260518b">
 </head>
-<body class="mf-theme-admin hc-admin-web">
+<body class="mf-theme-admin hc-admin-web{% if show_admin_welcome %} hc-admin-preload{% endif %}">
 {{ admin_alert_payload|json_script:"heavenectionAdminAlertPayload" }}
 <div class="hc-network-overlay" id="heavenectionNetworkOverlay" hidden>
     <div class="hc-network-card">
@@ -546,10 +546,12 @@ window.heavenectionAdminWelcome = {
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     if (!window.heavenectionAdminWelcome || !window.heavenectionAdminWelcome.enabled) {
+        document.body.classList.remove('hc-admin-preload');
         return;
     }
     const welcomeOverlay = document.getElementById('heavenectionAdminWelcome');
     if (!welcomeOverlay) {
+        document.body.classList.remove('hc-admin-preload');
         return;
     }
     document.body.classList.add('hc-admin-welcome-open');
@@ -558,6 +560,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }, 2300);
     window.setTimeout(function () {
         welcomeOverlay.remove();
+        document.body.classList.remove('hc-admin-preload');
         document.body.classList.remove('hc-admin-welcome-open');
     }, 3200);
 });
