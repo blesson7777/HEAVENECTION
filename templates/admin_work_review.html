@@ -420,21 +420,31 @@
     (function () {
         const dayModalElement = document.getElementById('workReviewDaysModal');
         const zeroTalkModalElement = document.getElementById('workReviewZeroTalkModal');
-        if (!dayModalElement) {
+        if (!dayModalElement && !zeroTalkModalElement) {
             return;
         }
-        const dayModal = bootstrap.Modal.getOrCreateInstance(dayModalElement);
+        const dayModal = dayModalElement ? bootstrap.Modal.getOrCreateInstance(dayModalElement) : null;
         const dayModalTitle = document.getElementById('workReviewDaysModalTitle');
         const dayModalBody = document.getElementById('workReviewDaysModalBody');
         const zeroTalkModal = zeroTalkModalElement ? bootstrap.Modal.getOrCreateInstance(zeroTalkModalElement) : null;
         const zeroTalkModalTitle = document.getElementById('workReviewZeroTalkModalTitle');
         const zeroTalkModalBody = document.getElementById('workReviewZeroTalkModalBody');
+        const resolveTargetContent = (targetValue) => {
+            if (!targetValue) {
+                return null;
+            }
+            const normalizedId = targetValue.startsWith('#') ? targetValue.slice(1) : targetValue;
+            return document.getElementById(normalizedId) || document.querySelector(targetValue);
+        };
 
         document.querySelectorAll('.js-review-days').forEach((button) => {
             button.addEventListener('click', () => {
+                if (!dayModal) {
+                    return;
+                }
                 const targetSelector = button.getAttribute('data-target');
                 const staffName = button.getAttribute('data-staff-name') || 'Staff';
-                const contentNode = targetSelector ? document.querySelector(targetSelector) : null;
+                const contentNode = resolveTargetContent(targetSelector);
                 if (dayModalTitle) {
                     dayModalTitle.textContent = `Review Days - ${staffName}`;
                 }
@@ -452,7 +462,7 @@
                 }
                 const targetSelector = button.getAttribute('data-target');
                 const staffName = button.getAttribute('data-staff-name') || 'Staff';
-                const contentNode = targetSelector ? document.querySelector(targetSelector) : null;
+                const contentNode = resolveTargetContent(targetSelector);
                 if (zeroTalkModalTitle) {
                     zeroTalkModalTitle.textContent = `Zero-Talk Blocks - ${staffName}`;
                 }
