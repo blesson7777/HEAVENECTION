@@ -8848,7 +8848,9 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
             exclude_call_id=call.id,
             include_attempt_at=call.end_time or now,
         )
-        if not followup_progress["can_close"]:
+        if followup_progress["can_close"]:
+            lead_status = Lead.Status.NOT_INTERESTED
+        else:
             lead_status = Lead.Status.INTERESTED
             lead_callback_window = call.lead.callback_window
             lead_callback_date = call.lead.callback_date
