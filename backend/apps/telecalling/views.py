@@ -1849,6 +1849,26 @@ def followups_page(request):
 
     if request.method == "POST":
         followup_action = request.POST.get("followup_action")
+        if followup_action == "recover_rejected_followup":
+            lead_id = (request.POST.get("lead_id") or "").strip()
+            recover_mode = (request.POST.get("recover_mode") or "").strip()
+            target_status = Lead.Status.INTERESTED if recover_mode == "mark_interested_same_staff" else Lead.Status.NEW
+            try:
+                summary = recover_recovery_lead_to_owner(lead_id, target_status=target_status)
+            except ValueError as error:
+                messages.error(request, str(error))
+                return redirect("followups-page")
+            if summary["target_status"] == Lead.Status.INTERESTED:
+                messages.success(
+                    request,
+                    f"{summary['lead_name']} moved to Follow Up under {summary['owner_name']}.",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"{summary['lead_name']} reassigned to {summary['owner_name']} as New lead.",
+                )
+            return redirect("followups-page")
         if followup_action == "mark_rejected":
             lead_id = (request.POST.get("lead_id") or "").strip()
             if not lead_id:

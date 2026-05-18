@@ -6916,6 +6916,11 @@ def build_followup_payload():
         .select_related("assigned_to", "interested_detail__staff")
         .order_by("-updated_at", "-last_contacted_at")
     )
+    rejected_candidates = list(
+        Lead.objects.select_related("assigned_to", "interested_detail__staff")
+        .filter(status=Lead.Status.NOT_INTERESTED)
+        .order_by("-updated_at", "-last_contacted_at")[:200]
+    )
     closed_candidates = list(
         Lead.objects.select_related("assigned_to", "interested_detail__staff")
         .filter(status=Lead.Status.NO_ANSWER)
@@ -6923,6 +6928,7 @@ def build_followup_payload():
     )
 
     owner_lookup_ids = [lead.id for lead in followups]
+    owner_lookup_ids.extend(lead.id for lead in rejected_candidates)
     owner_lookup_ids.extend(lead.id for lead in closed_candidates)
     latest_call_owner_map = {}
     if owner_lookup_ids:
@@ -7043,13 +7049,60 @@ def build_followup_payload():
 
     followup_rows.sort(key=_followup_sort_key)
 
+    rejected_candidate_ids = [lead.id for lead in rejected_candidates]
+    rejected_with_followup_history = set(
+        Call.objects.filter(
+            lead_id__in=rejected_candidate_ids,
+            status=Call.Status.INTERESTED,
+        ).values_list("lead_id", flat=True)
+    )
+    rejected_followup_rows = []
+    for lead in rejected_candidates:
+        if lead.id not in rejected_with_followup_history:
+            continue
+        owner_staff = _followup_owner(lead)
+        progress = _followup_no_response_progress(lead)
+        rejected_followup_rows.append(
+            {
+                "id": str(lead.id),
+                "name": lead.name,
+                "phone": lead.phone,
+                "status": lead.status,
+                "status_label": lead.get_status_display(),
+                "assigned_to_id": str(owner_staff.id) if owner_staff else "",
+                "assigned_to": owner_staff.name if owner_staff else "Unassigned",
+                "assigned_to_phone": owner_staff.phone if owner_staff else "",
+                "notes": lead.notes,
+                "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
+                "updated_at": _format_datetime(lead.updated_at),
+                "updated_at_sort": lead.updated_at.isoformat() if lead.updated_at else "",
+                "followup_attempt_count": progress["attempt_count"],
+                "followup_attempt_unique_dates": progress["unique_date_count"],
+                "followup_attempt_unique_times": progress["unique_time_count"],
+                "recovery_owner_id": str(owner_staff.id) if owner_staff else "",
+                "recovery_owner_name": owner_staff.name if owner_staff else "",
+            }
+        )
+
+    rejected_followup_rows.sort(
+        key=lambda row: row.get("updated_at_sort", ""),
+        reverse=True,
+    )
+
     closed_followup_rows = []
+    closed_candidate_ids = [lead.id for lead in closed_candidates]
+    closed_with_followup_history = set(
+        Call.objects.filter(
+            lead_id__in=closed_candidate_ids,
+            status=Call.Status.INTERESTED,
+        ).values_list("lead_id", flat=True)
+    )
     for lead in closed_candidates:
         owner_staff = _followup_owner(lead)
         progress = _followup_no_response_progress(lead)
         if progress["attempt_count"] < FOLLOWUP_NO_RESPONSE_LIMIT or not progress["can_close"]:
             continue
-        if not lead.calls.filter(status=Call.Status.INTERESTED).exists():
+        if lead.id not in closed_with_followup_history:
             continue
         closed_followup_rows.append(
             {
@@ -7073,6 +7126,7 @@ def build_followup_payload():
 
     return {
         "followup_rows": followup_rows,
+        "rejected_followup_rows": rejected_followup_rows,
         "followup_history_rows": [
             {
                 "id": row["id"],
@@ -7113,6 +7167,7 @@ def build_followup_payload():
         ],
         "followup_summary": {
             "total_followups": len(followup_rows),
+            "rejected_followup_count": len(rejected_followup_rows),
             "scheduled_count": sum(1 for row in followup_rows if row["is_scheduled"]),
             "unscheduled_count": sum(1 for row in followup_rows if row["is_unscheduled"]),
             "due_now_count": sum(1 for row in followup_rows if row["is_due_now"]),
