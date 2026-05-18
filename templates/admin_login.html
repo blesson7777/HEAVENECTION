@@ -10,17 +10,26 @@
     <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css/heavenection-calltrack.css' %}?v=20260518a">
+    <link rel="stylesheet" href="{% static 'css/heavenection-calltrack.css' %}?v=20260518b">
     <style>
+        :root {
+            --hc-login-primary: #4d5c90;
+            --hc-login-primary-dark: #1d2747;
+            --hc-login-ice: #67d5f8;
+            --hc-login-paper: #f8faff;
+            --hc-login-ink: #1f2a4b;
+            --hc-login-muted: #6d7899;
+        }
+
         body {
             min-height: 100vh;
             margin: 0;
             font-family: "Public Sans", Arial, sans-serif;
             background:
-                radial-gradient(circle at 14% 16%, rgba(114, 136, 210, 0.34) 0, rgba(114, 136, 210, 0) 30%),
-                radial-gradient(circle at 88% 12%, rgba(126, 238, 255, 0.18) 0, rgba(126, 238, 255, 0) 24%),
-                linear-gradient(158deg, #0f1630 0%, #25325a 42%, #3f4f86 100%);
-            color: #17213d;
+                radial-gradient(circle at 10% 8%, rgba(103, 213, 248, 0.24), transparent 28%),
+                radial-gradient(circle at 90% 12%, rgba(137, 156, 226, 0.28), transparent 30%),
+                linear-gradient(145deg, #0f1630 0%, #24345f 52%, #44548b 100%);
+            color: var(--hc-login-ink);
             overflow-x: hidden;
         }
 
@@ -28,302 +37,284 @@
             min-height: 100vh;
             display: grid;
             place-items: center;
-            padding: 1.5rem;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .hc-login-shell::before,
-        .hc-login-shell::after {
-            content: "";
-            position: absolute;
-            border-radius: 999px;
-            pointer-events: none;
-            filter: blur(8px);
-        }
-
-        .hc-login-shell::before {
-            width: 380px;
-            height: 380px;
-            top: -120px;
-            left: -90px;
-            background: radial-gradient(circle, rgba(127, 149, 224, 0.32) 0, rgba(127, 149, 224, 0) 72%);
-            animation: hc-login-float 11s ease-in-out infinite;
-        }
-
-        .hc-login-shell::after {
-            width: 460px;
-            height: 460px;
-            right: -140px;
-            bottom: -160px;
-            background: radial-gradient(circle, rgba(117, 233, 255, 0.22) 0, rgba(117, 233, 255, 0) 72%);
-            animation: hc-login-float 14s ease-in-out infinite reverse;
+            padding: 1.15rem;
         }
 
         .hc-login-card {
-            position: relative;
-            z-index: 1;
-            width: min(100%, 1180px);
+            width: min(1120px, 100%);
             display: grid;
-            grid-template-columns: minmax(0, 1.18fr) minmax(360px, 430px);
+            grid-template-columns: minmax(0, 1.06fr) minmax(340px, 420px);
+            border-radius: 32px;
             overflow: hidden;
-            border-radius: 38px;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(255, 255, 255, 0.1);
-            box-shadow: 0 36px 80px rgba(8, 14, 32, 0.38);
+            background: rgba(255, 255, 255, 0.09);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            box-shadow: 0 34px 78px rgba(7, 14, 33, 0.38);
             backdrop-filter: blur(16px);
         }
 
-        .hc-login-hero {
+        .hc-login-visual {
             position: relative;
-            padding: 3rem 3rem 2.8rem;
+            padding: 2.4rem 2.5rem;
+            color: #f6f8ff;
             background:
-                radial-gradient(circle at 14% 14%, rgba(255, 255, 255, 0.18) 0, rgba(255, 255, 255, 0) 24%),
-                radial-gradient(circle at 84% 18%, rgba(110, 232, 255, 0.16) 0, rgba(110, 232, 255, 0) 20%),
-                linear-gradient(160deg, #182242 0%, #2b3967 48%, #44548e 100%);
-            color: #f7f8ff;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            gap: 2rem;
-        }
-
-        .hc-login-hero::before {
-            content: "";
-            position: absolute;
-            inset: auto -14% -26% auto;
-            width: 340px;
-            height: 340px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(106, 225, 255, 0.2) 0, rgba(106, 225, 255, 0) 72%);
-        }
-
-        .hc-login-form {
-            position: relative;
-            padding: 3rem 2.55rem;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            gap: 1.2rem;
-            background:
-                linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 255, 0.97));
-        }
-
-        .hc-login-form .form-control {
-            min-height: 58px;
-            border-radius: 18px;
-            border: 1px solid #d7ddf0;
-            padding-inline: 1rem;
-            box-shadow: none;
-        }
-
-        .hc-login-form .form-control:focus {
-            border-color: #7484c5;
-            box-shadow: 0 0 0 4px rgba(116, 132, 197, 0.14);
-        }
-
-        .hc-login-form .btn-primary {
-            min-height: 56px;
-            border-radius: 18px;
-            background: linear-gradient(135deg, #4d5c90, #6878b2);
-            border: 0;
-            font-weight: 800;
-            box-shadow: 0 16px 30px rgba(77, 92, 144, 0.24);
-        }
-
-        .hc-login-form .btn-primary:hover {
-            background: linear-gradient(135deg, #44517d, #6472a6);
+                radial-gradient(circle at 22% 16%, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 35%),
+                linear-gradient(160deg, #1a274a 0%, #2d3b69 44%, #415088 100%);
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            gap: 1.5rem;
         }
 
         .hc-login-kicker {
             display: inline-flex;
             align-items: center;
-            gap: 0.55rem;
-            padding: 0.55rem 0.85rem;
+            gap: 0.45rem;
+            width: fit-content;
+            padding: 0.42rem 0.75rem;
             border-radius: 999px;
-            background: rgba(255, 255, 255, 0.12);
-            color: #e8ecff;
-            font-size: 0.84rem;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.1);
+            font-size: 0.76rem;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
             font-weight: 700;
         }
 
-        .hc-login-brand-stage {
-            display: flex;
+        .hc-login-brand {
+            display: grid;
+            grid-template-columns: 88px 1fr;
+            gap: 1rem;
             align-items: center;
-            gap: 1.2rem;
         }
 
         .hc-login-brand-mark {
-            width: 110px;
-            height: 110px;
-            padding: 1rem;
+            width: 88px;
+            height: 88px;
+            border-radius: 24px;
+            padding: 0.85rem;
+            background:
+                radial-gradient(circle at 22% 20%, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.09) 56%),
+                rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.24);
+            box-shadow: 0 16px 30px rgba(6, 13, 30, 0.26);
             display: grid;
             place-items: center;
-            border-radius: 30px;
-            background:
-                radial-gradient(circle at top, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08)),
-                linear-gradient(150deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.05));
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            box-shadow: 0 20px 38px rgba(4, 9, 24, 0.26);
-            animation: hc-login-mark-float 2.8s ease-in-out infinite;
+            animation: hc-logo-float 2.6s ease-in-out infinite;
         }
 
         .hc-login-brand-mark img {
             width: 100%;
             height: 100%;
             object-fit: contain;
-            filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.2));
+            filter: drop-shadow(0 8px 18px rgba(6, 10, 24, 0.38));
         }
 
         .hc-login-brand-copy strong {
             display: block;
-            font-size: 1.35rem;
+            font-size: 1.26rem;
             letter-spacing: 0.02em;
         }
 
         .hc-login-brand-copy small {
             display: block;
-            margin-top: 0.35rem;
-            color: rgba(238, 243, 255, 0.72);
-            line-height: 1.55;
-        }
-
-        .hc-login-headline {
-            max-width: 620px;
+            margin-top: 0.3rem;
+            color: rgba(237, 242, 255, 0.72);
         }
 
         .hc-login-headline h1 {
-            margin: 1.5rem 0 1rem;
-            font-size: clamp(2rem, 4vw, 3.6rem);
-            line-height: 1.02;
-            letter-spacing: -0.04em;
+            margin: 0;
+            font-size: clamp(1.9rem, 3.4vw, 3rem);
+            line-height: 1.05;
+            letter-spacing: -0.03em;
         }
 
         .hc-login-headline p {
-            margin: 0;
-            max-width: 540px;
-            color: rgba(241, 245, 255, 0.76);
-            font-size: 1.02rem;
-            line-height: 1.72;
+            margin: 0.75rem 0 0;
+            max-width: 520px;
+            color: rgba(238, 243, 255, 0.78);
+            line-height: 1.6;
         }
 
-        .hc-login-signal-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 1rem;
-        }
-
-        .hc-login-signal-card {
-            padding: 1rem 1rem 1.05rem;
+        .hc-login-graphic {
+            align-self: end;
             border-radius: 24px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.18);
             background:
-                linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.06));
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-        }
-
-        .hc-login-signal-card span {
-            display: block;
-            color: rgba(230, 238, 255, 0.72);
-            font-size: 0.76rem;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-        }
-
-        .hc-login-signal-card strong {
-            display: block;
-            margin-top: 0.55rem;
-            font-size: 1.45rem;
-            font-weight: 800;
-        }
-
-        .hc-login-signal-card small {
-            display: block;
-            margin-top: 0.45rem;
-            color: rgba(233, 240, 255, 0.72);
-            line-height: 1.55;
-        }
-
-        .hc-login-trust-line {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.7rem;
-        }
-
-        .hc-login-trust-line span {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            padding: 0.45rem 0.78rem;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.1);
-            color: rgba(242, 246, 255, 0.82);
-            font-size: 0.8rem;
-        }
-
-        .hc-login-form-kicker {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.45rem;
-            padding: 0.45rem 0.78rem;
-            border-radius: 999px;
-            background: #eef2fe;
-            color: #55659a;
-            font-size: 0.78rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-        }
-
-        .hc-login-form-panel {
-            padding: 1.15rem;
-            border-radius: 24px;
-            border: 1px solid #e6eaf6;
-            background: #fbfcff;
-            box-shadow: inset 0 1px 0 #ffffff;
-        }
-
-        .hc-login-form-meta {
+                linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
+            padding: 1rem;
             display: grid;
-            gap: 0.75rem;
-            margin-top: 1rem;
+            gap: 0.95rem;
+            overflow: hidden;
         }
 
-        .hc-login-form-meta-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 1rem;
-            padding: 0.85rem 1rem;
+        .hc-orbit-wrap {
+            position: relative;
+            height: 106px;
             border-radius: 18px;
-            background: #f3f6fd;
-            color: #435277;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            overflow: hidden;
         }
 
-        .hc-login-form-meta-item strong {
-            color: #1f2d4f;
-            font-size: 0.95rem;
+        .hc-orbit-core {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 34px;
+            height: 34px;
+            margin: -17px 0 0 -17px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #ffffff 0%, #7fdaf7 62%, #44c7f1 100%);
+            box-shadow: 0 0 0 10px rgba(103, 213, 248, 0.18);
         }
 
-        .hc-login-form-meta-item small {
-            color: #7482a3;
+        .hc-orbit-ring {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            border-radius: 50%;
+            border: 1px dashed rgba(255, 255, 255, 0.36);
+            transform: translate(-50%, -50%);
+        }
+
+        .hc-orbit-ring.r1 {
+            width: 74px;
+            height: 74px;
+            animation: hc-spin 7s linear infinite;
+        }
+
+        .hc-orbit-ring.r2 {
+            width: 108px;
+            height: 108px;
+            animation: hc-spin 10s linear infinite reverse;
+        }
+
+        .hc-orbit-dot {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.16);
+        }
+
+        .hc-orbit-dot.d1 {
+            top: 23px;
+            left: 58%;
+            animation: hc-pulse 2.1s ease-in-out infinite;
+        }
+
+        .hc-orbit-dot.d2 {
+            bottom: 20px;
+            left: 36%;
+            animation: hc-pulse 2.1s ease-in-out 0.5s infinite;
+        }
+
+        .hc-login-bars {
+            display: grid;
+            gap: 0.58rem;
+        }
+
+        .hc-login-bar {
+            height: 9px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.18);
+            overflow: hidden;
+        }
+
+        .hc-login-bar span {
+            display: block;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #6ed6f8 0%, #d6ebff 100%);
+            animation: hc-scan 2.9s ease-in-out infinite;
+        }
+
+        .hc-login-bar:nth-child(1) span { width: 62%; }
+        .hc-login-bar:nth-child(2) span { width: 82%; animation-delay: 0.2s; }
+        .hc-login-bar:nth-child(3) span { width: 54%; animation-delay: 0.4s; }
+
+        .hc-login-form {
+            background: linear-gradient(180deg, rgba(252, 253, 255, 0.98), rgba(246, 249, 255, 0.97));
+            padding: 2.4rem 2rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 1rem;
+        }
+
+        .hc-login-form h2 {
+            margin: 0.4rem 0 0;
+            font-size: 1.7rem;
+            color: var(--hc-login-ink);
+            letter-spacing: -0.02em;
+        }
+
+        .hc-login-form p {
+            margin: 0;
+            color: var(--hc-login-muted);
+            line-height: 1.56;
+        }
+
+        .hc-form-panel {
+            margin-top: 0.4rem;
+            border-radius: 22px;
+            border: 1px solid #e4e9f6;
+            background: #ffffff;
+            padding: 1rem;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        }
+
+        .hc-form-panel .form-control {
+            min-height: 55px;
+            border-radius: 15px;
+            border: 1px solid #d7deef;
+            box-shadow: none;
+        }
+
+        .hc-form-panel .form-control:focus {
+            border-color: #7d8ec8;
+            box-shadow: 0 0 0 4px rgba(125, 142, 200, 0.13);
+        }
+
+        .hc-form-panel .btn-primary {
+            min-height: 54px;
+            border: 0;
+            border-radius: 16px;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--hc-login-primary), #6b7cb8);
+            box-shadow: 0 13px 26px rgba(77, 92, 144, 0.23);
+        }
+
+        .hc-form-panel .btn-primary:hover {
+            background: linear-gradient(135deg, #44517d, #6271a8);
         }
 
         .hc-login-alert {
             border: 0;
-            border-radius: 18px;
-            background: #fff0f0;
-            color: #b64040;
+            border-radius: 14px;
+            background: #fff1f1;
+            color: #b64444;
+            margin: 0;
         }
 
-        @keyframes hc-login-float {
+        @keyframes hc-logo-float {
             0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-18px); }
+            50% { transform: translateY(-7px); }
         }
 
-        @keyframes hc-login-mark-float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-8px); }
+        @keyframes hc-spin {
+            from { transform: translate(-50%, -50%) rotate(0deg); }
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        @keyframes hc-pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.25); opacity: 0.66; }
+        }
+
+        @keyframes hc-scan {
+            0%, 100% { transform: translateX(0); opacity: 1; }
+            50% { transform: translateX(12px); opacity: 0.82; }
         }
 
         @media (max-width: 991.98px) {
@@ -331,36 +322,29 @@
                 grid-template-columns: 1fr;
             }
 
-            .hc-login-hero,
+            .hc-login-visual,
             .hc-login-form {
-                padding: 2rem;
-            }
-
-            .hc-login-signal-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .hc-login-brand-stage {
-                align-items: flex-start;
+                padding: 1.8rem;
             }
         }
 
         @media (max-width: 575.98px) {
             .hc-login-shell {
-                padding: 1rem;
+                padding: 0.8rem;
             }
 
             .hc-login-card {
-                border-radius: 28px;
+                border-radius: 24px;
             }
 
-            .hc-login-brand-stage {
-                flex-direction: column;
+            .hc-login-brand {
+                grid-template-columns: 74px 1fr;
             }
 
             .hc-login-brand-mark {
-                width: 92px;
-                height: 92px;
+                width: 74px;
+                height: 74px;
+                border-radius: 20px;
             }
         }
     </style>
@@ -383,67 +367,61 @@
         <button type="button" class="btn btn-primary" id="heavenectionNetworkRetry">Try Again</button>
     </div>
 </div>
-<div class="hc-login-shell">
+
+<main class="hc-login-shell">
     <div class="hc-login-card">
-        <section class="hc-login-hero">
+        <section class="hc-login-visual">
+            <span class="hc-login-kicker"><i class="bi bi-shield-lock-fill"></i> Admin Secure Access</span>
+
+            <div class="hc-login-brand">
+                <div class="hc-login-brand-mark">
+                    {% if company_profile.logo %}
+                    <img src="{% url 'company-logo' %}" alt="{{ company_profile.company_name|default:'Heavenection' }}">
+                    {% else %}
+                    <img src="{% static 'images/heavenection-logo.png' %}" alt="Heavenection">
+                    {% endif %}
+                </div>
+                <div class="hc-login-brand-copy">
+                    <strong>{{ company_profile.company_name|default:"Heavenection" }}</strong>
+                    <small>Admin Console</small>
+                </div>
+            </div>
+
             <div class="hc-login-headline">
-                <span class="hc-login-kicker"><i class="bi bi-shield-lock-fill"></i> HEAVENECTION Admin Console</span>
-                <div class="hc-login-brand-stage mt-4">
-                    <div class="hc-login-brand-mark">
-                        {% if company_profile.logo %}
-                        <img src="{% url 'company-logo' %}" alt="{{ company_profile.company_name|default:'Heavenection' }}">
-                        {% else %}
-                        <img src="{% static 'images/heavenection-logo.png' %}" alt="Heavenection">
-                        {% endif %}
-                    </div>
-                    <div class="hc-login-brand-copy">
-                        <strong>{{ company_profile.company_name|default:"Heavenection" }}</strong>
-                        <small>Secure operations access for live staff supervision, lead control, salary workflow, and business reporting.</small>
-                    </div>
-                </div>
-                <h1 class="fw-bold">Operate the team from one calm, controlled command desk.</h1>
-                <p>Sign in with your admin account to open the dashboard, command center, lead pipeline, work review signals, notifications, and payout controls in one place.</p>
+                <h1>Control calls, leads, and payouts from one screen.</h1>
+                <p>Sign in to open your live team operations dashboard.</p>
             </div>
 
-            <div class="hc-login-signal-grid">
-                <div class="hc-login-signal-card">
-                    <span>Live Control</span>
-                    <strong>Command</strong>
-                    <small>Watch staff activity, queue pressure, and review signals without losing context.</small>
+            <div class="hc-login-graphic" aria-hidden="true">
+                <div class="hc-orbit-wrap">
+                    <div class="hc-orbit-ring r1"></div>
+                    <div class="hc-orbit-ring r2"></div>
+                    <div class="hc-orbit-core"></div>
+                    <div class="hc-orbit-dot d1"></div>
+                    <div class="hc-orbit-dot d2"></div>
                 </div>
-                <div class="hc-login-signal-card">
-                    <span>Protected Access</span>
-                    <strong>Secure</strong>
-                    <small>Admin-only login access keeps sensitive lead and salary operations protected.</small>
+                <div class="hc-login-bars">
+                    <div class="hc-login-bar"><span></span></div>
+                    <div class="hc-login-bar"><span></span></div>
+                    <div class="hc-login-bar"><span></span></div>
                 </div>
-                <div class="hc-login-signal-card">
-                    <span>Business Flow</span>
-                    <strong>Connected</strong>
-                    <small>Leads, follow-ups, calls, reviews, and payroll stay aligned in the same system.</small>
-                </div>
-            </div>
-
-            <div class="hc-login-trust-line">
-                <span><i class="bi bi-shield-check"></i> Protected company access</span>
-                <span><i class="bi bi-broadcast-pin"></i> Live business records</span>
-                <span><i class="bi bi-bar-chart-line"></i> Real-time admin visibility</span>
             </div>
         </section>
 
         <section class="hc-login-form">
-            <div>
-                <span class="hc-login-form-kicker"><i class="bi bi-box-arrow-in-right"></i> Sign In</span>
-                <h2 class="fw-bold mb-2 mt-3">Welcome back</h2>
-                <p class="text-secondary mb-0">Use your admin phone number or email and password to continue into the workspace.</p>
-            </div>
+            <span class="hc-login-kicker text-dark border-0" style="background:#eef2fe;color:#536299;">
+                <i class="bi bi-box-arrow-in-right"></i> Sign In
+            </span>
+            <h2>Welcome Back</h2>
+            <p>Use your admin phone number or email and password.</p>
 
             {% if messages %}
                 {% for message in messages %}
-                    <div class="alert hc-login-alert mb-0">{{ message }}</div>
+                    <div class="alert hc-login-alert">{{ message }}</div>
                 {% endfor %}
             {% endif %}
 
-            <form method="post" novalidate class="hc-login-form-panel">
+            <form method="post" novalidate class="hc-form-panel">
                 {% csrf_token %}
                 <div class="mb-3">
                     <label class="form-label fw-semibold" for="identifier">Phone Number or Email</label>
@@ -469,26 +447,11 @@
                     >
                 </div>
                 <button type="submit" class="btn btn-primary w-100 mt-2">Open Admin Workspace</button>
-                <div class="hc-login-form-meta">
-                    <div class="hc-login-form-meta-item">
-                        <div>
-                            <strong>Secure Admin Entry</strong>
-                            <small>Access is restricted to verified admin credentials.</small>
-                        </div>
-                        <i class="bi bi-shield-lock fs-4"></i>
-                    </div>
-                    <div class="hc-login-form-meta-item">
-                        <div>
-                            <strong>Need stable access?</strong>
-                            <small>Stay connected to load live alerts and operations data smoothly.</small>
-                        </div>
-                        <i class="bi bi-wifi fs-4"></i>
-                    </div>
-                </div>
             </form>
         </section>
     </div>
-</div>
+</main>
+
 <script>
 window.heavenectionNetwork = { offlinePath: "{% url 'offline-page' %}" };
 </script>

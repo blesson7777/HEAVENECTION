@@ -3,7 +3,9 @@ package com.heavenection.app
 import android.Manifest
 import android.app.DownloadManager
 import android.content.pm.PackageManager.PERMISSION_GRANTED
+import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -13,6 +15,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.PowerManager
 import android.provider.Settings
 import android.telecom.TelecomManager
 import android.telephony.TelephonyManager
@@ -82,6 +85,12 @@ class MainActivity : FlutterActivity() {
                     openAppSettings()
                     result.success(true)
                 }
+                "getBackgroundAccessStatus" -> result.success(buildBackgroundAccessPayload())
+                "openBatteryOptimizationSettings" -> {
+                    openBatteryOptimizationSettings()
+                    result.success(true)
+                }
+                "openAutoStartSettings" -> result.success(openAutoStartSettings())
                 "getDownloadedUpdateStatus" -> result.success(
                     buildDownloadedUpdateStatus(call.argument<Int>("versionCode")),
                 )
@@ -342,6 +351,136 @@ class MainActivity : FlutterActivity() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         startActivity(intent)
+    }
+
+    private fun buildBackgroundAccessPayload(): Map<String, Any> {
+        val manufacturer = Build.MANUFACTURER.orEmpty()
+        val brand = Build.BRAND.orEmpty()
+        val model = Build.MODEL.orEmpty()
+        val batteryUnrestricted = isBatteryOptimizationIgnored()
+        return mapOf(
+            "manufacturer" to manufacturer,
+            "brand" to brand,
+            "model" to model,
+            "batteryUnrestricted" to batteryUnrestricted,
+            // Android does not expose a reliable public API to read OEM autostart toggle state.
+            "autoStartStatusKnown" to false,
+        )
+    }
+
+    private fun isBatteryOptimizationIgnored(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return true
+        }
+        val powerManager = getSystemService(POWER_SERVICE) as? PowerManager
+        return powerManager?.isIgnoringBatteryOptimizations(packageName) == true
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        val intents = mutableListOf<Intent>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            intents += Intent(
+                Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                Uri.parse("package:$packageName"),
+            )
+            intents += Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+        }
+        intents += Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:$packageName"),
+        )
+        launchFirstAvailableIntent(intents)
+    }
+
+    private fun openAutoStartSettings(): Boolean {
+        val manufacturer = Build.MANUFACTURER.orEmpty().lowercase()
+        val intents = mutableListOf<Intent>()
+
+        when {
+            manufacturer.contains("oneplus") ||
+                manufacturer.contains("oppo") ||
+                manufacturer.contains("realme") -> {
+                intents += componentIntent(
+                    "com.oplus.safecenter",
+                    "com.oplus.startupapp.view.StartupAppListActivity",
+                )
+                intents += componentIntent(
+                    "com.coloros.safecenter",
+                    "com.coloros.safecenter.permission.startup.StartupAppListActivity",
+                )
+                intents += componentIntent(
+                    "com.oneplus.security",
+                    "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity",
+                )
+                intents += componentIntent(
+                    "com.oneplus.security",
+                    "com.oneplus.security.auto.launch.view.AutoLaunchAppListActivity",
+                )
+            }
+            manufacturer.contains("xiaomi") ||
+                manufacturer.contains("redmi") ||
+                manufacturer.contains("poco") -> {
+                intents += componentIntent(
+                    "com.miui.securitycenter",
+                    "com.miui.permcenter.autostart.AutoStartManagementActivity",
+                )
+            }
+            manufacturer.contains("vivo") ||
+                manufacturer.contains("iqoo") -> {
+                intents += componentIntent(
+                    "com.vivo.permissionmanager",
+                    "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
+                )
+                intents += componentIntent(
+                    "com.iqoo.secure",
+                    "com.iqoo.secure.ui.phoneoptimize.BgStartUpManager",
+                )
+            }
+            manufacturer.contains("huawei") ||
+                manufacturer.contains("honor") -> {
+                intents += componentIntent(
+                    "com.huawei.systemmanager",
+                    "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity",
+                )
+                intents += componentIntent(
+                    "com.huawei.systemmanager",
+                    "com.huawei.systemmanager.optimize.process.ProtectActivity",
+                )
+            }
+            manufacturer.contains("samsung") -> {
+                intents += Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+            }
+        }
+
+        intents += Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:$packageName"),
+        )
+        return launchFirstAvailableIntent(intents)
+    }
+
+    private fun componentIntent(packageName: String, className: String): Intent {
+        return Intent().apply {
+            component = ComponentName(packageName, className)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+    }
+
+    private fun launchFirstAvailableIntent(intents: List<Intent>): Boolean {
+        intents.forEach { intent ->
+            val safeIntent = intent.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            if (safeIntent.resolveActivity(packageManager) != null) {
+                try {
+                    startActivity(safeIntent)
+                    return true
+                } catch (_: ActivityNotFoundException) {
+                    // Continue to next available intent.
+                } catch (_: SecurityException) {
+                    // Continue to next available intent.
+                }
+            }
+        }
+        return false
     }
 
     private fun startInstallForDownloadedUpdate(): Map<String, Any> {

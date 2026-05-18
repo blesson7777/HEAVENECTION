@@ -258,6 +258,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _removeAadharPhoto = false;
   bool _removePassbookPhoto = false;
   Map<String, dynamic> _requiredPermissionStatus = const <String, dynamic>{};
+  Map<String, dynamic> _backgroundAccessStatus = const <String, dynamic>{};
   bool? _requiredPermissionsGranted;
   bool _isRefreshingRequiredPermissions = false;
   bool _isRequiredPermissionDialogVisible = false;
@@ -980,6 +981,40 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
   }
 
+  Future<Map<String, dynamic>> _readBackgroundAccessStatus() async {
+    if (!Platform.isAndroid) {
+      return const <String, dynamic>{
+        'manufacturer': '',
+        'brand': '',
+        'model': '',
+        'batteryUnrestricted': false,
+        'autoStartStatusKnown': false,
+      };
+    }
+
+    try {
+      return Map<String, dynamic>.from(
+        await _updaterChannel.invokeMapMethod<String, dynamic>(
+              'getBackgroundAccessStatus',
+            ) ??
+            const <String, dynamic>{},
+      );
+    } on MissingPluginException {
+      return const <String, dynamic>{};
+    } on PlatformException {
+      return const <String, dynamic>{};
+    }
+  }
+
+  Future<void> _refreshBackgroundAccessStatus() async {
+    final status = await _readBackgroundAccessStatus();
+    if (!mounted) {
+      _backgroundAccessStatus = status;
+      return;
+    }
+    setState(() => _backgroundAccessStatus = status);
+  }
+
   Future<bool> _refreshRequiredPermissionState({
     bool showDialogIfMissing = false,
   }) async {
@@ -998,6 +1033,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
 
     final status = await _readRequiredPermissionStatus();
     _applyRequiredPermissionStatus(status);
+    unawaited(_refreshBackgroundAccessStatus());
     final allGranted = status['allGranted'] == true;
     if (allGranted) {
       _handlePermissionReadyPrompts();
@@ -1079,6 +1115,52 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         isError: true,
       );
     }
+  }
+
+  Future<void> _openBatteryOptimizationSettings() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+    try {
+      await _updaterChannel.invokeMethod<void>('openBatteryOptimizationSettings');
+    } on MissingPluginException {
+      _showMessage(
+        'Could not open battery settings on this device.',
+        isError: true,
+      );
+      return;
+    } on PlatformException catch (error) {
+      _showMessage(
+        error.message ?? 'Could not open battery settings right now.',
+        isError: true,
+      );
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    await _refreshBackgroundAccessStatus();
+  }
+
+  Future<void> _openAutoStartSettings() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+    try {
+      await _updaterChannel.invokeMethod<dynamic>('openAutoStartSettings');
+    } on MissingPluginException {
+      _showMessage(
+        'Could not open auto-start settings on this device.',
+        isError: true,
+      );
+      return;
+    } on PlatformException catch (error) {
+      _showMessage(
+        error.message ?? 'Could not open auto-start settings right now.',
+        isError: true,
+      );
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    await _refreshBackgroundAccessStatus();
   }
 
   Future<bool> _ensureRequiredPermissionsReady({
@@ -1265,6 +1347,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final callLogGranted = _requiredPermissionStatus['callLogGranted'] == true;
     final phoneStateGranted =
         _requiredPermissionStatus['phoneStateGranted'] == true;
+    final batteryUnrestricted =
+        _backgroundAccessStatus['batteryUnrestricted'] == true;
+    final manufacturer =
+        (_backgroundAccessStatus['manufacturer'] as String?)?.trim() ?? '';
+    final model = (_backgroundAccessStatus['model'] as String?)?.trim() ?? '';
 
     return Scaffold(
       appBar: AppBar(title: const Text('Allow Access')),
@@ -1329,6 +1416,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   'Needed to detect when a live customer call ends and open the correct remark flow.',
               granted: phoneStateGranted,
             ),
+            const SizedBox(height: 12),
+            _permissionRequirementRow(
+              icon: Icons.battery_saver_rounded,
+              title: 'Battery Usage Unrestricted',
+              description:
+                  'Needed so the phone keeps this app alive for instant call-log sync after calls.',
+              granted: batteryUnrestricted,
+            ),
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,
@@ -1349,10 +1444,30 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               icon: const Icon(Icons.settings_rounded),
               label: const Text('Open Settings'),
             ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _openBatteryOptimizationSettings,
+              icon: const Icon(Icons.battery_charging_full_rounded),
+              label: const Text('Open Battery Settings'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _openAutoStartSettings,
+              icon: const Icon(Icons.rocket_launch_rounded),
+              label: const Text('Open Auto-Start Settings'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _refreshBackgroundAccessStatus,
+              icon: const Icon(Icons.sync_rounded),
+              label: const Text('Recheck Device Settings'),
+            ),
             const SizedBox(height: 12),
-            const Text(
-              'If you denied any permission earlier, open Android settings and allow every required access there.',
-              style: TextStyle(color: Colors.black54, height: 1.45),
+            Text(
+              manufacturer.isEmpty && model.isEmpty
+                  ? 'If you denied any permission earlier, open Android settings and allow every required access there.'
+                  : 'Device: ${manufacturer.isEmpty ? 'Android' : manufacturer}${model.isEmpty ? '' : ' • $model'}. Keep battery usage unrestricted and auto-start/background activity enabled for stable call sync.',
+              style: const TextStyle(color: Colors.black54, height: 1.45),
             ),
           ],
         ),
@@ -4582,41 +4697,6 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     });
   }
 
-  void _syncNotificationPolling() {
-    _notificationPollTimer?.cancel();
-    if (_user == null || _lifecycleState != AppLifecycleState.resumed) {
-      return;
-    }
-
-    unawaited(_pollNotifications());
-    _notificationPollTimer = Timer.periodic(kNotificationPollInterval, (_) {
-      if (_lifecycleState == AppLifecycleState.resumed) {
-        unawaited(_pollNotifications());
-      }
-    });
-  }
-
-  Future<void> _pollNotifications() async {
-    if (_user == null || _isNotificationPollRequestInFlight) {
-      return;
-    }
-
-    _isNotificationPollRequestInFlight = true;
-    try {
-      final notifications = await _apiClient.fetchActiveNotifications();
-      if (!mounted) {
-        return;
-      }
-      _applyStaffNotifications(notifications);
-    } on ApiException catch (error) {
-      if (error.statusCode == 401) {
-        await _handleForcedLogout();
-      }
-    } finally {
-      _isNotificationPollRequestInFlight = false;
-    }
-  }
-
   Future<void> _handleResumeState() async {
     final permissionsReady = await _refreshRequiredPermissionState(
       showDialogIfMissing: true,
@@ -4694,6 +4774,41 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       allowManualFallback: false,
       showMissingMessage: showMissingMessage,
     );
+  }
+
+  void _syncNotificationPolling() {
+    _notificationPollTimer?.cancel();
+    if (_user == null || _lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+
+    unawaited(_pollNotifications());
+    _notificationPollTimer = Timer.periodic(kNotificationPollInterval, (_) {
+      if (_lifecycleState == AppLifecycleState.resumed) {
+        unawaited(_pollNotifications());
+      }
+    });
+  }
+
+  Future<void> _pollNotifications() async {
+    if (_user == null || _isNotificationPollRequestInFlight) {
+      return;
+    }
+
+    _isNotificationPollRequestInFlight = true;
+    try {
+      final notifications = await _apiClient.fetchActiveNotifications();
+      if (!mounted) {
+        return;
+      }
+      _applyStaffNotifications(notifications);
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await _handleForcedLogout();
+      }
+    } finally {
+      _isNotificationPollRequestInFlight = false;
+    }
   }
 
   Future<bool> _waitForCallToEnd({
