@@ -3922,8 +3922,29 @@
             latestPayload = payload || { summary: {}, alerts: [] };
             const summary = latestPayload.summary || {};
             const alerts = Array.isArray(latestPayload.alerts) ? latestPayload.alerts : [];
-            const totalAlerts = Number(summary.total_alerts || alerts.length || 0);
-            const unreadAlerts = alerts.filter((alert) => !isAlertSeen(alert.id));
+            const severityOrder = { critical: 0, warning: 1, normal: 2, good: 3 };
+            const orderedAlerts = alerts
+                .slice()
+                .sort((left, right) => {
+                    const leftSeen = isAlertSeen(left?.id);
+                    const rightSeen = isAlertSeen(right?.id);
+                    if (leftSeen !== rightSeen) {
+                        return leftSeen ? 1 : -1;
+                    }
+                    const leftSeverity = severityOrder[String(left?.severity || "").toLowerCase()] ?? 99;
+                    const rightSeverity = severityOrder[String(right?.severity || "").toLowerCase()] ?? 99;
+                    if (leftSeverity !== rightSeverity) {
+                        return leftSeverity - rightSeverity;
+                    }
+                    const leftScore = Number(left?.sort_score || 0);
+                    const rightScore = Number(right?.sort_score || 0);
+                    if (leftScore !== rightScore) {
+                        return rightScore - leftScore;
+                    }
+                    return String(right?.id || "").localeCompare(String(left?.id || ""));
+                });
+            const totalAlerts = Number(summary.total_alerts || orderedAlerts.length || 0);
+            const unreadAlerts = orderedAlerts.filter((alert) => !isAlertSeen(alert.id));
             const unreadCount = unreadAlerts.length;
             const criticalAlerts = Number(summary.critical_alerts || 0);
 
@@ -3942,8 +3963,8 @@
                 generatedAtNode.textContent = summary.generated_at_label || "--";
             }
 
-            listNode.innerHTML = alerts.length
-                ? alerts.map((alert) => `
+            listNode.innerHTML = orderedAlerts.length
+                ? orderedAlerts.map((alert) => `
                     <article class="hc-admin-alert-item is-${escapeHtml(alert.severity || "normal")}${isAlertSeen(alert.id) ? " is-read" : ""}" data-alert-id="${escapeHtml(alert.id || "")}">
                         <div class="hc-admin-alert-item-head">
                             <span class="hc-admin-alert-chip is-${escapeHtml(alert.severity || "normal")}">${escapeHtml(alert.severity_label || "Normal")}</span>
