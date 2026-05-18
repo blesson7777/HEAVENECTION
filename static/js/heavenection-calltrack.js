@@ -3319,6 +3319,34 @@
             return (suspicious * 9) + (zeroOnly * 7) + (invalidShort * 5) + (missed * 4) + reviewNeed;
         }
 
+        function qualityFactorRows(row) {
+            const factors = [];
+            const consistency = String(row?.outcome_consistency_label || "--").trim();
+            if (consistency && consistency !== "--") {
+                factors.push(`Consistency: ${consistency}`);
+            }
+            factors.push(`Real calls: ${asNumber(row?.real_call_count)}/${asNumber(row?.verified_attempt_count)}`);
+            if (asNumber(row?.zero_only_block_count) > 0) {
+                factors.push(`Zero-talk blocks: ${asNumber(row?.zero_only_block_count)}`);
+            }
+            if (asNumber(row?.suspicious_block_count) > 0) {
+                factors.push(`Call review blocks: ${asNumber(row?.suspicious_block_count)}`);
+            }
+            if (asNumber(row?.invalid_short_count) > 0) {
+                factors.push(`Invalid short: ${asNumber(row?.invalid_short_count)}`);
+            }
+            if (asNumber(row?.zero_second_attempt_count) > 0) {
+                factors.push(`Zero-second attempts: ${asNumber(row?.zero_second_attempt_count)}`);
+            }
+            if (asNumber(row?.missed_callbacks) > 0) {
+                factors.push(`Missed follow-up: ${asNumber(row?.missed_callbacks)}`);
+            }
+            if (asNumber(row?.long_away_count) > 0) {
+                factors.push(`Long away periods: ${asNumber(row?.long_away_count)}`);
+            }
+            return factors;
+        }
+
         function summarizeTeam(payload) {
             const summary = payload?.summary || {};
             if (liveStaffNode) {
@@ -3378,6 +3406,9 @@
                             <span><strong>${asNumber(row.quality_score)}</strong> quality</span>
                             <span><strong>${asNumber(row.converted_today)}</strong> converted</span>
                         </div>
+                        <div class="hc-performance-alert-meta">
+                            ${qualityFactorRows(row).slice(0, 3).map((factor) => `<span>${escapeHtml(factor)}</span>`).join("")}
+                        </div>
                     </article>
                 `;
             }).join("");
@@ -3414,6 +3445,9 @@
                         <span>${asNumber(row.zero_only_block_count)} zero blocks</span>
                         <span>${asNumber(row.invalid_short_count)} invalid short</span>
                         <span>${asNumber(row.missed_callbacks)} missed follow-up</span>
+                    </div>
+                    <div class="hc-performance-alert-meta">
+                        ${qualityFactorRows(row).map((factor) => `<span>${escapeHtml(factor)}</span>`).join("")}
                     </div>
                 </article>
             `).join("");
@@ -3568,6 +3602,9 @@
                                 <div><dt>Converted</dt><dd>${asNumber(row.converted_today)}</dd></div>
                                 <div><dt>Real Calls</dt><dd>${asNumber(row.real_call_count)}</dd></div>
                             </dl>
+                            <div class="hc-performance-alert-meta">
+                                ${qualityFactorRows(row).map((factor) => `<span>${escapeHtml(factor)}</span>`).join("")}
+                            </div>
                         </article>
                     `).join("")}
                 </div>
