@@ -10,16 +10,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css/heavenection-calltrack.css' %}?v=20260402a">
+    <link rel="stylesheet" href="{% static 'css/heavenection-calltrack.css' %}?v=20260518a">
     <style>
         body {
             min-height: 100vh;
             margin: 0;
             font-family: "Public Sans", Arial, sans-serif;
             background:
-                radial-gradient(circle at top left, rgba(141, 157, 207, 0.28) 0, rgba(141, 157, 207, 0) 30%),
-                linear-gradient(160deg, #1f2746 0%, #3a487d 50%, #4d5c90 100%);
+                radial-gradient(circle at 14% 16%, rgba(114, 136, 210, 0.34) 0, rgba(114, 136, 210, 0) 30%),
+                radial-gradient(circle at 88% 12%, rgba(126, 238, 255, 0.18) 0, rgba(126, 238, 255, 0) 24%),
+                linear-gradient(158deg, #0f1630 0%, #25325a 42%, #3f4f86 100%);
             color: #17213d;
+            overflow-x: hidden;
         }
 
         .hc-login-shell {
@@ -27,23 +29,58 @@
             display: grid;
             place-items: center;
             padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hc-login-shell::before,
+        .hc-login-shell::after {
+            content: "";
+            position: absolute;
+            border-radius: 999px;
+            pointer-events: none;
+            filter: blur(8px);
+        }
+
+        .hc-login-shell::before {
+            width: 380px;
+            height: 380px;
+            top: -120px;
+            left: -90px;
+            background: radial-gradient(circle, rgba(127, 149, 224, 0.32) 0, rgba(127, 149, 224, 0) 72%);
+            animation: hc-login-float 11s ease-in-out infinite;
+        }
+
+        .hc-login-shell::after {
+            width: 460px;
+            height: 460px;
+            right: -140px;
+            bottom: -160px;
+            background: radial-gradient(circle, rgba(117, 233, 255, 0.22) 0, rgba(117, 233, 255, 0) 72%);
+            animation: hc-login-float 14s ease-in-out infinite reverse;
         }
 
         .hc-login-card {
-            width: min(100%, 1080px);
+            position: relative;
+            z-index: 1;
+            width: min(100%, 1180px);
             display: grid;
-            grid-template-columns: minmax(0, 1.1fr) minmax(320px, 420px);
+            grid-template-columns: minmax(0, 1.18fr) minmax(360px, 430px);
             overflow: hidden;
-            border-radius: 32px;
-            background: rgba(255, 255, 255, 0.96);
-            box-shadow: 0 30px 60px rgba(14, 21, 44, 0.28);
+            border-radius: 38px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 36px 80px rgba(8, 14, 32, 0.38);
+            backdrop-filter: blur(16px);
         }
 
         .hc-login-hero {
-            padding: 3rem;
+            position: relative;
+            padding: 3rem 3rem 2.8rem;
             background:
-                radial-gradient(circle at 12% 12%, rgba(255, 255, 255, 0.18) 0, rgba(255, 255, 255, 0) 22%),
-                linear-gradient(160deg, #232c4d 0%, #3b4a80 50%, #5766a5 100%);
+                radial-gradient(circle at 14% 14%, rgba(255, 255, 255, 0.18) 0, rgba(255, 255, 255, 0) 24%),
+                radial-gradient(circle at 84% 18%, rgba(110, 232, 255, 0.16) 0, rgba(110, 232, 255, 0) 20%),
+                linear-gradient(160deg, #182242 0%, #2b3967 48%, #44548e 100%);
             color: #f7f8ff;
             display: flex;
             flex-direction: column;
@@ -51,27 +88,51 @@
             gap: 2rem;
         }
 
+        .hc-login-hero::before {
+            content: "";
+            position: absolute;
+            inset: auto -14% -26% auto;
+            width: 340px;
+            height: 340px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(106, 225, 255, 0.2) 0, rgba(106, 225, 255, 0) 72%);
+        }
+
         .hc-login-form {
-            padding: 3rem 2.4rem;
+            position: relative;
+            padding: 3rem 2.55rem;
             display: flex;
             flex-direction: column;
             justify-content: center;
             gap: 1.2rem;
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 255, 0.97));
         }
 
         .hc-login-form .form-control {
-            min-height: 54px;
+            min-height: 58px;
             border-radius: 18px;
             border: 1px solid #d7ddf0;
             padding-inline: 1rem;
+            box-shadow: none;
+        }
+
+        .hc-login-form .form-control:focus {
+            border-color: #7484c5;
+            box-shadow: 0 0 0 4px rgba(116, 132, 197, 0.14);
         }
 
         .hc-login-form .btn-primary {
-            min-height: 54px;
+            min-height: 56px;
             border-radius: 18px;
             background: linear-gradient(135deg, #4d5c90, #6878b2);
             border: 0;
             font-weight: 800;
+            box-shadow: 0 16px 30px rgba(77, 92, 144, 0.24);
+        }
+
+        .hc-login-form .btn-primary:hover {
+            background: linear-gradient(135deg, #44517d, #6472a6);
         }
 
         .hc-login-kicker {
@@ -86,6 +147,185 @@
             font-weight: 700;
         }
 
+        .hc-login-brand-stage {
+            display: flex;
+            align-items: center;
+            gap: 1.2rem;
+        }
+
+        .hc-login-brand-mark {
+            width: 110px;
+            height: 110px;
+            padding: 1rem;
+            display: grid;
+            place-items: center;
+            border-radius: 30px;
+            background:
+                radial-gradient(circle at top, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08)),
+                linear-gradient(150deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.05));
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 20px 38px rgba(4, 9, 24, 0.26);
+            animation: hc-login-mark-float 2.8s ease-in-out infinite;
+        }
+
+        .hc-login-brand-mark img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.2));
+        }
+
+        .hc-login-brand-copy strong {
+            display: block;
+            font-size: 1.35rem;
+            letter-spacing: 0.02em;
+        }
+
+        .hc-login-brand-copy small {
+            display: block;
+            margin-top: 0.35rem;
+            color: rgba(238, 243, 255, 0.72);
+            line-height: 1.55;
+        }
+
+        .hc-login-headline {
+            max-width: 620px;
+        }
+
+        .hc-login-headline h1 {
+            margin: 1.5rem 0 1rem;
+            font-size: clamp(2rem, 4vw, 3.6rem);
+            line-height: 1.02;
+            letter-spacing: -0.04em;
+        }
+
+        .hc-login-headline p {
+            margin: 0;
+            max-width: 540px;
+            color: rgba(241, 245, 255, 0.76);
+            font-size: 1.02rem;
+            line-height: 1.72;
+        }
+
+        .hc-login-signal-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
+        .hc-login-signal-card {
+            padding: 1rem 1rem 1.05rem;
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.06));
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .hc-login-signal-card span {
+            display: block;
+            color: rgba(230, 238, 255, 0.72);
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .hc-login-signal-card strong {
+            display: block;
+            margin-top: 0.55rem;
+            font-size: 1.45rem;
+            font-weight: 800;
+        }
+
+        .hc-login-signal-card small {
+            display: block;
+            margin-top: 0.45rem;
+            color: rgba(233, 240, 255, 0.72);
+            line-height: 1.55;
+        }
+
+        .hc-login-trust-line {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.7rem;
+        }
+
+        .hc-login-trust-line span {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.45rem 0.78rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.1);
+            color: rgba(242, 246, 255, 0.82);
+            font-size: 0.8rem;
+        }
+
+        .hc-login-form-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+            padding: 0.45rem 0.78rem;
+            border-radius: 999px;
+            background: #eef2fe;
+            color: #55659a;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .hc-login-form-panel {
+            padding: 1.15rem;
+            border-radius: 24px;
+            border: 1px solid #e6eaf6;
+            background: #fbfcff;
+            box-shadow: inset 0 1px 0 #ffffff;
+        }
+
+        .hc-login-form-meta {
+            display: grid;
+            gap: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .hc-login-form-meta-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 0.85rem 1rem;
+            border-radius: 18px;
+            background: #f3f6fd;
+            color: #435277;
+        }
+
+        .hc-login-form-meta-item strong {
+            color: #1f2d4f;
+            font-size: 0.95rem;
+        }
+
+        .hc-login-form-meta-item small {
+            color: #7482a3;
+        }
+
+        .hc-login-alert {
+            border: 0;
+            border-radius: 18px;
+            background: #fff0f0;
+            color: #b64040;
+        }
+
+        @keyframes hc-login-float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-18px); }
+        }
+
+        @keyframes hc-login-mark-float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+
         @media (max-width: 991.98px) {
             .hc-login-card {
                 grid-template-columns: 1fr;
@@ -94,6 +334,33 @@
             .hc-login-hero,
             .hc-login-form {
                 padding: 2rem;
+            }
+
+            .hc-login-signal-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hc-login-brand-stage {
+                align-items: flex-start;
+            }
+        }
+
+        @media (max-width: 575.98px) {
+            .hc-login-shell {
+                padding: 1rem;
+            }
+
+            .hc-login-card {
+                border-radius: 28px;
+            }
+
+            .hc-login-brand-stage {
+                flex-direction: column;
+            }
+
+            .hc-login-brand-mark {
+                width: 92px;
+                height: 92px;
             }
         }
     </style>
@@ -119,33 +386,64 @@
 <div class="hc-login-shell">
     <div class="hc-login-card">
         <section class="hc-login-hero">
-            <div>
-                <span class="hc-login-kicker">HEAVENECTION CallTrack</span>
-                <div class="mt-4">
-                    <img src="{% static 'images/heavenection-logo.png' %}" alt="Heavenection" class="hc-brand-logo">
+            <div class="hc-login-headline">
+                <span class="hc-login-kicker"><i class="bi bi-shield-lock-fill"></i> HEAVENECTION Admin Console</span>
+                <div class="hc-login-brand-stage mt-4">
+                    <div class="hc-login-brand-mark">
+                        {% if company_profile.logo %}
+                        <img src="{% url 'company-logo' %}" alt="{{ company_profile.company_name|default:'Heavenection' }}">
+                        {% else %}
+                        <img src="{% static 'images/heavenection-logo.png' %}" alt="Heavenection">
+                        {% endif %}
+                    </div>
+                    <div class="hc-login-brand-copy">
+                        <strong>{{ company_profile.company_name|default:"Heavenection" }}</strong>
+                        <small>Secure operations access for live staff supervision, lead control, salary workflow, and business reporting.</small>
+                    </div>
                 </div>
-                <h1 class="mt-4 mb-3 fw-bold">Admin access for live operations and reporting.</h1>
-                <p class="mb-0 text-white-50">Sign in with your admin phone number and password to access the dashboard, lead desk, live team activity, and salary reporting.</p>
+                <h1 class="fw-bold">Operate the team from one calm, controlled command desk.</h1>
+                <p>Sign in with your admin account to open the dashboard, command center, lead pipeline, work review signals, notifications, and payout controls in one place.</p>
             </div>
-            <div class="text-white-50">
-                <div>Protected company access</div>
-                <div>Live business records</div>
+
+            <div class="hc-login-signal-grid">
+                <div class="hc-login-signal-card">
+                    <span>Live Control</span>
+                    <strong>Command</strong>
+                    <small>Watch staff activity, queue pressure, and review signals without losing context.</small>
+                </div>
+                <div class="hc-login-signal-card">
+                    <span>Protected Access</span>
+                    <strong>Secure</strong>
+                    <small>Admin-only login access keeps sensitive lead and salary operations protected.</small>
+                </div>
+                <div class="hc-login-signal-card">
+                    <span>Business Flow</span>
+                    <strong>Connected</strong>
+                    <small>Leads, follow-ups, calls, reviews, and payroll stay aligned in the same system.</small>
+                </div>
+            </div>
+
+            <div class="hc-login-trust-line">
+                <span><i class="bi bi-shield-check"></i> Protected company access</span>
+                <span><i class="bi bi-broadcast-pin"></i> Live business records</span>
+                <span><i class="bi bi-bar-chart-line"></i> Real-time admin visibility</span>
             </div>
         </section>
 
         <section class="hc-login-form">
             <div>
-                <h2 class="fw-bold mb-2">Admin Login</h2>
-                <p class="text-secondary mb-0">Use your admin account to continue.</p>
+                <span class="hc-login-form-kicker"><i class="bi bi-box-arrow-in-right"></i> Sign In</span>
+                <h2 class="fw-bold mb-2 mt-3">Welcome back</h2>
+                <p class="text-secondary mb-0">Use your admin phone number or email and password to continue into the workspace.</p>
             </div>
 
             {% if messages %}
                 {% for message in messages %}
-                    <div class="alert alert-danger mb-0">{{ message }}</div>
+                    <div class="alert hc-login-alert mb-0">{{ message }}</div>
                 {% endfor %}
             {% endif %}
 
-            <form method="post" novalidate>
+            <form method="post" novalidate class="hc-login-form-panel">
                 {% csrf_token %}
                 <div class="mb-3">
                     <label class="form-label fw-semibold" for="identifier">Phone Number or Email</label>
@@ -159,7 +457,7 @@
                         required
                     >
                 </div>
-                <div class="mb-4">
+                <div class="mb-3">
                     <label class="form-label fw-semibold" for="password">Password</label>
                     <input
                         type="password"
@@ -170,7 +468,23 @@
                         required
                     >
                 </div>
-                <button type="submit" class="btn btn-primary w-100">Sign In</button>
+                <button type="submit" class="btn btn-primary w-100 mt-2">Open Admin Workspace</button>
+                <div class="hc-login-form-meta">
+                    <div class="hc-login-form-meta-item">
+                        <div>
+                            <strong>Secure Admin Entry</strong>
+                            <small>Access is restricted to verified admin credentials.</small>
+                        </div>
+                        <i class="bi bi-shield-lock fs-4"></i>
+                    </div>
+                    <div class="hc-login-form-meta-item">
+                        <div>
+                            <strong>Need stable access?</strong>
+                            <small>Stay connected to load live alerts and operations data smoothly.</small>
+                        </div>
+                        <i class="bi bi-wifi fs-4"></i>
+                    </div>
+                </div>
             </form>
         </section>
     </div>
