@@ -143,6 +143,7 @@ from backend.apps.telecalling.services import (
     reset_staff_review_leads_to_new_queue,
     release_staff_queue,
     reactivate_oldest_recovery_leads,
+    recover_recovery_lead_to_owner,
     run_automatic_lead_cleanup_if_due,
     set_active_app_release,
     retry_pending_staff_call,
@@ -2014,6 +2015,26 @@ def recovery_leads_page(request):
 
     if request.method == "POST":
         recovery_action = request.POST.get("recovery_action")
+        if recovery_action == "recover_single":
+            lead_id = (request.POST.get("lead_id") or "").strip()
+            recover_mode = (request.POST.get("recover_mode") or "").strip()
+            target_status = Lead.Status.INTERESTED if recover_mode == "mark_interested_same_staff" else Lead.Status.NEW
+            try:
+                summary = recover_recovery_lead_to_owner(lead_id, target_status=target_status)
+            except ValueError as error:
+                messages.error(request, str(error))
+                return redirect("recovery-leads-page")
+            if summary["target_status"] == Lead.Status.INTERESTED:
+                messages.success(
+                    request,
+                    f"{summary['lead_name']} moved to Follow Up under {summary['owner_name']}.",
+                )
+            else:
+                messages.success(
+                    request,
+                    f"{summary['lead_name']} reassigned to {summary['owner_name']} as New lead.",
+                )
+            return redirect("recovery-leads-page")
         if recovery_action == "reactivate_oldest":
             raw_count = request.POST.get("readd_count", "").strip()
             scope = request.POST.get("readd_scope", "all").strip() or "all"

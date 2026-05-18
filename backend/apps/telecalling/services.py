@@ -7473,12 +7473,60 @@ def _readd_recovery_status_scope(scope):
     return (Lead.Status.NO_ANSWER,)
 
 
+def _recovery_owner_staff_map(recovery_leads):
+    owner_map = {}
+    if not recovery_leads:
+        return owner_map
+
+    lead_ids = [lead.id for lead in recovery_leads]
+    for lead in recovery_leads:
+        assigned = getattr(lead, "assigned_to", None)
+        if assigned and assigned.role == Staff.Role.STAFF and assigned.is_active:
+            owner_map[lead.id] = assigned
+
+    owner_statuses = (
+        Call.Status.INTERESTED,
+        Call.Status.CALL_BACK,
+        Call.Status.NO_ANSWER,
+        Call.Status.NOT_INTERESTED,
+        Call.Status.CONVERTED,
+    )
+    latest_owner_calls = (
+        Call.objects.filter(lead_id__in=lead_ids, status__in=owner_statuses)
+        .select_related("staff")
+        .order_by("lead_id", "-start_time", "-created_at", "-id")
+    )
+    for call in latest_owner_calls:
+        if call.lead_id in owner_map:
+            continue
+        staff = call.staff
+        if staff and staff.role == Staff.Role.STAFF and staff.is_active:
+            owner_map[call.lead_id] = staff
+
+    missing_ids = [lead_id for lead_id in lead_ids if lead_id not in owner_map]
+    if missing_ids:
+        detail_rows = (
+            InterestedLeadDetail.objects.filter(lead_id__in=missing_ids)
+            .select_related("staff")
+            .order_by("lead_id", "-updated_at", "-created_at")
+        )
+        for detail in detail_rows:
+            if detail.lead_id in owner_map:
+                continue
+            staff = detail.staff
+            if staff and staff.role == Staff.Role.STAFF and staff.is_active:
+                owner_map[detail.lead_id] = staff
+
+    return owner_map
+
+
 def build_recovery_lead_payload():
-    recovery_leads = (
+    recovery_leads = list(
         _recovery_lead_queryset()
         .select_related("assigned_to")
         .order_by("readd_count", "updated_at", "last_contacted_at", "created_at", "id")
     )
+    owner_map = _recovery_owner_staff_map(recovery_leads)
     staff_options = [
         {"id": str(staff.id), "name": staff.name}
         for staff in _staff_queryset().filter(is_active=True)
@@ -7486,6 +7534,7 @@ def build_recovery_lead_payload():
 
     recovery_rows = []
     for lead in recovery_leads:
+        recovery_owner = owner_map.get(lead.id)
         recovery_rows.append(
             {
                 "id": str(lead.id),
@@ -7502,6 +7551,8 @@ def build_recovery_lead_payload():
                 "updated_at": _format_datetime(lead.updated_at),
                 "created_at": _format_datetime(lead.created_at),
                 "readd_count": int(lead.readd_count or 0),
+                "recovery_owner_id": str(recovery_owner.id) if recovery_owner else "",
+                "recovery_owner_name": recovery_owner.name if recovery_owner else "",
             }
         )
 
@@ -7523,6 +7574,51 @@ def build_recovery_lead_payload():
             "oldest_lead_name": oldest_row["name"] if oldest_row else "No leads in this list",
             "oldest_lead_updated_at": oldest_row["updated_at"] if oldest_row else "No waiting recovery leads",
         },
+    }
+
+
+def recover_recovery_lead_to_owner(lead_id, *, target_status=Lead.Status.NEW):
+    normalized_status = str(target_status or "").strip()
+    if normalized_status not in {Lead.Status.NEW, Lead.Status.INTERESTED}:
+        raise ValueError("Recovery target must be New or Interested.")
+
+    try:
+        parsed_id = uuid.UUID(str(lead_id))
+    except (TypeError, ValueError, AttributeError):
+        raise ValueError("Select a valid recovery lead.") from None
+
+    lead = (
+        Lead.objects.select_related("assigned_to")
+        .filter(id=parsed_id, status__in=RECOVERY_LEAD_STATUSES)
+        .first()
+    )
+    if lead is None:
+        raise ValueError("Recovery lead not found or already moved from recovery queue.")
+
+    owner_map = _recovery_owner_staff_map([lead])
+    owner = owner_map.get(lead.id)
+    if owner is None:
+        raise ValueError("No active previous staff owner found for this customer.")
+
+    update_fields = ["assigned_to", "status", "callback_window", "callback_date", "updated_at"]
+    lead.assigned_to = owner
+    lead.status = normalized_status
+    lead.callback_window = ""
+    lead.callback_date = None
+    if normalized_status == Lead.Status.NEW:
+        lead.readd_count = int(lead.readd_count or 0) + 1
+        update_fields.append("readd_count")
+    lead.save(update_fields=update_fields)
+
+    if normalized_status == Lead.Status.NEW:
+        auto_allocate_leads(target_staff=owner, prioritized_lead_ids=[lead.id])
+
+    return {
+        "lead_id": str(lead.id),
+        "lead_name": lead.name,
+        "owner_name": owner.name,
+        "target_status": normalized_status,
+        "target_status_label": "Follow Up" if normalized_status == Lead.Status.INTERESTED else "New",
     }
 
 

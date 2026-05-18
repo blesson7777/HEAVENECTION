@@ -255,24 +255,49 @@
                             {{ lead.status_label }}
                         </span>
                     </td>
-                    <td>{{ lead.assigned_to }}</td>
+                    <td>
+                        <div>{{ lead.assigned_to }}</div>
+                        {% if lead.assigned_to == "Unassigned" and lead.recovery_owner_name %}
+                        <div class="small text-muted">Suggested owner: {{ lead.recovery_owner_name }}</div>
+                        {% endif %}
+                    </td>
                     <td>{{ lead.last_contacted }}</td>
                     <td>{{ lead.readd_count }}</td>
                     <td>{{ lead.updated_at }}</td>
                     <td>{{ lead.created_at }}</td>
                     <td>
-                        <button
-                            type="button"
-                            class="btn btn-outline-primary btn-sm js-edit-lead"
-                            data-lead-id="{{ lead.id }}"
-                            data-name="{{ lead.name }}"
-                            data-phone="{{ lead.phone }}"
-                            data-status="{{ lead.status }}"
-                            data-callback-window="{{ lead.callback_window }}"
-                            data-callback-date="{{ lead.callback_date }}"
-                            data-assigned-to-id="{{ lead.assigned_to_id }}"
-                            data-notes="{{ lead.notes }}"
-                        >Edit</button>
+                        <div class="d-flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                class="btn btn-outline-primary btn-sm js-edit-lead"
+                                data-lead-id="{{ lead.id }}"
+                                data-name="{{ lead.name }}"
+                                data-phone="{{ lead.phone }}"
+                                data-status="{{ lead.status }}"
+                                data-callback-window="{{ lead.callback_window }}"
+                                data-callback-date="{{ lead.callback_date }}"
+                                data-assigned-to-id="{{ lead.assigned_to_id }}"
+                                data-notes="{{ lead.notes }}"
+                            >Edit</button>
+                            {% if lead.recovery_owner_id %}
+                            <form method="post" data-confirm-title="Reassign Lead" data-confirm-message="Reassign this lead to {{ lead.recovery_owner_name }} as a new lead?" data-confirm-ok="Reassign" data-confirm-class="btn-primary">
+                                {% csrf_token %}
+                                <input type="hidden" name="recovery_action" value="recover_single">
+                                <input type="hidden" name="lead_id" value="{{ lead.id }}">
+                                <input type="hidden" name="recover_mode" value="reassign_same_staff">
+                                <button type="submit" class="btn btn-sm btn-outline-success">Reassign Same Staff</button>
+                            </form>
+                            <form method="post" data-confirm-title="Move To Follow Up" data-confirm-message="Move this lead to Follow Up under {{ lead.recovery_owner_name }}?" data-confirm-ok="Move" data-confirm-class="btn-warning">
+                                {% csrf_token %}
+                                <input type="hidden" name="recovery_action" value="recover_single">
+                                <input type="hidden" name="lead_id" value="{{ lead.id }}">
+                                <input type="hidden" name="recover_mode" value="mark_interested_same_staff">
+                                <button type="submit" class="btn btn-sm btn-outline-warning">Mark Follow Up Same Staff</button>
+                            </form>
+                            {% else %}
+                            <span class="small text-muted">No previous staff owner found</span>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% empty %}
