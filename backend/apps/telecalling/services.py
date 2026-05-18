@@ -1630,6 +1630,18 @@ def _salary_period_snapshot(staff, *, period_start, period_end, payout_cycle):
     }
 
 
+def _snapshot_with_paid_total(snapshot, paid_total):
+    paid_total = _money(paid_total)
+    earned_total = _money(snapshot.get("earned_total") or Decimal("0.00"))
+    balance = max(earned_total - paid_total, Decimal("0.00"))
+    updated_snapshot = dict(snapshot)
+    updated_snapshot["paid_total"] = paid_total
+    updated_snapshot["paid_total_label"] = _format_currency(paid_total)
+    updated_snapshot["balance"] = _money(balance)
+    updated_snapshot["balance_label"] = _format_currency(balance)
+    return updated_snapshot
+
+
 def _salary_schedule_label(staff):
     if staff.compensation_type == Staff.CompensationType.WEEKLY:
         return f"Every {staff.get_weekly_payout_day_display()}"
@@ -2246,6 +2258,21 @@ def _salary_record_paid_total(record):
     total = record.payment_transactions.aggregate(
         total=Coalesce(Sum("amount"), Decimal("0.00"))
     ).get("total")
+    return _money(total)
+
+
+def _running_cycle_advance_paid_total(staff, *, period_start, period_end, payout_cycle):
+    total = (
+        SalaryPaymentTransaction.objects.filter(
+            salary_record__staff=staff,
+            salary_record__payout_cycle=payout_cycle,
+            salary_record__period_start=period_start,
+            salary_record__period_end__gte=period_start,
+            salary_record__period_end__lte=period_end,
+            payment_kind=SalaryPaymentTransaction.PaymentKind.ADVANCE,
+        ).aggregate(total=Coalesce(Sum("amount"), Decimal("0.00"))).get("total")
+        or Decimal("0.00")
+    )
     return _money(total)
 
 
@@ -6246,6 +6273,15 @@ def build_salary_page_payload():
             period_end=running_end,
             payout_cycle=_running_payout_cycle_for_staff(staff),
         )
+        running_snapshot = _snapshot_with_paid_total(
+            running_snapshot,
+            _running_cycle_advance_paid_total(
+                staff,
+                period_start=running_start,
+                period_end=running_end,
+                payout_cycle=_running_payout_cycle_for_staff(staff),
+            ),
+        )
         advance_available = running_snapshot["balance"]
         same_period_as_due = (
             due_snapshot["period_start"] == running_snapshot["period_start"]
@@ -6397,6 +6433,15 @@ def build_salary_detail_payload(staff):
         period_start=running_start,
         period_end=running_end,
         payout_cycle=_running_payout_cycle_for_staff(staff),
+    )
+    running_snapshot = _snapshot_with_paid_total(
+        running_snapshot,
+        _running_cycle_advance_paid_total(
+            staff,
+            period_start=running_start,
+            period_end=running_end,
+            payout_cycle=_running_payout_cycle_for_staff(staff),
+        ),
     )
     previous_month_start, previous_month_end = _previous_month_range(today)
     previous_month_snapshot = _salary_period_snapshot(
