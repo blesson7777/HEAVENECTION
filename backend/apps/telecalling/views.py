@@ -1848,6 +1848,47 @@ def followups_page(request):
 
     if request.method == "POST":
         followup_action = request.POST.get("followup_action")
+        if followup_action == "mark_rejected":
+            lead_id = (request.POST.get("lead_id") or "").strip()
+            if not lead_id:
+                messages.error(request, "Select a follow-up lead to mark as rejected.")
+                return redirect("followups-page")
+            try:
+                lead = Lead.objects.select_related("assigned_to").get(id=lead_id)
+            except Lead.DoesNotExist:
+                messages.error(request, "Follow-up lead not found.")
+                return redirect("followups-page")
+
+            if lead.status not in {Lead.Status.INTERESTED, Lead.Status.CALL_BACK}:
+                messages.warning(
+                    request,
+                    f"{lead.name} is no longer in the follow-up queue.",
+                )
+                return redirect("followups-page")
+
+            previous_assigned_to_id = lead.assigned_to_id
+            lead.status = Lead.Status.NOT_INTERESTED
+            lead.callback_window = ""
+            lead.callback_date = None
+            lead.save(
+                update_fields=[
+                    "status",
+                    "callback_window",
+                    "callback_date",
+                    "updated_at",
+                ]
+            )
+            _refresh_queue_after_admin_lead_save(
+                lead=lead,
+                previous_assigned_to_id=previous_assigned_to_id,
+                explicit_assignment=False,
+            )
+            messages.success(
+                request,
+                f"{lead.name} marked as Rejected and removed from staff follow-up queue.",
+            )
+            return redirect("followups-page")
+
         if followup_action == "csv_update":
             serializer = FollowupUpdateUploadSerializer(data={"file": request.FILES.get("file")})
             if serializer.is_valid():

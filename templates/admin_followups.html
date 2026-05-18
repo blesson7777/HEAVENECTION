@@ -117,6 +117,20 @@
                                 data-lead-id="{{ lead.id }}"
                                 data-lead-name="{{ lead.name }}"
                             >Mark Converted</button>
+                            <form
+                                method="post"
+                                action="{% url 'followups-page' %}"
+                                class="m-0"
+                                data-confirm-title="Mark Follow-Up as Rejected"
+                                data-confirm-message="Mark {{ lead.name }} as Rejected and remove from staff follow-up list?"
+                                data-confirm-ok="Mark Rejected"
+                                data-confirm-class="btn-danger"
+                            >
+                                {% csrf_token %}
+                                <input type="hidden" name="followup_action" value="mark_rejected">
+                                <input type="hidden" name="lead_id" value="{{ lead.id }}">
+                                <button type="submit" class="btn btn-outline-danger btn-sm">Mark Rejected</button>
+                            </form>
                         </div>
                     </td>
                 </tr>
