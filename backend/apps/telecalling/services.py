@@ -709,9 +709,41 @@ def build_admin_web_alert_payload(*, limit=10, monitoring_payload=None):
         status=Lead.Status.NEW,
         assigned_to__isnull=True,
     ).count()
+    pending_salary_amount = Decimal("0.00")
+    pending_salary_staff_count = 0
+    for staff in _staff_queryset():
+        (due_start, due_end), due_cycle = _due_period_for_staff(staff, today)
+        due_snapshot = _salary_period_snapshot(
+            staff,
+            period_start=due_start,
+            period_end=due_end,
+            payout_cycle=due_cycle,
+        )
+        if due_snapshot["balance"] > Decimal("0.00"):
+            pending_salary_amount += due_snapshot["balance"]
+            pending_salary_staff_count += 1
 
     threshold_per_hour = int(company_profile.hourly_call_bonus_threshold or 0)
     bonus_enabled = bool(company_profile.hourly_call_bonus_enabled and threshold_per_hour > 0)
+
+    if pending_salary_staff_count > 0:
+        alerts.append(
+            {
+                "id": "salary-due-global",
+                "severity": "warning",
+                "severity_label": "Warning",
+                "title": "Salary payment is due",
+                "message": (
+                    f"{pending_salary_staff_count} staff member(s) have due salary waiting. "
+                    f"Total pending salary is {_format_currency(pending_salary_amount)}."
+                ),
+                "staff_name": "",
+                "target_url": "/salary/",
+                "target_label": "Open Salary Overview",
+                "meta_label": "Payroll attention",
+                "sort_score": 160 + min(pending_salary_staff_count, 25),
+            }
+        )
 
     if followup_overdue_count > 0:
         alerts.append(
