@@ -17,7 +17,7 @@
         <div class="hc-surface-card">
             <span class="mf-db2-kicker">Advance Available</span>
             <h4 class="mt-2 mb-1">{{ summary.advance_total }}</h4>
-            <p class="text-muted mb-0">Current earned amount that can be released as advance.</p>
+            <p class="text-muted mb-0">Running-cycle earned amount that can be released before the period closes.</p>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
@@ -103,15 +103,17 @@
                         <div class="text-muted small">Earned {{ row.due_earned_total }} | Paid {{ row.due_paid_total }}</div>
                         <div class="text-muted small">Hours {{ row.due_hours_label }}</div>
                         <div class="text-muted small">Base {{ row.due_base_pay }} | Bonus {{ row.due_bonus_earnings }}</div>
+                        <div class="text-muted small">This is the closed period amount that can be fully paid now.</div>
                     </td>
                     <td>
                         <strong>{{ row.advance_available }}</strong>
                         <div class="text-muted small">{{ row.running_period_label }}</div>
                         <div class="text-muted small">Current earned {{ row.running_earned_total }} | Already released {{ row.running_paid_total }}</div>
                         <div class="text-muted small">Hours {{ row.running_hours_label }}</div>
+                        <div class="text-muted small">This is not due salary yet. It is only the current cycle advance window.</div>
                     </td>
                     <td class="text-end">
-                        <a href="{% url 'salary-detail-page' row.id %}" class="btn btn-dark btn-sm">Open Payment</a>
+                        <a href="{% url 'salary-detail-page' row.id %}" class="btn btn-dark btn-sm">Open Payout Details</a>
                         <div class="text-muted small mt-2">
                             {% if row.can_pay_salary %}
                             Due salary ready

@@ -24,7 +24,7 @@
         <div class="hc-surface-card">
             <span class="mf-db2-kicker">Advance Available</span>
             <h4 class="mt-2 mb-1">{{ summary.advance_available }}</h4>
-            <p class="text-muted mb-0">Can be released only from the running cycle.</p>
+            <p class="text-muted mb-0">Can be released only from the still-running payout cycle.</p>
         </div>
     </div>
     <div class="col-sm-6 col-xl-3">
@@ -238,9 +238,9 @@
                     <strong>{{ running_snapshot.advance_available }}</strong>
                 </div>
                 <div class="hc-profile-meta-card">
-                    <span class="hc-profile-meta-label">Base / Calls / Bonus</span>
+                    <span class="hc-profile-meta-label">Base Pay / Bonus</span>
                     <strong>{{ running_snapshot.base_pay_label }}</strong>
-                    <small>{{ running_snapshot.bonus_earnings_label }} bonus</small>
+                    <small>{{ running_snapshot.bonus_earnings_label }} bonus. No separate call earnings are used.</small>
                 </div>
             </div>
             <div class="mt-3">
