@@ -8425,7 +8425,6 @@ def build_staff_followups_payload(staff):
         .filter(
             assigned_to=staff,
             status__in=(Lead.Status.INTERESTED, Lead.Status.CALL_BACK),
-            interested_detail__isnull=True,
         )
         .order_by("callback_date", "callback_window", "-updated_at", "-last_contacted_at")
     )
