@@ -1688,11 +1688,26 @@ def build_staff_current_salary_summary(staff, *, today=None):
     breakdown = calculate_staff_payout_for_dates(staff, period_start, period_end)
     total_hours = breakdown["active_hours"]
     total_earned = breakdown["total_pay"]
+    total_paid = (
+        SalaryPaymentTransaction.objects.filter(salary_record__staff=staff)
+        .aggregate(total=Coalesce(Sum("amount"), Decimal("0.00")))
+        .get("total")
+        or Decimal("0.00")
+    )
+    latest_transaction = (
+        SalaryPaymentTransaction.objects.filter(salary_record__staff=staff)
+        .order_by("-paid_at", "-created_at")
+        .first()
+    )
     return {
         "total_working_hours": float(total_hours),
         "total_working_hours_label": _format_work_duration_label(breakdown["active_seconds"]),
         "total_earned_amount": float(total_earned),
         "total_earned_amount_label": f"Rs. {float(total_earned):,.2f}",
+        "total_paid_amount": float(total_paid),
+        "total_paid_amount_label": _format_currency(total_paid),
+        "latest_transaction_id": str(latest_transaction.id) if latest_transaction else "",
+        "latest_paid_at_label": _format_datetime(latest_transaction.paid_at) if latest_transaction else "--",
     }
 
 
