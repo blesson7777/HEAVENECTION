@@ -52,10 +52,17 @@
                 <p class="mb-0 text-muted">Rejected leads that came from follow-up flow and can be recovered quickly.</p>
             </div>
         </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Expired Follow-Ups</span>
+                <h3 class="mb-1">{{ followup_summary.expired_followup_count }}</h3>
+                <p class="mb-0 text-muted">Follow-ups with no staff update for 14 days are auto-marked as expired.</p>
+            </div>
+        </div>
     </div>
 
     <div class="alert alert-primary border-0 mb-4" role="alert">
-        This queue shows every lead marked as <strong>Follow Up</strong> by staff. Scheduled leads stay highlighted here until the staff makes the next follow-up call. A lead can be closed as <strong>No Response</strong> only after <strong>3 unanswered tries</strong> done on different dates and times.
+        This queue shows every lead marked as <strong>Follow Up</strong> by staff. Scheduled leads stay highlighted here until the staff makes the next follow-up call. A lead can be closed as <strong>No Response</strong> only after <strong>3 unanswered tries</strong>. Any follow-up with no staff update for <strong>14 days</strong> is moved to <strong>Expired Follow Up</strong>.
     </div>
 
     <div class="hc-search-box">
@@ -143,6 +150,72 @@
                 </tr>
                 {% empty %}
                 <tr><td colspan="7" class="text-center py-4">No follow-up leads are in the queue right now.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="hc-surface-card animate-on-scroll mt-4">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Expired Follow-Ups</span>
+            <h5>Auto-expired follow-up leads (no staff update for 14 days)</h5>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Lead</th>
+                    <th>Last Owner</th>
+                    <th>Idle</th>
+                    <th>Updated</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in expired_followup_rows %}
+                <tr>
+                    <td>
+                        <strong>{{ row.name }}</strong>
+                        <div class="small text-muted">{{ row.phone }}</div>
+                        <div class="text-muted small mt-1">{{ row.notes|default:"No notes" }}</div>
+                    </td>
+                    <td>
+                        <div>{{ row.assigned_to }}</div>
+                        {% if row.assigned_to_phone %}
+                        <div class="small text-muted">{{ row.assigned_to_phone }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div><strong>{{ row.days_idle }}</strong> days</div>
+                        <div class="small text-muted">Last contact: {{ row.last_contacted }}</div>
+                    </td>
+                    <td>{{ row.updated_at }}</td>
+                    <td>
+                        {% if row.assigned_to_id %}
+                        <form
+                            method="post"
+                            action="{% url 'followups-page' %}"
+                            class="m-0"
+                            data-confirm-title="Reallocate Expired Follow-Up"
+                            data-confirm-message="Reallocate {{ row.name }} back to Follow Up under {{ row.assigned_to }}?"
+                            data-confirm-ok="Reallocate"
+                            data-confirm-class="btn-warning"
+                        >
+                            {% csrf_token %}
+                            <input type="hidden" name="followup_action" value="reallocate_expired_followup">
+                            <input type="hidden" name="lead_id" value="{{ row.id }}">
+                            <button type="submit" class="btn btn-sm btn-outline-warning">Reallocate Same Staff</button>
+                        </form>
+                        {% else %}
+                        <span class="small text-muted">No active owner</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="text-center py-4">No expired follow-up leads right now.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -399,6 +472,7 @@
                                 <option value="interested">Follow Up</option>
                                 <option value="not_interested">Rejected</option>
                                 <option value="no_answer">No Response</option>
+                                <option value="expired_followup">Expired Follow Up</option>
                                 <option value="call_back">Call Back</option>
                                 <option value="converted">Converted</option>
                             </select>

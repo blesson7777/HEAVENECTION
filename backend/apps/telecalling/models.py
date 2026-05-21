@@ -157,6 +157,7 @@ class Lead(models.Model):
     class Status(models.TextChoices):
         NEW = "new", "New"
         INTERESTED = "interested", "Follow Up"
+        EXPIRED_FOLLOWUP = "expired_followup", "Expired Follow Up"
         NOT_INTERESTED = "not_interested", "Rejected"
         NO_ANSWER = "no_answer", "No Response"
         CALL_BACK = "call_back", "Call Back"

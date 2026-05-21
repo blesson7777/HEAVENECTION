@@ -73,6 +73,7 @@ logger = logging.getLogger(__name__)
 CALLBACK_EVENING_HOURS = range(16, 20)
 CALLBACK_NIGHT_HOURS = range(20, 24)
 FOLLOWUP_NO_RESPONSE_LIMIT = 3
+FOLLOWUP_STALE_EXPIRY_DAYS = 14
 ACTIVE_QUEUE_STATUSES = (
     Lead.Status.NEW,
     Lead.Status.INTERESTED,
@@ -80,7 +81,10 @@ ACTIVE_QUEUE_STATUSES = (
 STAFF_CALL_QUEUE_STATUSES = (
     Lead.Status.NEW,
 )
-FOLLOW_UP_STATUSES = (Lead.Status.INTERESTED,)
+FOLLOW_UP_STATUSES = (
+    Lead.Status.INTERESTED,
+    Lead.Status.CALL_BACK,
+)
 RECOVERY_LEAD_STATUSES = (
     Lead.Status.NOT_INTERESTED,
     Lead.Status.NO_ANSWER,
@@ -3129,6 +3133,36 @@ def _follow_up_queryset():
     return Lead.objects.filter(status__in=FOLLOW_UP_STATUSES)
 
 
+def expire_stale_followups(*, now=None, expiry_days=FOLLOWUP_STALE_EXPIRY_DAYS):
+    now = now or timezone.now()
+    cutoff = now - timedelta(days=max(1, int(expiry_days or FOLLOWUP_STALE_EXPIRY_DAYS)))
+    stale_followups = list(
+        Lead.objects.filter(status__in=FOLLOW_UP_STATUSES).filter(
+            Q(last_contacted_at__lt=cutoff)
+            | Q(last_contacted_at__isnull=True, updated_at__lt=cutoff)
+        )
+    )
+    expired_count = 0
+    for lead in stale_followups:
+        lead.status = Lead.Status.EXPIRED_FOLLOWUP
+        lead.callback_window = ""
+        lead.callback_date = None
+        lead.save(
+            update_fields=[
+                "status",
+                "callback_window",
+                "callback_date",
+                "updated_at",
+            ]
+        )
+        expired_count += 1
+
+    return {
+        "expired_count": expired_count,
+        "cutoff": cutoff,
+    }
+
+
 def _callback_tracking_queryset():
     return Lead.objects.filter(
         status=Lead.Status.INTERESTED,
@@ -3231,6 +3265,8 @@ def _normalize_status_value(value):
         "not interested": Lead.Status.NOT_INTERESTED,
         "no response": Lead.Status.NO_ANSWER,
         "no answer": Lead.Status.NO_ANSWER,
+        "expired follow up": Lead.Status.EXPIRED_FOLLOWUP,
+        "expired_followup": Lead.Status.EXPIRED_FOLLOWUP,
         "callback": Lead.Status.INTERESTED,
         "call back": Lead.Status.INTERESTED,
         "converted": Lead.Status.CONVERTED,
@@ -6928,6 +6964,7 @@ def build_lead_management_payload():
 
 
 def build_followup_payload():
+    expire_stale_followups()
     today = timezone.localdate()
     reference = timezone.now()
     followups = list(
@@ -6945,10 +6982,16 @@ def build_followup_payload():
         .filter(status=Lead.Status.NO_ANSWER)
         .order_by("-updated_at", "-last_contacted_at")[:200]
     )
+    expired_candidates = list(
+        Lead.objects.select_related("assigned_to", "interested_detail__staff")
+        .filter(status=Lead.Status.EXPIRED_FOLLOWUP)
+        .order_by("-updated_at", "-last_contacted_at")[:200]
+    )
 
     owner_lookup_ids = [lead.id for lead in followups]
     owner_lookup_ids.extend(lead.id for lead in rejected_candidates)
     owner_lookup_ids.extend(lead.id for lead in closed_candidates)
+    owner_lookup_ids.extend(lead.id for lead in expired_candidates)
     latest_call_owner_map = {}
     if owner_lookup_ids:
         owner_statuses = (
@@ -7143,9 +7186,41 @@ def build_followup_payload():
             }
         )
 
+    expired_followup_rows = []
+    for lead in expired_candidates:
+        owner_staff = _followup_owner(lead)
+        activity_anchor = lead.last_contacted_at or lead.updated_at or lead.created_at
+        days_idle = max(
+            0,
+            (timezone.localdate(reference) - timezone.localdate(activity_anchor)).days,
+        )
+        expired_followup_rows.append(
+            {
+                "id": str(lead.id),
+                "name": lead.name,
+                "phone": lead.phone,
+                "status": lead.status,
+                "status_label": lead.get_status_display(),
+                "assigned_to_id": str(owner_staff.id) if owner_staff else "",
+                "assigned_to": owner_staff.name if owner_staff else "Unassigned",
+                "assigned_to_phone": owner_staff.phone if owner_staff else "",
+                "notes": lead.notes,
+                "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
+                "updated_at": _format_datetime(lead.updated_at),
+                "updated_at_sort": lead.updated_at.isoformat() if lead.updated_at else "",
+                "days_idle": days_idle,
+            }
+        )
+
+    expired_followup_rows.sort(
+        key=lambda row: row.get("updated_at_sort", ""),
+        reverse=True,
+    )
+
     return {
         "followup_rows": followup_rows,
         "rejected_followup_rows": rejected_followup_rows,
+        "expired_followup_rows": expired_followup_rows,
         "followup_history_rows": [
             {
                 "id": row["id"],
@@ -7179,6 +7254,21 @@ def build_followup_payload():
                 key=lambda row: row["updated_at_sort"],
                 reverse=True,
             )[:12]
+        ]
+        + [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "phone": row["phone"],
+                "status_label": row["status_label"],
+                "handover_status_label": "Expired after inactivity",
+                "schedule_state_label": f"{row['days_idle']} days without follow-up update",
+                "schedule_state_tone": "danger",
+                "callback_schedule_label": "Expired Follow Up",
+                "assigned_to": row["assigned_to"],
+                "updated_at": row["updated_at"],
+            }
+            for row in expired_followup_rows[:12]
         ],
         "staff_options": [
             {"id": str(staff.id), "name": staff.name}
@@ -7187,6 +7277,7 @@ def build_followup_payload():
         "followup_summary": {
             "total_followups": len(followup_rows),
             "rejected_followup_count": len(rejected_followup_rows),
+            "expired_followup_count": len(expired_followup_rows),
             "scheduled_count": sum(1 for row in followup_rows if row["is_scheduled"]),
             "unscheduled_count": sum(1 for row in followup_rows if row["is_unscheduled"]),
             "due_now_count": sum(1 for row in followup_rows if row["is_due_now"]),
@@ -7693,6 +7784,52 @@ def recover_recovery_lead_to_owner(lead_id, *, target_status=Lead.Status.NEW):
         "owner_name": owner.name,
         "target_status": normalized_status,
         "target_status_label": "Follow Up" if normalized_status == Lead.Status.INTERESTED else "New",
+    }
+
+
+def reallocate_expired_followup_to_owner(lead_id):
+    try:
+        parsed_id = uuid.UUID(str(lead_id))
+    except (TypeError, ValueError, AttributeError):
+        raise ValueError("Select a valid expired follow-up lead.") from None
+
+    lead = (
+        Lead.objects.select_related("assigned_to", "interested_detail__staff")
+        .filter(id=parsed_id, status=Lead.Status.EXPIRED_FOLLOWUP)
+        .first()
+    )
+    if lead is None:
+        raise ValueError("Expired follow-up lead not found or already reallocated.")
+
+    owner = lead.assigned_to
+    if not (
+        owner
+        and owner.role == Staff.Role.STAFF
+        and owner.is_active
+    ):
+        owner = _recovery_owner_staff_map([lead]).get(lead.id)
+    if owner is None:
+        raise ValueError("No active staff owner found for this expired follow-up lead.")
+
+    lead.assigned_to = owner
+    lead.status = Lead.Status.INTERESTED
+    lead.callback_window = ""
+    lead.callback_date = None
+    lead.save(
+        update_fields=[
+            "assigned_to",
+            "status",
+            "callback_window",
+            "callback_date",
+            "updated_at",
+        ]
+    )
+    auto_allocate_leads(target_staff=owner, prioritized_lead_ids=[lead.id])
+
+    return {
+        "lead_id": str(lead.id),
+        "lead_name": lead.name,
+        "owner_name": owner.name,
     }
 
 
@@ -8281,6 +8418,7 @@ def build_staff_today_payload(staff):
 
 
 def build_staff_followups_payload(staff):
+    expire_stale_followups()
     now = timezone.now()
     followups = (
         Lead.objects.select_related("assigned_to")

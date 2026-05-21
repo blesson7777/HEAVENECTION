@@ -144,6 +144,7 @@ from backend.apps.telecalling.services import (
     release_staff_queue,
     reactivate_oldest_recovery_leads,
     recover_recovery_lead_to_owner,
+    reallocate_expired_followup_to_owner,
     run_automatic_lead_cleanup_if_due,
     set_active_app_release,
     retry_pending_staff_call,
@@ -1868,6 +1869,18 @@ def followups_page(request):
                     request,
                     f"{summary['lead_name']} reassigned to {summary['owner_name']} as New lead.",
                 )
+            return redirect("followups-page")
+        if followup_action == "reallocate_expired_followup":
+            lead_id = (request.POST.get("lead_id") or "").strip()
+            try:
+                summary = reallocate_expired_followup_to_owner(lead_id)
+            except ValueError as error:
+                messages.error(request, str(error))
+                return redirect("followups-page")
+            messages.success(
+                request,
+                f"{summary['lead_name']} moved back to Follow Up under {summary['owner_name']}.",
+            )
             return redirect("followups-page")
         if followup_action == "mark_rejected":
             lead_id = (request.POST.get("lead_id") or "").strip()
