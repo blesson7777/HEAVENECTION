@@ -6879,10 +6879,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final message = durationSeconds <= 0
         ? canCloseAsNoResponse
               ? 'This follow-up has reached try $attemptNumber. Choose how to save this customer now.'
-              : 'The customer did not attend this follow-up call. Save this try and call again until 3 tries are completed.'
+              : 'The customer did not attend this follow-up call. Mark this try as No Response and call again until 3 tries are completed.'
         : canCloseAsNoResponse
         ? 'This follow-up has reached try $attemptNumber. Choose how to save this customer now.'
-        : 'The follow-up call was too short to confirm a real discussion. Save this try and call again until 3 tries are completed.';
+        : 'The follow-up call was too short to confirm a real discussion. Mark this try as No Response and call again until 3 tries are completed.';
 
     return await showDialog<ShortCallDecision>(
       context: context,
@@ -6922,7 +6922,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 onPressed: () => Navigator.of(
                   dialogContext,
                 ).pop(ShortCallDecision.markNoResponse),
-                child: const Text('Save This Try'),
+                child: const Text('Mark No Response'),
               ),
             if (!canCloseAsNoResponse)
               ElevatedButton(
