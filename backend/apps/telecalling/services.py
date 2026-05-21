@@ -3399,17 +3399,10 @@ def _followup_no_response_progress(
     date_count = len(unique_dates)
     time_count = len(unique_times)
     ready_threshold = FOLLOWUP_NO_RESPONSE_LIMIT
-    can_close = (
-        attempt_count >= ready_threshold
-        and date_count >= ready_threshold
-        and time_count >= ready_threshold
-    )
-    remaining = max(
-        0,
-        ready_threshold - attempt_count,
-        ready_threshold - date_count,
-        ready_threshold - time_count,
-    )
+    # Follow-up closure rule: close as rejected after 3 unanswered attempts.
+    # Keep date/time counters for monitoring display only.
+    can_close = attempt_count >= ready_threshold
+    remaining = max(0, ready_threshold - attempt_count)
     return {
         "attempt_count": attempt_count,
         "unique_date_count": date_count,
