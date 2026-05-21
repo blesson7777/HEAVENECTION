@@ -2194,6 +2194,17 @@ def build_staff_salary_details_payload(staff):
         period_end=current_period_end,
         payout_cycle=_running_payout_cycle_for_staff(staff),
     )
+    # Staff app must reflect credited advances in the running cycle
+    # (admin salary views already apply this same adjustment).
+    current_snapshot = _snapshot_with_paid_total(
+        current_snapshot,
+        _running_cycle_advance_paid_total(
+            staff,
+            period_start=current_period_start,
+            period_end=current_period_end,
+            payout_cycle=_running_payout_cycle_for_staff(staff),
+        ),
+    )
     previous_month_start, previous_month_end = _previous_month_range(today)
     previous_month_snapshot = _salary_period_snapshot(
         staff,
