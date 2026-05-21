@@ -8993,15 +8993,27 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
         return call
 
     status = _normalize_followup_status(status)
+    now = timezone.now()
+    is_followup_lead = _is_followup_status(call.lead.status)
+    followup_progress = None
+    if is_followup_lead and status in {Call.Status.NO_ANSWER, Call.Status.NOT_INTERESTED}:
+        followup_progress = _followup_no_response_progress(
+            call.lead,
+            staff=call.staff,
+            exclude_call_id=call.id,
+            include_attempt_at=call.end_time or now,
+        )
+
     if not call.is_verified or int(call.duration_seconds or 0) <= 0:
         if status == Call.Status.NOT_INTERESTED:
-            status = Call.Status.NO_ANSWER
+            # Allow direct rejection for follow-up only after 3 unanswered tries.
+            if not (is_followup_lead and followup_progress and followup_progress["can_close"]):
+                status = Call.Status.NO_ANSWER
         elif status != Call.Status.NO_ANSWER:
             raise ValueError(
                 "This call could not be verified from the phone log. Sync it again or mark it as No Response."
             )
 
-    now = timezone.now()
     session = get_open_session(call.staff, reconcile=True)
     if session:
         _touch_session_interaction(session, now, metadata={"source": "call_status"})
@@ -9011,15 +9023,15 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
     lead_status = status
     lead_callback_window = resolved_callback_window
     lead_callback_date = resolved_callback_date
-    if _is_followup_status(call.lead.status) and status == Call.Status.NO_ANSWER:
-        followup_progress = _followup_no_response_progress(
+    if is_followup_lead and status == Call.Status.NO_ANSWER:
+        followup_progress = followup_progress or _followup_no_response_progress(
             call.lead,
             staff=call.staff,
             exclude_call_id=call.id,
             include_attempt_at=call.end_time or now,
         )
         if followup_progress["can_close"]:
-            lead_status = Lead.Status.NOT_INTERESTED
+            lead_status = Lead.Status.NO_ANSWER
         else:
             lead_status = Lead.Status.INTERESTED
             lead_callback_window = call.lead.callback_window

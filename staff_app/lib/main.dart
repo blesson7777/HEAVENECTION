@@ -6878,11 +6878,11 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final attemptNumber = lead.followupAttemptCount + 1;
     final message = durationSeconds <= 0
         ? canCloseAsNoResponse
-              ? 'The customer did not attend this follow-up call. This is try $attemptNumber, so you can now move it to No Response.'
-              : 'The customer did not attend this follow-up call. Save this try and call again until 3 proper tries are completed on different dates and times.'
+              ? 'This follow-up has reached try $attemptNumber. Choose how to save this customer now.'
+              : 'The customer did not attend this follow-up call. Save this try and call again until 3 tries are completed.'
         : canCloseAsNoResponse
-        ? 'The follow-up call was too short to confirm a real discussion. This is try $attemptNumber, so you can now move it to No Response.'
-        : 'The follow-up call was too short to confirm a real discussion. Save this try and call again until 3 proper tries are completed on different dates and times.';
+        ? 'This follow-up has reached try $attemptNumber. Choose how to save this customer now.'
+        : 'The follow-up call was too short to confirm a real discussion. Save this try and call again until 3 tries are completed.';
 
     return await showDialog<ShortCallDecision>(
       context: context,
@@ -6931,13 +6931,20 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 ).pop(ShortCallDecision.callAgain),
                 child: const Text('Call Again'),
               )
-            else
-              ElevatedButton(
+            else ...[
+              TextButton(
                 onPressed: () => Navigator.of(
                   dialogContext,
                 ).pop(ShortCallDecision.markNoResponse),
                 child: const Text('Mark No Response'),
               ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(
+                  dialogContext,
+                ).pop(ShortCallDecision.markRejected),
+                child: const Text('Mark Rejected'),
+              ),
+            ],
           ],
         );
       },
