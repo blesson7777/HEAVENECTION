@@ -5272,10 +5272,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final selection = await _showCallRemarkDialog(
       title: isFollowupLead ? 'Update Follow Up' : 'Select Customer Remark',
       message: isFollowupLead
-          ? 'Choose the next step for this follow-up customer. Use Follow Up to reschedule, Rejected if the customer declined, or Interested if you are ready to move them forward.'
+          ? 'Choose the next step for this follow-up customer. Use Follow Up to reschedule, mark Rejected if the customer declined, mark No Response if discussion was not completed, or mark Interested to move forward.'
           : 'Choose one simple remark before moving to the next customer.',
       choices: isFollowupLead
-          ? const ['Interested', 'Follow Up', 'Rejected']
+          ? const ['Rejected', 'No Response', 'Interested', 'Follow Up']
           : const ['Rejected', 'Interested', 'Follow Up', 'No Response'],
       saveButtonLabel: isFollowupLead ? 'Save Follow Up' : 'Save Remark',
       initialStatus: isFollowupLead ? 'Interested' : _callStatus,
