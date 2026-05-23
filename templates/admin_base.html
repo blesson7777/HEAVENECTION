@@ -425,6 +425,12 @@
                 {% block admin_content %}{% endblock %}
             </div>
         </main>
+        <footer class="hc-admin-footer">
+            <div class="hc-admin-footer-inner">
+                <span>&copy; {% now "Y" %} {{ company_profile.company_name|default:"Heavenection" }}.</span>
+                <span>Site developed by <strong>INZSOFT TECHNOLOGIES</strong>.</span>
+            </div>
+        </footer>
     </div>
 </div>
 
@@ -440,15 +446,19 @@
             </div>
             <div class="modal-body pt-3">
                 <form id="emiCalculatorForm" class="row g-3" action="javascript:void(0);">
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label fw-semibold" for="emiPrincipal">Loan Amount</label>
                         <input type="number" class="form-control" id="emiPrincipal" min="1" step="0.01" value="100000" required>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold" for="emiDownPayment">Down Payment</label>
+                        <input type="number" class="form-control" id="emiDownPayment" min="0" step="0.01" value="0">
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label fw-semibold" for="emiInterestRate">Annual Interest %</label>
                         <input type="number" class="form-control" id="emiInterestRate" min="0" step="0.01" value="12" required>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label class="form-label fw-semibold" for="emiTenureValue">Tenure</label>
                         <div class="input-group">
                             <input type="number" class="form-control" id="emiTenureValue" min="1" step="1" value="12" required>
@@ -457,6 +467,23 @@
                                 <option value="years">Years</option>
                             </select>
                         </div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="emiProcessingFeePercent">Processing Fee %</label>
+                        <input type="number" class="form-control" id="emiProcessingFeePercent" min="0" step="0.01" value="1.5">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="emiExtraMonthlyPayment">Extra Monthly Prepayment</label>
+                        <input type="number" class="form-control" id="emiExtraMonthlyPayment" min="0" step="0.01" value="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold" for="emiRoundTo">Round EMI To</label>
+                        <select class="form-select" id="emiRoundTo">
+                            <option value="none">Exact amount</option>
+                            <option value="10">Nearest 10</option>
+                            <option value="100">Nearest 100</option>
+                            <option value="500">Nearest 500</option>
+                        </select>
                     </div>
                     <div class="col-12">
                         <div id="emiCalculatorFeedback" class="hc-form-feedback d-none"></div>
@@ -475,11 +502,64 @@
                                 <span class="mf-db2-kicker">Total Payable</span>
                                 <strong id="emiTotalValue">Rs. 0.00</strong>
                             </div>
+                            <div class="hc-emi-card">
+                                <span class="mf-db2-kicker">Net Loan</span>
+                                <strong id="emiNetLoanValue">Rs. 0.00</strong>
+                            </div>
+                            <div class="hc-emi-card">
+                                <span class="mf-db2-kicker">Processing Fee</span>
+                                <strong id="emiProcessingFeeValue">Rs. 0.00</strong>
+                            </div>
+                            <div class="hc-emi-card">
+                                <span class="mf-db2-kicker">EMI With Prepay</span>
+                                <strong id="emiEffectiveMonthlyValue">Rs. 0.00</strong>
+                            </div>
+                            <div class="hc-emi-card">
+                                <span class="mf-db2-kicker">Payoff Time</span>
+                                <strong id="emiPayoffMonthsValue">0 months</strong>
+                            </div>
+                            <div class="hc-emi-card">
+                                <span class="mf-db2-kicker">Interest Saved</span>
+                                <strong id="emiInterestSavedValue">Rs. 0.00</strong>
+                            </div>
+                            <div class="hc-emi-card">
+                                <span class="mf-db2-kicker">Total Cost + Fee</span>
+                                <strong id="emiGrandTotalValue">Rs. 0.00</strong>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="table-responsive">
+                            <table class="table table-sm hc-table mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Month</th>
+                                        <th>Opening</th>
+                                        <th>EMI</th>
+                                        <th>Interest</th>
+                                        <th>Principal</th>
+                                        <th>Extra</th>
+                                        <th>Closing</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="emiScheduleBody">
+                                    <tr><td colspan="7" class="text-muted text-center">Repayment preview will appear after calculation.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="mf-db2-kicker">Recent Calculations</span>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" id="emiClearHistoryButton">Clear History</button>
+                        </div>
+                        <div id="emiHistoryList" class="hc-emi-history-list">
+                            <div class="text-muted small">No recent calculations yet.</div>
                         </div>
                     </div>
                     <div class="col-12">
                         <div class="hc-emi-note">
-                            EMI is calculated using the standard reducing-balance formula with monthly compounding.
+                            EMI is calculated using reducing-balance with monthly compounding. Extra monthly prepayment reduces payoff time and interest.
                         </div>
                     </div>
                     <div class="col-12 d-flex justify-content-end gap-2">

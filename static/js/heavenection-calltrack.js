@@ -4126,15 +4126,30 @@
         }
 
         const principalInput = document.getElementById("emiPrincipal");
+        const downPaymentInput = document.getElementById("emiDownPayment");
         const interestInput = document.getElementById("emiInterestRate");
         const tenureValueInput = document.getElementById("emiTenureValue");
         const tenureUnitInput = document.getElementById("emiTenureUnit");
+        const processingFeePercentInput = document.getElementById("emiProcessingFeePercent");
+        const extraMonthlyPaymentInput = document.getElementById("emiExtraMonthlyPayment");
+        const roundToInput = document.getElementById("emiRoundTo");
         const monthlyValueNode = document.getElementById("emiMonthlyValue");
         const interestValueNode = document.getElementById("emiInterestValue");
         const totalValueNode = document.getElementById("emiTotalValue");
+        const netLoanValueNode = document.getElementById("emiNetLoanValue");
+        const processingFeeValueNode = document.getElementById("emiProcessingFeeValue");
+        const effectiveMonthlyValueNode = document.getElementById("emiEffectiveMonthlyValue");
+        const payoffMonthsValueNode = document.getElementById("emiPayoffMonthsValue");
+        const interestSavedValueNode = document.getElementById("emiInterestSavedValue");
+        const grandTotalValueNode = document.getElementById("emiGrandTotalValue");
+        const scheduleBodyNode = document.getElementById("emiScheduleBody");
+        const historyListNode = document.getElementById("emiHistoryList");
+        const clearHistoryButton = document.getElementById("emiClearHistoryButton");
         const feedbackNode = document.getElementById("emiCalculatorFeedback");
         const resetButton = document.getElementById("emiResetButton");
         const calculateButton = document.getElementById("emiCalculateButton");
+        const EMI_HISTORY_STORAGE_KEY = "heavenection_emi_history_v1";
+        const EMI_HISTORY_LIMIT = 20;
 
         function formatCurrency(value) {
             return new Intl.NumberFormat("en-IN", {
@@ -4142,6 +4157,160 @@
                 currency: "INR",
                 maximumFractionDigits: 2,
             }).format(value || 0);
+        }
+
+        function formatMonthsLabel(monthsValue) {
+            const months = Math.max(0, Math.round(Number(monthsValue) || 0));
+            const years = Math.floor(months / 12);
+            const remainingMonths = months % 12;
+            if (!years) {
+                return `${months} month${months === 1 ? "" : "s"}`;
+            }
+            if (!remainingMonths) {
+                return `${years} year${years === 1 ? "" : "s"}`;
+            }
+            return `${years} year${years === 1 ? "" : "s"} ${remainingMonths} month${remainingMonths === 1 ? "" : "s"}`;
+        }
+
+        function roundInstallment(value, roundTo) {
+            if (!Number.isFinite(value) || value <= 0) {
+                return 0;
+            }
+            const normalizedRoundTo = Number(roundTo);
+            if (!Number.isFinite(normalizedRoundTo) || normalizedRoundTo <= 0) {
+                return value;
+            }
+            return Math.round(value / normalizedRoundTo) * normalizedRoundTo;
+        }
+
+        function readHistory() {
+            try {
+                const raw = window.localStorage.getItem(EMI_HISTORY_STORAGE_KEY);
+                if (!raw) {
+                    return [];
+                }
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (_error) {
+                return [];
+            }
+        }
+
+        function writeHistory(rows) {
+            try {
+                window.localStorage.setItem(EMI_HISTORY_STORAGE_KEY, JSON.stringify(rows || []));
+            } catch (_error) {
+                // Ignore storage write errors.
+            }
+        }
+
+        function getCurrentInputSnapshot() {
+            return {
+                principal: Number(principalInput?.value || 0),
+                downPayment: Number(downPaymentInput?.value || 0),
+                annualRate: Number(interestInput?.value || 0),
+                tenureValue: Number(tenureValueInput?.value || 0),
+                tenureUnit: tenureUnitInput?.value || "months",
+                processingFeePercent: Number(processingFeePercentInput?.value || 0),
+                extraMonthly: Number(extraMonthlyPaymentInput?.value || 0),
+                roundTo: roundToInput?.value || "none",
+            };
+        }
+
+        function applyInputSnapshot(snapshot) {
+            if (!snapshot) {
+                return;
+            }
+            if (principalInput) {
+                principalInput.value = String(snapshot.principal ?? 0);
+            }
+            if (downPaymentInput) {
+                downPaymentInput.value = String(snapshot.downPayment ?? 0);
+            }
+            if (interestInput) {
+                interestInput.value = String(snapshot.annualRate ?? 0);
+            }
+            if (tenureValueInput) {
+                tenureValueInput.value = String(snapshot.tenureValue ?? 1);
+            }
+            if (tenureUnitInput) {
+                tenureUnitInput.value = snapshot.tenureUnit === "years" ? "years" : "months";
+            }
+            if (processingFeePercentInput) {
+                processingFeePercentInput.value = String(snapshot.processingFeePercent ?? 0);
+            }
+            if (extraMonthlyPaymentInput) {
+                extraMonthlyPaymentInput.value = String(snapshot.extraMonthly ?? 0);
+            }
+            if (roundToInput) {
+                roundToInput.value = snapshot.roundTo || "none";
+            }
+        }
+
+        function renderHistory() {
+            if (!historyListNode) {
+                return;
+            }
+            const rows = readHistory();
+            if (!rows.length) {
+                historyListNode.innerHTML = '<div class="text-muted small">No recent calculations yet.</div>';
+                return;
+            }
+            historyListNode.innerHTML = rows
+                .map((row, index) => {
+                    const timestamp = row?.timestamp
+                        ? new Date(row.timestamp).toLocaleString("en-IN")
+                        : "--";
+                    return `
+                        <button type="button" class="hc-emi-history-item" data-history-index="${index}">
+                            <div class="hc-emi-history-top">
+                                <strong>${formatCurrency(row?.netLoan || 0)}</strong>
+                                <span>${timestamp}</span>
+                            </div>
+                            <div class="hc-emi-history-meta">
+                                EMI ${formatCurrency(row?.monthlyEmi || 0)} · ${formatMonthsLabel(row?.payoffMonths || 0)}
+                            </div>
+                        </button>
+                    `;
+                })
+                .join("");
+            historyListNode.querySelectorAll(".hc-emi-history-item").forEach((button) => {
+                button.addEventListener("click", () => {
+                    const historyRows = readHistory();
+                    const index = Number(button.getAttribute("data-history-index"));
+                    const selected = Number.isInteger(index) ? historyRows[index] : null;
+                    if (!selected?.input) {
+                        return;
+                    }
+                    applyInputSnapshot(selected.input);
+                    calculateEmi({ persist: false, showSuccess: false });
+                    showFeedback("Loaded from recent calculation history.", false);
+                });
+            });
+        }
+
+        function persistHistory(resultPayload) {
+            const input = getCurrentInputSnapshot();
+            const existing = readHistory();
+            const duplicateIndex = existing.findIndex((row) => {
+                if (!row || !row.input) {
+                    return false;
+                }
+                return JSON.stringify(row.input) === JSON.stringify(input);
+            });
+            const entry = {
+                timestamp: new Date().toISOString(),
+                input,
+                netLoan: resultPayload.netLoan || 0,
+                monthlyEmi: resultPayload.monthlyEmi || 0,
+                payoffMonths: resultPayload.payoffMonths || 0,
+            };
+            if (duplicateIndex >= 0) {
+                existing.splice(duplicateIndex, 1);
+            }
+            existing.unshift(entry);
+            writeHistory(existing.slice(0, EMI_HISTORY_LIMIT));
+            renderHistory();
         }
 
         function showFeedback(message, isError) {
@@ -4162,7 +4331,10 @@
             feedbackNode.classList.remove("is-success", "is-error");
         }
 
-        function setResults(monthlyEmi, totalInterest, totalPayable) {
+        function setResults(payload) {
+            const monthlyEmi = payload.monthlyEmi || 0;
+            const totalInterest = payload.totalInterest || 0;
+            const totalPayable = payload.totalPayable || 0;
             if (monthlyValueNode) {
                 monthlyValueNode.textContent = formatCurrency(monthlyEmi);
             }
@@ -4172,64 +4344,285 @@
             if (totalValueNode) {
                 totalValueNode.textContent = formatCurrency(totalPayable);
             }
+            if (netLoanValueNode) {
+                netLoanValueNode.textContent = formatCurrency(payload.netLoan || 0);
+            }
+            if (processingFeeValueNode) {
+                processingFeeValueNode.textContent = formatCurrency(payload.processingFee || 0);
+            }
+            if (effectiveMonthlyValueNode) {
+                effectiveMonthlyValueNode.textContent = formatCurrency(payload.effectiveMonthly || 0);
+            }
+            if (payoffMonthsValueNode) {
+                payoffMonthsValueNode.textContent = formatMonthsLabel(payload.payoffMonths || 0);
+            }
+            if (interestSavedValueNode) {
+                interestSavedValueNode.textContent = formatCurrency(payload.interestSaved || 0);
+            }
+            if (grandTotalValueNode) {
+                grandTotalValueNode.textContent = formatCurrency(payload.grandTotal || 0);
+            }
         }
 
-        function calculateEmi() {
+        function setBlankResults() {
+            setResults({
+                monthlyEmi: 0,
+                totalInterest: 0,
+                totalPayable: 0,
+                netLoan: 0,
+                processingFee: 0,
+                effectiveMonthly: 0,
+                payoffMonths: 0,
+                interestSaved: 0,
+                grandTotal: 0,
+            });
+            if (scheduleBodyNode) {
+                scheduleBodyNode.innerHTML = '<tr><td colspan="7" class="text-muted text-center">Repayment preview will appear after calculation.</td></tr>';
+            }
+        }
+
+        function renderSchedule(rows) {
+            if (!scheduleBodyNode) {
+                return;
+            }
+            if (!rows || !rows.length) {
+                scheduleBodyNode.innerHTML = '<tr><td colspan="7" class="text-muted text-center">No amortization rows generated.</td></tr>';
+                return;
+            }
+            scheduleBodyNode.innerHTML = rows
+                .map((row) => {
+                    if (row.kind === "separator") {
+                        return '<tr><td colspan="7" class="text-muted text-center">...</td></tr>';
+                    }
+                    return `
+                        <tr>
+                            <td>${row.month}</td>
+                            <td>${formatCurrency(row.opening)}</td>
+                            <td>${formatCurrency(row.emi)}</td>
+                            <td>${formatCurrency(row.interest)}</td>
+                            <td>${formatCurrency(row.principal)}</td>
+                            <td>${formatCurrency(row.extra)}</td>
+                            <td>${formatCurrency(row.closing)}</td>
+                        </tr>
+                    `;
+                })
+                .join("");
+        }
+
+        function simulateSchedule(netLoan, monthlyRate, monthlyEmi, extraMonthly, previewLimit = 12) {
+            let balance = Number(netLoan);
+            let month = 0;
+            let totalInterest = 0;
+            let totalPaid = 0;
+            const rows = [];
+            let lastRow = null;
+            const maxMonths = 2400;
+
+            while (balance > 0.01 && month < maxMonths) {
+                month += 1;
+                const opening = balance;
+                const interest = monthlyRate > 0 ? opening * monthlyRate : 0;
+                let emiPayment = monthlyEmi;
+                let principalPart = emiPayment - interest;
+                if (!Number.isFinite(principalPart) || principalPart <= 0) {
+                    return {
+                        error: "EMI is too low to cover monthly interest. Increase tenure precision or reduce EMI rounding.",
+                    };
+                }
+
+                let extra = Math.max(0, Number(extraMonthly) || 0);
+                if (principalPart > balance) {
+                    principalPart = balance;
+                    emiPayment = interest + principalPart;
+                    extra = 0;
+                } else if (principalPart + extra > balance) {
+                    extra = Math.max(0, balance - principalPart);
+                }
+
+                const closing = Math.max(0, opening - principalPart - extra);
+                const monthPaid = emiPayment + extra;
+                totalInterest += interest;
+                totalPaid += monthPaid;
+
+                lastRow = {
+                    month,
+                    opening,
+                    emi: emiPayment,
+                    interest,
+                    principal: principalPart,
+                    extra,
+                    closing,
+                };
+                if (month <= previewLimit) {
+                    rows.push(lastRow);
+                }
+
+                balance = closing;
+            }
+
+            if (balance > 0.01) {
+                return {
+                    error: "Loan could not be closed with current inputs. Please adjust tenure or EMI rounding.",
+                };
+            }
+
+            if (lastRow && month > previewLimit) {
+                rows.push({ kind: "separator" });
+                rows.push(lastRow);
+            }
+
+            return {
+                months: month,
+                totalInterest,
+                totalPaid,
+                rows,
+            };
+        }
+
+        function calculateEmi(options = {}) {
+            const persist = options.persist === true;
+            const showSuccess = options.showSuccess === true;
             const principal = Number(principalInput?.value || 0);
+            const downPayment = Number(downPaymentInput?.value || 0);
             const annualRate = Number(interestInput?.value || 0);
             const tenureValue = Number(tenureValueInput?.value || 0);
             const tenureUnit = tenureUnitInput?.value || "months";
-            const months = tenureUnit === "years" ? tenureValue * 12 : tenureValue;
+            const processingFeePercent = Number(processingFeePercentInput?.value || 0);
+            const extraMonthly = Number(extraMonthlyPaymentInput?.value || 0);
+            const roundToValue = roundToInput?.value || "none";
+            const months = Math.round(tenureUnit === "years" ? tenureValue * 12 : tenureValue);
 
             if (!Number.isFinite(principal) || principal <= 0) {
-                setResults(0, 0, 0);
+                setBlankResults();
                 showFeedback("Enter a valid loan amount.", true);
                 return;
             }
+            if (!Number.isFinite(downPayment) || downPayment < 0) {
+                setBlankResults();
+                showFeedback("Down payment cannot be negative.", true);
+                return;
+            }
+            if (downPayment >= principal) {
+                setBlankResults();
+                showFeedback("Down payment must be less than the total loan amount.", true);
+                return;
+            }
             if (!Number.isFinite(months) || months <= 0) {
-                setResults(0, 0, 0);
+                setBlankResults();
                 showFeedback("Enter a valid tenure.", true);
                 return;
             }
+            if (months > 600) {
+                setBlankResults();
+                showFeedback("Tenure looks too high. Keep it within 600 months.", true);
+                return;
+            }
             if (!Number.isFinite(annualRate) || annualRate < 0) {
-                setResults(0, 0, 0);
+                setBlankResults();
                 showFeedback("Interest rate cannot be negative.", true);
                 return;
             }
-
-            const monthlyRate = annualRate / 12 / 100;
-            let monthlyEmi = 0;
-            if (monthlyRate === 0) {
-                monthlyEmi = principal / months;
-            } else {
-                const factor = Math.pow(1 + monthlyRate, months);
-                monthlyEmi = principal * monthlyRate * factor / (factor - 1);
+            if (!Number.isFinite(processingFeePercent) || processingFeePercent < 0) {
+                setBlankResults();
+                showFeedback("Processing fee percent cannot be negative.", true);
+                return;
+            }
+            if (!Number.isFinite(extraMonthly) || extraMonthly < 0) {
+                setBlankResults();
+                showFeedback("Extra monthly prepayment cannot be negative.", true);
+                return;
             }
 
-            const totalPayable = monthlyEmi * months;
-            const totalInterest = totalPayable - principal;
-            setResults(monthlyEmi, totalInterest, totalPayable);
-            clearFeedback();
+            const netLoan = principal - downPayment;
+            const monthlyRate = annualRate / 12 / 100;
+            let calculatedMonthlyEmi = 0;
+            if (monthlyRate === 0) {
+                calculatedMonthlyEmi = netLoan / months;
+            } else {
+                const factor = Math.pow(1 + monthlyRate, months);
+                calculatedMonthlyEmi = netLoan * monthlyRate * factor / (factor - 1);
+            }
+            const roundStep = roundToValue === "none" ? 0 : Number(roundToValue || 0);
+            const monthlyEmi = roundInstallment(calculatedMonthlyEmi, roundStep);
+            const processingFee = (netLoan * processingFeePercent) / 100;
+
+            const baseSimulation = simulateSchedule(netLoan, monthlyRate, monthlyEmi, 0);
+            if (baseSimulation.error) {
+                setBlankResults();
+                showFeedback(baseSimulation.error, true);
+                return;
+            }
+            const activeSimulation = simulateSchedule(netLoan, monthlyRate, monthlyEmi, extraMonthly);
+            if (activeSimulation.error) {
+                setBlankResults();
+                showFeedback(activeSimulation.error, true);
+                return;
+            }
+
+            const interestSaved = Math.max(0, baseSimulation.totalInterest - activeSimulation.totalInterest);
+            const effectiveMonthly = monthlyEmi + extraMonthly;
+            const grandTotal = activeSimulation.totalPaid + processingFee;
+
+            setResults({
+                monthlyEmi,
+                totalInterest: activeSimulation.totalInterest,
+                totalPayable: activeSimulation.totalPaid,
+                netLoan,
+                processingFee,
+                effectiveMonthly,
+                payoffMonths: activeSimulation.months,
+                interestSaved,
+                grandTotal,
+            });
+            renderSchedule(activeSimulation.rows);
+            if (persist) {
+                persistHistory({
+                    monthlyEmi,
+                    netLoan,
+                    payoffMonths: activeSimulation.months,
+                });
+            }
+            if (showSuccess) {
+                clearFeedback();
+                showFeedback(
+                    `Loan closes in ${formatMonthsLabel(activeSimulation.months)}. Base plan: ${formatMonthsLabel(baseSimulation.months)}. Estimated interest saved: ${formatCurrency(interestSaved)}.`,
+                    false
+                );
+            } else {
+                clearFeedback();
+            }
         }
 
         form.addEventListener("submit", (event) => {
             event.preventDefault();
-            calculateEmi();
+            calculateEmi({ persist: true, showSuccess: true });
         });
 
         calculateButton?.addEventListener("click", (event) => {
             event.preventDefault();
-            calculateEmi();
+            calculateEmi({ persist: true, showSuccess: true });
         });
 
-        [principalInput, interestInput, tenureValueInput, tenureUnitInput].forEach((input) => {
-            input?.addEventListener("input", calculateEmi);
-            input?.addEventListener("change", calculateEmi);
+        [
+            principalInput,
+            downPaymentInput,
+            interestInput,
+            tenureValueInput,
+            tenureUnitInput,
+            processingFeePercentInput,
+            extraMonthlyPaymentInput,
+            roundToInput,
+        ].forEach((input) => {
+            input?.addEventListener("input", () => calculateEmi({ persist: false, showSuccess: false }));
+            input?.addEventListener("change", () => calculateEmi({ persist: false, showSuccess: false }));
         });
 
         resetButton?.addEventListener("click", () => {
             if (principalInput) {
                 principalInput.value = "100000";
+            }
+            if (downPaymentInput) {
+                downPaymentInput.value = "0";
             }
             if (interestInput) {
                 interestInput.value = "12";
@@ -4240,11 +4633,27 @@
             if (tenureUnitInput) {
                 tenureUnitInput.value = "months";
             }
+            if (processingFeePercentInput) {
+                processingFeePercentInput.value = "1.5";
+            }
+            if (extraMonthlyPaymentInput) {
+                extraMonthlyPaymentInput.value = "0";
+            }
+            if (roundToInput) {
+                roundToInput.value = "none";
+            }
             clearFeedback();
-            calculateEmi();
+            calculateEmi({ persist: false, showSuccess: false });
         });
 
-        calculateEmi();
+        clearHistoryButton?.addEventListener("click", () => {
+            writeHistory([]);
+            renderHistory();
+            showFeedback("EMI calculation history cleared.", false);
+        });
+
+        renderHistory();
+        calculateEmi({ persist: false, showSuccess: false });
     }
 
     if (typeof initMateriallyLayout === "function") {
