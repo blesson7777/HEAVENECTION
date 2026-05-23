@@ -5879,7 +5879,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
             staff_uuid = uuid.UUID(str(row["id"]))
         except (TypeError, ValueError, AttributeError):
             continue
-        blocks = (zero_talk_blocks.get(staff_uuid) or {}).get("all_streaks", [])
+        blocks = (zero_talk_blocks.get(staff_uuid) or {}).get("blocks", [])
         if not blocks:
             continue
         zero_talk_staff_rows.append(

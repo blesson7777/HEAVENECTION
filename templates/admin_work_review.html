@@ -487,16 +487,20 @@
 
 {% block extra_scripts %}
 <script>
-    (function () {
+    document.addEventListener('DOMContentLoaded', function () {
+        const bootstrapModalApi = window.bootstrap && window.bootstrap.Modal;
+        if (!bootstrapModalApi) {
+            return;
+        }
         const dayModalElement = document.getElementById('workReviewDaysModal');
         const zeroTalkModalElement = document.getElementById('workReviewZeroTalkModal');
         if (!dayModalElement && !zeroTalkModalElement) {
             return;
         }
-        const dayModal = dayModalElement ? bootstrap.Modal.getOrCreateInstance(dayModalElement) : null;
+        const dayModal = dayModalElement ? bootstrapModalApi.getOrCreateInstance(dayModalElement) : null;
         const dayModalTitle = document.getElementById('workReviewDaysModalTitle');
         const dayModalBody = document.getElementById('workReviewDaysModalBody');
-        const zeroTalkModal = zeroTalkModalElement ? bootstrap.Modal.getOrCreateInstance(zeroTalkModalElement) : null;
+        const zeroTalkModal = zeroTalkModalElement ? bootstrapModalApi.getOrCreateInstance(zeroTalkModalElement) : null;
         const zeroTalkModalTitle = document.getElementById('workReviewZeroTalkModalTitle');
         const zeroTalkModalBody = document.getElementById('workReviewZeroTalkModalBody');
         const resolveTargetContent = (targetValue) => {
@@ -542,6 +546,6 @@
                 zeroTalkModal.show();
             });
         });
-    })();
+    });
 </script>
 {% endblock %}
