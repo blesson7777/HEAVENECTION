@@ -847,6 +847,8 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             "hourly_call_bonus_enabled",
             "hourly_call_bonus_threshold",
             "hourly_call_bonus_rate",
+            "followup_auto_expire_enabled",
+            "followup_auto_expire_days",
             "work_review_zero_talk_attempt_threshold",
             "work_review_idle_gap_seconds",
             "work_review_connected_cooldown_seconds",
@@ -896,6 +898,8 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
             "hourly_call_bonus_enabled",
             "hourly_call_bonus_threshold",
             "hourly_call_bonus_rate",
+            "followup_auto_expire_enabled",
+            "followup_auto_expire_days",
             "work_review_zero_talk_attempt_threshold",
             "work_review_idle_gap_seconds",
             "work_review_connected_cooldown_seconds",
@@ -954,6 +958,16 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
         if cooldown_seconds > 3600:
             raise serializers.ValidationError("Connected cooldown seconds cannot exceed 3600.")
         return cooldown_seconds
+
+    def validate_followup_auto_expire_days(self, value):
+        if value is None:
+            return value
+        expiry_days = int(value)
+        if expiry_days < 1:
+            raise serializers.ValidationError("Follow-up auto-expire days must be at least 1.")
+        if expiry_days > 3650:
+            raise serializers.ValidationError("Follow-up auto-expire days cannot exceed 3650.")
+        return expiry_days
 
     def validate_lead_auto_delete_days(self, value):
         if value is None:

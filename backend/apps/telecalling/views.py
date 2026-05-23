@@ -1857,6 +1857,29 @@ def followups_page(request):
 
     if request.method == "POST":
         followup_action = request.POST.get("followup_action")
+        if followup_action == "update_followup_expiry_settings":
+            company_profile = get_company_profile()
+            settings_data = {
+                "followup_auto_expire_enabled": request.POST.get("followup_auto_expire_enabled") == "on",
+                "followup_auto_expire_days": (request.POST.get("followup_auto_expire_days") or "").strip(),
+            }
+            serializer = CompanyProfileUpdateSerializer(company_profile, data=settings_data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                if settings_data["followup_auto_expire_enabled"]:
+                    messages.success(
+                        request,
+                        f"Follow-up auto-expiry enabled with {settings_data['followup_auto_expire_days']} day limit.",
+                    )
+                else:
+                    messages.success(request, "Follow-up auto-expiry disabled.")
+            else:
+                messages.error(
+                    request,
+                    "Unable to update follow-up expiry settings. "
+                    + " ".join(_normalize_errors(serializer.errors).values()),
+                )
+            return redirect("followups-page")
         if followup_action == "recover_rejected_followup":
             lead_id = (request.POST.get("lead_id") or "").strip()
             recover_mode = (request.POST.get("recover_mode") or "").strip()

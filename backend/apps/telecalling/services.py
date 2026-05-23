@@ -3173,9 +3173,32 @@ def _follow_up_queryset():
     return Lead.objects.filter(status__in=FOLLOW_UP_STATUSES)
 
 
-def expire_stale_followups(*, now=None, expiry_days=FOLLOWUP_STALE_EXPIRY_DAYS):
+def _followup_expiry_settings(*, company_profile=None):
+    profile = company_profile or get_company_profile()
+    return {
+        "enabled": bool(getattr(profile, "followup_auto_expire_enabled", True)),
+        "expiry_days": max(
+            1,
+            int(getattr(profile, "followup_auto_expire_days", FOLLOWUP_STALE_EXPIRY_DAYS) or FOLLOWUP_STALE_EXPIRY_DAYS),
+        ),
+    }
+
+
+def expire_stale_followups(*, now=None, expiry_days=None, enabled=None, company_profile=None):
     now = now or timezone.now()
-    cutoff = now - timedelta(days=max(1, int(expiry_days or FOLLOWUP_STALE_EXPIRY_DAYS)))
+    settings = _followup_expiry_settings(company_profile=company_profile)
+    is_enabled = settings["enabled"] if enabled is None else bool(enabled)
+    resolved_expiry_days = settings["expiry_days"] if expiry_days is None else max(1, int(expiry_days))
+
+    if not is_enabled:
+        return {
+            "expired_count": 0,
+            "cutoff": None,
+            "enabled": False,
+            "expiry_days": resolved_expiry_days,
+        }
+
+    cutoff = now - timedelta(days=resolved_expiry_days)
     stale_followups = list(
         Lead.objects.filter(status__in=FOLLOW_UP_STATUSES).filter(
             Q(last_contacted_at__lt=cutoff)
@@ -3200,6 +3223,8 @@ def expire_stale_followups(*, now=None, expiry_days=FOLLOWUP_STALE_EXPIRY_DAYS):
     return {
         "expired_count": expired_count,
         "cutoff": cutoff,
+        "enabled": True,
+        "expiry_days": resolved_expiry_days,
     }
 
 
@@ -7035,7 +7060,13 @@ def build_lead_management_payload():
 
 
 def build_followup_payload():
-    expire_stale_followups()
+    company_profile = get_company_profile()
+    expiry_settings = _followup_expiry_settings(company_profile=company_profile)
+    expire_stale_followups(
+        company_profile=company_profile,
+        enabled=expiry_settings["enabled"],
+        expiry_days=expiry_settings["expiry_days"],
+    )
     today = timezone.localdate()
     reference = timezone.now()
     followups = list(
@@ -7357,6 +7388,10 @@ def build_followup_payload():
             "assigned_count": sum(1 for row in followup_rows if row["assigned_to_id"]),
             "unassigned_count": sum(1 for row in followup_rows if not row["assigned_to_id"]),
             "with_notes_count": sum(1 for row in followup_rows if row["notes"]),
+        },
+        "followup_expiry_settings": {
+            "enabled": expiry_settings["enabled"],
+            "expiry_days": expiry_settings["expiry_days"],
         },
     }
 
