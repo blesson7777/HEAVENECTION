@@ -365,6 +365,7 @@ def _fallback_team_payload():
 
 
 def _fallback_work_hours_payload():
+    company_profile = get_company_profile()
     summary_rows = [
         {
             "id": row["id"],
@@ -392,6 +393,11 @@ def _fallback_work_hours_payload():
     return {
         "today_label": _fallback_today_label(),
         "selected_date": timezone.localdate().isoformat(),
+        "work_gap_rules": {
+            "idle_gap_seconds": int(company_profile.work_review_idle_gap_seconds or 60),
+            "connected_cooldown_seconds": int(company_profile.work_review_connected_cooldown_seconds or 90),
+            "attempt_threshold": int(company_profile.work_review_zero_talk_attempt_threshold or 10),
+        },
         "summary_rows": summary_rows,
         "session_rows": [],
     }

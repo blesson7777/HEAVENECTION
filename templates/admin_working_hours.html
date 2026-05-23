@@ -83,7 +83,7 @@
                                             <span>Next: {{ gap.current_call_label }} · {{ gap.current_call_time }} · {{ gap.current_call_duration }} · {{ gap.current_call_status }}</span>
                                         </div>
                                         <div class="hc-work-review-day-meta">
-                                            <span>Uncounted time starts after 90 seconds of idle gap.</span>
+                                            <span>Uncounted time starts after {{ work_gap_rules.connected_cooldown_seconds }} seconds of idle gap.</span>
                                         </div>
                                     </div>
                                         {% endfor %}
@@ -162,10 +162,10 @@
             </div>
             <div class="modal-body pt-3">
                 <div class="hc-work-review-caption mb-3">
-                    Only the first 90 seconds after a call are counted as buffer time. Any extra gap time is not counted.
+                    Only the first {{ work_gap_rules.connected_cooldown_seconds }} seconds after a call are counted as buffer time. Any extra gap time is not counted.
                 </div>
                 <div class="hc-work-review-caption mb-3">
-                    If a block has 10 or more attempts with no connected call, it is treated as zero‑talk and does not add work hours.
+                    If a block has {{ work_gap_rules.attempt_threshold }} or more attempts with no connected call, it is treated as zero-talk and does not add work hours.
                 </div>
                 <div class="hc-work-review-modal-body" id="workGapDetailsModalBody">
                     <div class="hc-work-review-empty-note">No gap details available.</div>
@@ -178,20 +178,31 @@
 
 {% block extra_scripts %}
 <script>
-    (function () {
+    document.addEventListener('DOMContentLoaded', function () {
+        const bootstrapModalApi = window.bootstrap && window.bootstrap.Modal;
+        if (!bootstrapModalApi) {
+            return;
+        }
         const modalElement = document.getElementById('workGapDetailsModal');
         if (!modalElement) {
             return;
         }
-        const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+        const modal = bootstrapModalApi.getOrCreateInstance(modalElement);
         const modalTitle = document.getElementById('workGapDetailsModalTitle');
         const modalBody = document.getElementById('workGapDetailsModalBody');
+        const resolveTargetContent = (targetValue) => {
+            if (!targetValue) {
+                return null;
+            }
+            const normalizedId = targetValue.startsWith('#') ? targetValue.slice(1) : targetValue;
+            return document.getElementById(normalizedId) || document.querySelector(targetValue);
+        };
 
         document.querySelectorAll('.js-gap-details').forEach((button) => {
             button.addEventListener('click', () => {
                 const targetSelector = button.getAttribute('data-target');
                 const staffName = button.getAttribute('data-staff-name') || 'Staff';
-                const contentNode = targetSelector ? document.querySelector(targetSelector) : null;
+                const contentNode = resolveTargetContent(targetSelector);
                 if (modalTitle) {
                     modalTitle.textContent = `Uncounted Gaps - ${staffName}`;
                 }
@@ -201,6 +212,6 @@
                 modal.show();
             });
         });
-    })();
+    });
 </script>
 {% endblock %}

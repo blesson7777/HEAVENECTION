@@ -1939,7 +1939,6 @@ def _sync_referral_reward_for_staff(staff, *, company_profile=None):
     if (
         (not company_profile.referral_program_enabled and not _is_grandfathered_referral(staff))
         or not staff.referred_by_id
-        or required_hours <= Decimal("0")
         or reward_amount <= Decimal("0")
     ):
         return None
@@ -8070,6 +8069,7 @@ def build_call_detail_payload(*, limit=200, date_value=""):
 
 
 def build_work_hours_payload(*, date_value=""):
+    rules = _work_review_rules()
     selected_date = _parse_date_value(date_value) or timezone.localdate()
     start, end = _day_range_for_date(selected_date)
     today = selected_date
@@ -8157,6 +8157,13 @@ def build_work_hours_payload(*, date_value=""):
     return {
         "today_label": today.strftime("%A, %d %b %Y"),
         "selected_date": selected_date.isoformat(),
+        "work_gap_rules": {
+            "idle_gap_seconds": int(rules.get("idle_gap_seconds", CALL_ACTIVITY_IDLE_BREAK_SECONDS) or 1),
+            "connected_cooldown_seconds": int(
+                rules.get("connected_cooldown_seconds", CONNECTED_CALL_COOLDOWN_SECONDS) or 0
+            ),
+            "attempt_threshold": int(rules.get("attempt_threshold", MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) or 1),
+        },
         "summary_rows": summary_rows,
         "session_rows": session_rows,
     }
