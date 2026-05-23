@@ -211,6 +211,27 @@ def get_lead_queue_limit():
     return max(1, int(profile.lead_queue_target_per_staff or DEFAULT_LEAD_QUEUE_LIMIT))
 
 
+def _work_review_rules():
+    profile = get_company_profile()
+    attempt_threshold = max(
+        1,
+        int(getattr(profile, "work_review_zero_talk_attempt_threshold", MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) or 1),
+    )
+    idle_gap_seconds = max(
+        1,
+        int(getattr(profile, "work_review_idle_gap_seconds", CALL_ACTIVITY_IDLE_BREAK_SECONDS) or 1),
+    )
+    connected_cooldown_seconds = max(
+        0,
+        int(getattr(profile, "work_review_connected_cooldown_seconds", CONNECTED_CALL_COOLDOWN_SECONDS) or 0),
+    )
+    return {
+        "attempt_threshold": attempt_threshold,
+        "idle_gap_seconds": idle_gap_seconds,
+        "connected_cooldown_seconds": connected_cooldown_seconds,
+    }
+
+
 def _today_range(now=None):
     if now is None:
         now = timezone.now()
@@ -287,11 +308,16 @@ def _call_activity_window(call):
         return None, None, 0
 
 
-def _call_activity_cooldown_seconds(block_end, *, range_end=None):
+def _call_activity_cooldown_seconds(block_end, *, range_end=None, rules=None):
     if not block_end:
         return 0
 
-    cooldown_end = block_end + timedelta(seconds=CONNECTED_CALL_COOLDOWN_SECONDS)
+    active_rules = rules or _work_review_rules()
+    cooldown_seconds = int(active_rules.get("connected_cooldown_seconds", CONNECTED_CALL_COOLDOWN_SECONDS) or 0)
+    if cooldown_seconds <= 0:
+        return 0
+
+    cooldown_end = block_end + timedelta(seconds=cooldown_seconds)
     if range_end is not None:
         cooldown_end = min(cooldown_end, range_end)
 
@@ -303,11 +329,13 @@ def _call_activity_cooldown_seconds(block_end, *, range_end=None):
     return max(0, int((cooldown_end - block_end).total_seconds()))
 
 
-def _split_call_activity_blocks(calls):
+def _split_call_activity_blocks(calls, *, rules=None):
     blocks = []
     block_calls = []
     block_start = None
     block_end = None
+    active_rules = rules or _work_review_rules()
+    idle_gap_seconds = int(active_rules.get("idle_gap_seconds", CALL_ACTIVITY_IDLE_BREAK_SECONDS) or 1)
 
     for call in calls:
         start_time, end_time, _duration_seconds = _call_activity_window(call)
@@ -321,7 +349,7 @@ def _split_call_activity_blocks(calls):
             continue
 
         gap_seconds = max(0, int((start_time - block_end).total_seconds()))
-        if gap_seconds > CALL_ACTIVITY_IDLE_BREAK_SECONDS:
+        if gap_seconds > idle_gap_seconds:
             blocks.append((block_calls, block_start, block_end))
             block_calls = [call]
             block_start = start_time
@@ -337,9 +365,10 @@ def _split_call_activity_blocks(calls):
     return blocks
 
 
-def _call_activity_blocks_with_stats(calls):
+def _call_activity_blocks_with_stats(calls, *, rules=None):
     blocks = []
-    for block_calls, block_start, block_end in _split_call_activity_blocks(calls):
+    active_rules = rules or _work_review_rules()
+    for block_calls, block_start, block_end in _split_call_activity_blocks(calls, rules=active_rules):
         real_call_activity_seconds = 0
         real_calls_in_block = 0
         zero_seconds_in_block = 0
@@ -378,7 +407,7 @@ def _call_activity_blocks_with_stats(calls):
     return blocks
 
 
-def _call_activity_block_summary(calls, *, range_end=None):
+def _call_activity_block_summary(calls, *, range_end=None, rules=None):
     total_seconds = 0
     attempt_count = 0
     suspicious_block_count = 0
@@ -387,7 +416,9 @@ def _call_activity_block_summary(calls, *, range_end=None):
     zero_second_attempt_count = 0
     real_call_attempt_count = 0
 
-    blocks = _call_activity_blocks_with_stats(calls)
+    active_rules = rules or _work_review_rules()
+    attempt_threshold = int(active_rules.get("attempt_threshold", MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) or 1)
+    blocks = _call_activity_blocks_with_stats(calls, rules=active_rules)
     for block in blocks:
         attempt_count += len(block["calls"])
         zero_second_attempt_count += block["zero_seconds_in_block"]
@@ -401,13 +432,13 @@ def _call_activity_block_summary(calls, *, range_end=None):
         nonlocal zero_streak, zero_streak_attempts
         if not zero_streak:
             return
-        if force_zero_only or zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+        if force_zero_only or zero_streak_attempts >= attempt_threshold:
             zero_only_block_count += len(zero_streak)
         else:
             for block in zero_streak:
                 block_seconds = block["block_seconds"]
                 total_seconds += max(block_seconds, block["real_call_activity_seconds"])
-                total_seconds += _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
+                total_seconds += _call_activity_cooldown_seconds(block["block_end"], range_end=range_end, rules=active_rules)
         zero_streak = []
         zero_streak_attempts = 0
 
@@ -417,13 +448,13 @@ def _call_activity_block_summary(calls, *, range_end=None):
             zero_streak_attempts += len(block["calls"])
             continue
 
-        streak_reached = zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
+        streak_reached = zero_streak_attempts >= attempt_threshold
         flush_zero_streak(force_zero_only=streak_reached)
 
         block_seconds = block["block_seconds"]
         if (
-            len(block["calls"]) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
-            and (block["real_calls_in_block"] * MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) < len(block["calls"])
+            len(block["calls"]) >= attempt_threshold
+            and (block["real_calls_in_block"] * attempt_threshold) < len(block["calls"])
         ):
             suspicious_block_count += 1
             suspicious_attempt_count += len(block["calls"])
@@ -431,7 +462,7 @@ def _call_activity_block_summary(calls, *, range_end=None):
             continue
 
         if streak_reached and block["first_real_call_start"]:
-            cooldown_seconds = _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
+            cooldown_seconds = _call_activity_cooldown_seconds(block["block_end"], range_end=range_end, rules=active_rules)
             adjusted_start = block["first_real_call_start"]
             adjusted_segment = (
                 adjusted_start,
@@ -440,7 +471,7 @@ def _call_activity_block_summary(calls, *, range_end=None):
             total_seconds += _segment_seconds(adjusted_segment)
         else:
             total_seconds += max(block_seconds, block["real_call_activity_seconds"])
-            total_seconds += _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
+            total_seconds += _call_activity_cooldown_seconds(block["block_end"], range_end=range_end, rules=active_rules)
 
     flush_zero_streak()
 
@@ -455,8 +486,9 @@ def _call_activity_block_summary(calls, *, range_end=None):
     }
 
 
-def _effective_active_seconds_map(*, start_at=None, end_at=None, staff_ids=None):
+def _effective_active_seconds_map(*, start_at=None, end_at=None, staff_ids=None, rules=None):
     call_queryset = _payable_work_hour_call_queryset()
+    active_rules = rules or _work_review_rules()
 
     if start_at is not None and end_at is not None:
         call_queryset = call_queryset.filter(start_time__range=(start_at, end_at))
@@ -481,6 +513,7 @@ def _effective_active_seconds_map(*, start_at=None, end_at=None, staff_ids=None)
         totals_by_staff[day_key[0]] += _call_activity_block_summary(
             calls,
             range_end=end_at,
+            rules=active_rules,
         )["active_seconds"]
 
     if staff_ids is not None:
@@ -490,8 +523,9 @@ def _effective_active_seconds_map(*, start_at=None, end_at=None, staff_ids=None)
     return dict(totals_by_staff)
 
 
-def _effective_active_insights_map(*, start_at=None, end_at=None, staff_ids=None):
+def _effective_active_insights_map(*, start_at=None, end_at=None, staff_ids=None, rules=None):
     call_queryset = Call.objects.filter(end_time__isnull=False, is_verified=True)
+    active_rules = rules or _work_review_rules()
 
     if start_at is not None and end_at is not None:
         call_queryset = call_queryset.filter(start_time__range=(start_at, end_at))
@@ -527,7 +561,7 @@ def _effective_active_insights_map(*, start_at=None, end_at=None, staff_ids=None
         }
     )
     for day_key, calls in calls_by_staff_day.items():
-        summary = _call_activity_block_summary(calls)
+        summary = _call_activity_block_summary(calls, rules=active_rules)
         staff_summary = insights_by_staff[day_key[0]]
         for field_name, value in summary.items():
             staff_summary[field_name] += value
@@ -1275,7 +1309,7 @@ def _count_calls_in_segments(calls, segments):
     return count
 
 
-def _call_activity_block_analysis(calls, *, range_end=None):
+def _call_activity_block_analysis(calls, *, range_end=None, rules=None):
     analysis = {
         "active_seconds": 0,
         "attempt_count": 0,
@@ -1287,7 +1321,9 @@ def _call_activity_block_analysis(calls, *, range_end=None):
         "segments": [],
     }
 
-    blocks = _call_activity_blocks_with_stats(calls)
+    active_rules = rules or _work_review_rules()
+    attempt_threshold = int(active_rules.get("attempt_threshold", MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) or 1)
+    blocks = _call_activity_blocks_with_stats(calls, rules=active_rules)
     for block in blocks:
         analysis["attempt_count"] += len(block["calls"])
         analysis["zero_second_attempt_count"] += block["zero_seconds_in_block"]
@@ -1300,11 +1336,15 @@ def _call_activity_block_analysis(calls, *, range_end=None):
         nonlocal zero_streak, zero_streak_attempts
         if not zero_streak:
             return
-        if force_zero_only or zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+        if force_zero_only or zero_streak_attempts >= attempt_threshold:
             analysis["zero_only_block_count"] += len(zero_streak)
         else:
             for block in zero_streak:
-                cooldown_seconds = _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
+                cooldown_seconds = _call_activity_cooldown_seconds(
+                    block["block_end"],
+                    range_end=range_end,
+                    rules=active_rules,
+                )
                 block_segment = (
                     block["block_start"],
                     block["block_end"] + timedelta(seconds=cooldown_seconds),
@@ -1320,12 +1360,12 @@ def _call_activity_block_analysis(calls, *, range_end=None):
             zero_streak_attempts += len(block["calls"])
             continue
 
-        streak_reached = zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
+        streak_reached = zero_streak_attempts >= attempt_threshold
         flush_zero_streak(force_zero_only=streak_reached)
 
         if (
-            len(block["calls"]) >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
-            and (block["real_calls_in_block"] * MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) < len(block["calls"])
+            len(block["calls"]) >= attempt_threshold
+            and (block["real_calls_in_block"] * attempt_threshold) < len(block["calls"])
         ):
             analysis["suspicious_block_count"] += 1
             analysis["suspicious_attempt_count"] += len(block["calls"])
@@ -1333,7 +1373,7 @@ def _call_activity_block_analysis(calls, *, range_end=None):
             analysis["segments"].extend(block["real_call_segments"])
             continue
 
-        cooldown_seconds = _call_activity_cooldown_seconds(block["block_end"], range_end=range_end)
+        cooldown_seconds = _call_activity_cooldown_seconds(block["block_end"], range_end=range_end, rules=active_rules)
         block_start = block["block_start"]
         if streak_reached and block["first_real_call_start"]:
             block_start = block["first_real_call_start"]
@@ -1358,7 +1398,7 @@ def _hourly_bonus_summary_for_day_calls(calls, *, company_profile, range_end=Non
     if threshold_per_hour <= 0 or bonus_rate <= Decimal("0.00"):
         return _empty_hourly_bonus_summary()
 
-    analysis = _call_activity_block_analysis(calls, range_end=range_end)
+    analysis = _call_activity_block_analysis(calls, range_end=range_end, rules=_work_review_rules())
     completed_hours = analysis["active_seconds"] // 3600
     if completed_hours < 1:
         return {
@@ -3479,14 +3519,15 @@ def _build_quality_note(
     long_away_count,
     real_call_count,
     verified_attempt_count,
+    attempt_threshold,
 ):
-    if verified_attempt_count >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK and real_call_count == 0:
+    if verified_attempt_count >= attempt_threshold and real_call_count == 0:
         return (
             f"No real conversations were recorded across {verified_attempt_count} verified attempts, "
             "so this calling pattern needs review."
         )
     if (
-        verified_attempt_count >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
+        verified_attempt_count >= attempt_threshold
         and real_call_count > 0
         and (Decimal(real_call_count) / Decimal(verified_attempt_count)) < Decimal("0.20")
     ):
@@ -3509,9 +3550,11 @@ def _build_quality_note(
     return "Build more recent call activity for a fuller review."
 
 
-def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range_end=None):
+def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range_end=None, rules=None):
     if not staff_ids:
         return {}
+    active_rules = rules or _work_review_rules()
+    attempt_threshold = int(active_rules.get("attempt_threshold", MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) or 1)
 
     current_time = timezone.localtime(range_end or now or timezone.now())
     if range_start:
@@ -3652,7 +3695,7 @@ def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range
             metrics[staff_id]["long_away_count"] += 1
 
     for (staff_id, _day), day_calls in calls_by_staff_day.items():
-        summary = _call_activity_block_summary(day_calls)
+        summary = _call_activity_block_summary(day_calls, rules=active_rules)
         metrics[staff_id]["suspicious_block_count"] += summary["suspicious_block_count"]
         metrics[staff_id]["zero_only_block_count"] += summary["zero_only_block_count"]
         metrics[staff_id]["suspicious_attempt_count"] += summary["suspicious_attempt_count"]
@@ -3709,7 +3752,7 @@ def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range
 
         penalty_points = min((suspicious_block_count * 12) + (zero_only_block_count * 10), 40)
         overall_score = max(overall_score - penalty_points, 0)
-        if verified_attempt_count >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK:
+        if verified_attempt_count >= attempt_threshold:
             if real_call_count == 0:
                 overall_score = min(overall_score, 25)
             elif real_call_ratio is not None and real_call_ratio < Decimal("0.20"):
@@ -3746,6 +3789,7 @@ def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range
                 long_away_count=long_away_count,
                 real_call_count=real_call_count,
                 verified_attempt_count=verified_attempt_count,
+                attempt_threshold=attempt_threshold,
             ),
             "has_activity": has_activity,
             "invalid_short_count": invalid_short_calls,
@@ -3865,9 +3909,11 @@ def _review_lead_ids_for_staff(staff, *, now=None):
     return [uuid.UUID(row["lead_id"]) for row in _staff_review_call_rows(staff, now=now)]
 
 
-def _build_work_review_day_previews(staff_ids, *, now=None, preview_days=7, preview_limit=2):
+def _build_work_review_day_previews(staff_ids, *, now=None, preview_days=7, preview_limit=2, rules=None):
     if not staff_ids:
         return {}
+    active_rules = rules or _work_review_rules()
+    attempt_threshold = int(active_rules.get("attempt_threshold", MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) or 1)
 
     current_time = timezone.localtime(now or timezone.now())
     preview_start_date = current_time.date() - timedelta(days=max(preview_days - 1, 0))
@@ -3912,7 +3958,7 @@ def _build_work_review_day_previews(staff_ids, *, now=None, preview_days=7, prev
 
     previews_by_staff = defaultdict(list)
     for (staff_id, activity_day), day_calls in calls_by_staff_day.items():
-        summary = _call_activity_block_summary(day_calls)
+        summary = _call_activity_block_summary(day_calls, rules=active_rules)
         attempt_count = summary["attempt_count"]
         real_call_count = summary["real_call_count"]
         zero_second_attempt_count = summary["zero_second_attempt_count"]
@@ -3923,7 +3969,7 @@ def _build_work_review_day_previews(staff_ids, *, now=None, preview_days=7, prev
         review_state = "stable"
         review_label = "Stable day"
         review_tone = "success"
-        if attempt_count >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK and real_call_count == 0:
+        if attempt_count >= attempt_threshold and real_call_count == 0:
             review_state = "review"
             review_label = "No real conversations"
             review_tone = "danger"
@@ -3972,10 +4018,13 @@ def _zero_talk_block_details_by_staff(
     block_limit=3,
     include_unverified=True,
     include_invalid_short=True,
+    rules=None,
 ):
     staff_ids = [staff_id for staff_id in (staff_ids or []) if staff_id]
     if not staff_ids:
         return {}
+    active_rules = rules or _work_review_rules()
+    attempt_threshold = int(active_rules.get("attempt_threshold", MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) or 1)
 
     call_queryset = Call.objects.filter(staff_id__in=staff_ids, start_time__range=(range_start, range_end))
     if not include_unverified:
@@ -3996,7 +4045,7 @@ def _zero_talk_block_details_by_staff(
     for staff_id, staff_calls in calls_by_staff.items():
         zero_blocks = []
         all_streaks = []
-        blocks = _call_activity_blocks_with_stats(staff_calls)
+        blocks = _call_activity_blocks_with_stats(staff_calls, rules=active_rules)
         zero_streak = []
         zero_streak_attempts = 0
         pending_gap_label = "0s"
@@ -4045,7 +4094,7 @@ def _zero_talk_block_details_by_staff(
                     }
                 )
 
-            is_zero_talk = zero_streak_attempts >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK
+            is_zero_talk = zero_streak_attempts >= attempt_threshold
             streak_payload = {
                 "date_label": date_label,
                 "time_range": time_range,
@@ -4055,7 +4104,11 @@ def _zero_talk_block_details_by_staff(
                 "calls": call_rows,
                 "call_count": len(call_rows),
                 "extra_calls": 0,
-                "streak_note": "Zero-only streak (10+ attempts reached)" if is_zero_talk else "Zero-only streak below 10 attempts",
+                "streak_note": (
+                    f"Zero-only streak ({attempt_threshold}+ attempts reached)"
+                    if is_zero_talk
+                    else f"Zero-only streak below {attempt_threshold} attempts"
+                ),
                 "next_call_gap_label": pending_gap_label,
                 "next_connected_call_time": pending_next_call_time or "No connected call yet",
                 "streak_gap_label": _format_duration(streak_gap_seconds),
@@ -5511,9 +5564,10 @@ def build_live_monitoring_payload():
     }
 
 
-def build_team_management_payload(*, quality_range_start=None, quality_range_end=None):
+def build_team_management_payload(*, quality_range_start=None, quality_range_end=None, rules=None):
     today, start, end = _today_range()
     active_cutoff = timezone.now() - timedelta(seconds=ONLINE_WINDOW_SECONDS)
+    active_rules = rules or _work_review_rules()
     staff_queryset = _staff_queryset()
     staff_ids = [staff.id for staff in staff_queryset]
     open_sessions = _open_sessions_by_staff()
@@ -5522,6 +5576,7 @@ def build_team_management_payload(*, quality_range_start=None, quality_range_end
         staff_ids,
         range_start=quality_range_start,
         range_end=quality_range_end,
+        rules=active_rules,
     )
 
     call_totals = {
@@ -5536,7 +5591,12 @@ def build_team_management_payload(*, quality_range_start=None, quality_range_end
         .values("staff_id")
         .annotate(count=Count("id"))
     }
-    active_totals = _effective_active_seconds_map(start_at=start, end_at=end, staff_ids=staff_ids)
+    active_totals = _effective_active_seconds_map(
+        start_at=start,
+        end_at=end,
+        staff_ids=staff_ids,
+        rules=active_rules,
+    )
     assigned_totals = {
         row["assigned_to"]: row["count"]
         for row in _lead_queue_queryset().exclude(assigned_to=None)
@@ -5652,6 +5712,8 @@ def build_team_management_payload(*, quality_range_start=None, quality_range_end
 
 
 def build_work_review_payload(*, search_query="", review_filter="all", now=None, month_value=""):
+    rules = _work_review_rules()
+    attempt_threshold = int(rules.get("attempt_threshold", MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) or 1)
     reference_date = _parse_month_value(month_value)
     reference_date = reference_date or timezone.localdate()
     range_start, range_end = _month_range_for_reference(
@@ -5661,6 +5723,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
     team_payload = build_team_management_payload(
         quality_range_start=range_start,
         quality_range_end=range_end,
+        rules=rules,
     )
     team_rows = list(team_payload["team_rows"])
     staff_ids = []
@@ -5670,7 +5733,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
         except (TypeError, ValueError, AttributeError):
             continue
 
-    day_previews = _build_work_review_day_previews(staff_ids, now=now)
+    day_previews = _build_work_review_day_previews(staff_ids, now=now, rules=rules)
     normalized_query = " ".join(str(search_query or "").strip().lower().split())
     review_filter = str(review_filter or "all").strip().lower() or "all"
     if review_filter not in {"all", "review", "attention", "stable", "quiet"}:
@@ -5693,6 +5756,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
         block_limit=1000,
         include_unverified=True,
         include_invalid_short=True,
+        rules=rules,
     )
 
     for row in team_rows:
@@ -5725,7 +5789,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
             or suspicious_block_count > 0
             or zero_only_block_count > 0
             or zero_streak_blocks
-            or (verified_attempt_count >= MIN_REAL_CALLS_PER_ATTEMPT_BLOCK and real_call_count == 0)
+            or (verified_attempt_count >= attempt_threshold and real_call_count == 0)
         ):
             review_state = "review"
             review_state_label = "Review Needed"
@@ -5840,6 +5904,13 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
             months_back=6,
         ),
         "period_label": reference_date.strftime("%b %Y"),
+        "work_review_rules": {
+            "attempt_threshold": attempt_threshold,
+            "idle_gap_seconds": int(rules.get("idle_gap_seconds", CALL_ACTIVITY_IDLE_BREAK_SECONDS) or 1),
+            "connected_cooldown_seconds": int(
+                rules.get("connected_cooldown_seconds", CONNECTED_CALL_COOLDOWN_SECONDS) or 0
+            ),
+        },
         "review_summary": {
             "total_staff": len(team_rows),
             "filtered_staff_count": len(review_rows),
@@ -8058,6 +8129,11 @@ def build_work_hours_payload(*, date_value=""):
 
 def _work_gap_summary_map(*, start_at=None, end_at=None, staff_ids=None):
     call_queryset = _payable_work_hour_call_queryset()
+    rules = _work_review_rules()
+    idle_gap_seconds = int(rules.get("idle_gap_seconds", CALL_ACTIVITY_IDLE_BREAK_SECONDS) or 1)
+    connected_cooldown_seconds = int(
+        rules.get("connected_cooldown_seconds", CONNECTED_CALL_COOLDOWN_SECONDS) or 0
+    )
 
     if start_at is not None and end_at is not None:
         call_queryset = call_queryset.filter(start_time__range=(start_at, end_at))
@@ -8117,9 +8193,9 @@ def _work_gap_summary_map(*, start_at=None, end_at=None, staff_ids=None):
 
             if previous_end:
                 gap_seconds = max(0, int((start_time - previous_end).total_seconds()))
-                if gap_seconds > CALL_ACTIVITY_IDLE_BREAK_SECONDS:
-                    buffer_seconds = min(gap_seconds, CONNECTED_CALL_COOLDOWN_SECONDS)
-                    uncounted_seconds = max(0, gap_seconds - CONNECTED_CALL_COOLDOWN_SECONDS)
+                if gap_seconds > idle_gap_seconds:
+                    buffer_seconds = min(gap_seconds, connected_cooldown_seconds)
+                    uncounted_seconds = max(0, gap_seconds - connected_cooldown_seconds)
                     if uncounted_seconds <= 0:
                         continue
                     gap_total_seconds += gap_seconds

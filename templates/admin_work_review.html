@@ -86,6 +86,9 @@
             <div class="d-flex gap-2 flex-wrap">
                 <button type="submit" class="btn btn-primary">Apply</button>
                 <a href="{% url 'work-review-page' %}" class="btn btn-outline-primary">Clear</a>
+                <button type="button" class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#workReviewRulesModal">
+                    Rule Settings
+                </button>
             </div>
         </div>
     </form>
@@ -136,7 +139,7 @@
                                         </div>
                                         <small>
                                             {{ block.attempt_count }} attempts - {{ block.zero_second_count }} zero-second -
-                                            {% if block.is_zero_talk %}Not counted in work hours{% else %}Counted (below 10 attempts){% endif %}
+                                            {% if block.is_zero_talk %}Not counted in work hours{% else %}Counted (below {{ work_review_rules.attempt_threshold }} attempts){% endif %}
                                         </small>
                                         {% if block.streak_note %}
                                         <div class="hc-work-review-caption">{{ block.streak_note }}</div>
@@ -404,12 +407,79 @@
             </div>
             <div class="modal-body pt-3">
                 <div class="hc-work-review-caption mb-3">
-                    A zero‑talk streak is confirmed after 10 zero‑second attempts without any connected call. All blocks in that streak are treated as zero‑talk and do not add work hours.
+                    A zero-talk streak is confirmed after {{ work_review_rules.attempt_threshold }} zero-second attempts without any connected call. All blocks in that streak are treated as zero-talk and do not add work hours.
                 </div>
                 <div class="hc-work-review-modal-body" id="workReviewZeroTalkModalBody">
                     <div class="hc-work-review-empty-note">No zero-talk blocks available.</div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="workReviewRulesModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content hc-modal-card">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="work_review_action" value="update_rules">
+                <input type="hidden" name="return_query" value="{{ return_query }}">
+                <div class="modal-header border-0 pb-0">
+                    <div>
+                        <span class="mf-db2-kicker">Rule Settings</span>
+                        <h5 class="modal-title mt-1">Work Review Controls</h5>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body pt-3">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="workReviewThresholdInput">Zero-talk attempt threshold</label>
+                        <input
+                            type="number"
+                            min="1"
+                            max="200"
+                            class="form-control"
+                            id="workReviewThresholdInput"
+                            name="work_review_zero_talk_attempt_threshold"
+                            value="{{ work_review_rules.attempt_threshold }}"
+                            required
+                        >
+                        <div class="form-text">Streaks at or above this attempt count are marked as zero-talk blocks.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="workReviewIdleGapInput">Idle gap split (seconds)</label>
+                        <input
+                            type="number"
+                            min="1"
+                            max="3600"
+                            class="form-control"
+                            id="workReviewIdleGapInput"
+                            name="work_review_idle_gap_seconds"
+                            value="{{ work_review_rules.idle_gap_seconds }}"
+                            required
+                        >
+                        <div class="form-text">If the pause between calls is above this value, a new activity block starts.</div>
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label fw-semibold" for="workReviewCooldownInput">Connected cooldown buffer (seconds)</label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="3600"
+                            class="form-control"
+                            id="workReviewCooldownInput"
+                            name="work_review_connected_cooldown_seconds"
+                            value="{{ work_review_rules.connected_cooldown_seconds }}"
+                            required
+                        >
+                        <div class="form-text">Extra paid/covered buffer after a block before gap time becomes uncounted.</div>
+                    </div>
+                </div>
+                <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Rules</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

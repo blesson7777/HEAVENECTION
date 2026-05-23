@@ -398,6 +398,7 @@ def _fallback_work_hours_payload():
 
 
 def _fallback_work_review_payload():
+    company_profile = get_company_profile()
     team_payload = _fallback_team_payload()
     review_rows = []
     for row in team_payload["team_rows"]:
@@ -427,6 +428,11 @@ def _fallback_work_review_payload():
         "month_value": timezone.localdate().strftime("%Y-%m"),
         "month_options": [],
         "period_label": timezone.localdate().strftime("%b %Y"),
+        "work_review_rules": {
+            "attempt_threshold": int(company_profile.work_review_zero_talk_attempt_threshold or 10),
+            "idle_gap_seconds": int(company_profile.work_review_idle_gap_seconds or 60),
+            "connected_cooldown_seconds": int(company_profile.work_review_connected_cooldown_seconds or 90),
+        },
         "review_summary": {
             "total_staff": len(review_rows),
             "filtered_staff_count": len(review_rows),
@@ -440,6 +446,7 @@ def _fallback_work_review_payload():
             "flagged_day_total": 0,
         },
         "review_rows": review_rows,
+        "zero_talk_staff_rows": [],
     }
 
 
@@ -2185,15 +2192,50 @@ def learning_page(request):
     return render(request, "admin_learning.html", context)
 
 
-@require_GET
+@require_http_methods(["GET", "POST"])
 def work_review_page(request):
     current_user = _get_admin_user_or_redirect(request)
     if not current_user:
         return redirect("web-login")
 
+    if request.method == "POST" and request.POST.get("work_review_action") == "update_rules":
+        company_profile = get_company_profile()
+        update_payload = {
+            "work_review_zero_talk_attempt_threshold": request.POST.get(
+                "work_review_zero_talk_attempt_threshold", ""
+            ).strip(),
+            "work_review_idle_gap_seconds": request.POST.get("work_review_idle_gap_seconds", "").strip(),
+            "work_review_connected_cooldown_seconds": request.POST.get(
+                "work_review_connected_cooldown_seconds", ""
+            ).strip(),
+        }
+        serializer = CompanyProfileUpdateSerializer(company_profile, data=update_payload, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            messages.success(request, "Work review rules updated successfully.")
+        else:
+            errors = _normalize_errors(serializer.errors)
+            error_message = " ".join(errors.values()) if errors else "Please correct the work review rule values."
+            messages.error(request, f"Unable to update work review rules. {error_message}")
+        return_query = request.POST.get("return_query", "").strip()
+        if return_query:
+            return redirect(f"{request.path}?{return_query}")
+        return redirect(request.path)
+
     search_query = request.GET.get("q", "").strip()
     review_filter = request.GET.get("review", "all").strip().lower() or "all"
     month_value = request.GET.get("month", "").strip()
+    payload = _safe_admin_payload(
+        lambda: build_work_review_payload(
+            search_query=search_query,
+            review_filter=review_filter,
+            month_value=month_value,
+        ),
+        _fallback_work_review_payload,
+        label="work-review-page",
+        request=request,
+    )
+    payload["return_query"] = request.GET.urlencode()
     context = _admin_web_context(
         request,
         current_user,
@@ -2201,16 +2243,7 @@ def work_review_page(request):
         page_title="Work Review Center",
         page_heading="Work Review Center",
         page_subtitle="Review calling patterns, empty attempts, and callback gaps from one dedicated monitoring page.",
-        extra_context=_safe_admin_payload(
-            lambda: build_work_review_payload(
-                search_query=search_query,
-                review_filter=review_filter,
-                month_value=month_value,
-            ),
-            _fallback_work_review_payload,
-            label="work-review-page",
-            request=request,
-        ),
+        extra_context=payload,
     )
     return render(request, "admin_work_review.html", context)
 

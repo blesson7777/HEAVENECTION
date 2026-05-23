@@ -131,6 +131,9 @@ class CompanyProfile(models.Model):
     hourly_call_bonus_enabled = models.BooleanField(default=False)
     hourly_call_bonus_threshold = models.PositiveIntegerField(default=50)
     hourly_call_bonus_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0.50)
+    work_review_zero_talk_attempt_threshold = models.PositiveIntegerField(default=10)
+    work_review_idle_gap_seconds = models.PositiveIntegerField(default=60)
+    work_review_connected_cooldown_seconds = models.PositiveIntegerField(default=90)
     lead_auto_delete_enabled = models.BooleanField(default=False)
     lead_auto_delete_mode = models.CharField(
         max_length=20,

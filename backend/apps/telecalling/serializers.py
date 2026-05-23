@@ -847,6 +847,9 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             "hourly_call_bonus_enabled",
             "hourly_call_bonus_threshold",
             "hourly_call_bonus_rate",
+            "work_review_zero_talk_attempt_threshold",
+            "work_review_idle_gap_seconds",
+            "work_review_connected_cooldown_seconds",
             "lead_auto_delete_enabled",
             "lead_auto_delete_mode",
             "lead_auto_delete_days",
@@ -893,6 +896,9 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
             "hourly_call_bonus_enabled",
             "hourly_call_bonus_threshold",
             "hourly_call_bonus_rate",
+            "work_review_zero_talk_attempt_threshold",
+            "work_review_idle_gap_seconds",
+            "work_review_connected_cooldown_seconds",
             "lead_auto_delete_enabled",
             "lead_auto_delete_mode",
             "lead_auto_delete_days",
@@ -918,6 +924,36 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
         if int(value) < 0:
             raise serializers.ValidationError("Target calls per hour cannot be negative.")
         return value
+
+    def validate_work_review_zero_talk_attempt_threshold(self, value):
+        if value is None:
+            return value
+        threshold = int(value)
+        if threshold < 1:
+            raise serializers.ValidationError("Zero-talk attempt threshold must be at least 1.")
+        if threshold > 200:
+            raise serializers.ValidationError("Zero-talk attempt threshold cannot exceed 200.")
+        return threshold
+
+    def validate_work_review_idle_gap_seconds(self, value):
+        if value is None:
+            return value
+        gap_seconds = int(value)
+        if gap_seconds < 1:
+            raise serializers.ValidationError("Idle gap split seconds must be at least 1.")
+        if gap_seconds > 3600:
+            raise serializers.ValidationError("Idle gap split seconds cannot exceed 3600.")
+        return gap_seconds
+
+    def validate_work_review_connected_cooldown_seconds(self, value):
+        if value is None:
+            return value
+        cooldown_seconds = int(value)
+        if cooldown_seconds < 0:
+            raise serializers.ValidationError("Connected cooldown seconds cannot be negative.")
+        if cooldown_seconds > 3600:
+            raise serializers.ValidationError("Connected cooldown seconds cannot exceed 3600.")
+        return cooldown_seconds
 
     def validate_lead_auto_delete_days(self, value):
         if value is None:
