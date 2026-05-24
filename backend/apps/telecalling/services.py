@@ -2098,9 +2098,13 @@ def build_staff_salary_history_rows(staff, limit=20):
                     _seconds_from_decimal_hours(record.total_hours)
                 ),
                 "final_salary": _format_currency(record.final_salary),
+                "final_salary_label": _format_currency(record.final_salary),
                 "paid_amount": _format_currency(transaction.amount),
+                "paid_amount_label": _format_currency(transaction.amount),
                 "is_paid": record.is_paid,
+                "paid_at_iso": transaction.paid_at.isoformat() if transaction.paid_at else None,
                 "paid_at": _format_datetime(transaction.paid_at),
+                "paid_at_label": _format_datetime(transaction.paid_at),
                 "payment_kind": transaction.payment_kind,
                 "payment_kind_label": transaction.get_payment_kind_display(),
                 "payment_method": transaction.payment_method,

@@ -291,13 +291,28 @@ class SalaryHistoryItem {
       totalHours: _asDouble(json['total_hours']),
       totalHoursLabel: json['total_hours_label']?.toString() ?? '0.0h',
       finalSalary: _asDouble(json['final_salary']),
-      finalSalaryLabel: json['final_salary_label']?.toString() ?? 'Rs. 0.00',
+      finalSalaryLabel:
+          json['final_salary_label']?.toString() ??
+          json['final_salary']?.toString() ??
+          'Rs. 0.00',
       paidAmount: _asDouble(json['paid_amount']),
-      paidAmountLabel: json['paid_amount_label']?.toString() ?? '',
-      paidAt: json['paid_at'] == null
-          ? null
-          : DateTime.tryParse(json['paid_at'].toString())?.toLocal(),
-      paidAtLabel: json['paid_at_label']?.toString() ?? '',
+      paidAmountLabel:
+          json['paid_amount_label']?.toString() ??
+          json['paid_amount']?.toString() ??
+          '',
+      paidAt:
+          (json['paid_at_iso'] != null
+                  ? DateTime.tryParse(json['paid_at_iso'].toString())
+                  : null)
+              ?.toLocal() ??
+          (json['paid_at'] != null
+                  ? DateTime.tryParse(json['paid_at'].toString())
+                  : null)
+              ?.toLocal(),
+      paidAtLabel:
+          json['paid_at_label']?.toString() ??
+          json['paid_at']?.toString() ??
+          '',
       paymentMethodLabel: json['payment_method_label']?.toString() ?? '',
       paymentReference: json['payment_reference']?.toString() ?? '',
       paymentNote: json['payment_note']?.toString() ?? '',
