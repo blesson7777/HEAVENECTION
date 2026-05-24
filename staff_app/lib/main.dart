@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:call_log/call_log.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
@@ -3188,209 +3189,33 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     if (_profile == null || !mounted) {
       return;
     }
-
-    final currentPasswordController = TextEditingController();
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
-    String? errorText;
-    var isSubmitting = false;
-    var isCurrentPasswordVisible = false;
-    var isNewPasswordVisible = false;
-    var isConfirmPasswordVisible = false;
-
-    try {
-      final changed = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              Future<void> submitPassword() async {
-                final currentPassword = currentPasswordController.text.trim();
-                final newPassword = newPasswordController.text.trim();
-                final confirmPassword = confirmPasswordController.text.trim();
-
-                if (currentPassword.isEmpty ||
-                    newPassword.isEmpty ||
-                    confirmPassword.isEmpty) {
-                  setDialogState(() {
-                    errorText = 'Enter the current, new, and confirm password.';
-                  });
-                  return;
-                }
-                if (newPassword != confirmPassword) {
-                  setDialogState(() {
-                    errorText =
-                        'New password and confirm password must match.';
-                  });
-                  return;
-                }
-
-                setDialogState(() {
-                  errorText = null;
-                  isSubmitting = true;
-                });
-
-                try {
-                  await _apiClient.updateStaffProfile(
-                    name: _profileNameController.text.trim(),
-                    phone: _profilePhoneController.text.trim(),
-                    email: _profileEmailController.text.trim(),
-                    bankAccountName: _bankAccountNameController.text.trim(),
-                    bankName: _bankNameController.text.trim(),
-                    bankAccountNumber: _bankAccountNumberController.text.trim(),
-                    bankIfscCode: _bankIfscController.text.trim(),
-                    aadharNumber: _aadharNumberController.text.trim(),
-                    passbookPhoto: _selectedPassbookPhoto,
-                    currentPassword: currentPassword,
-                    newPassword: newPassword,
-                    aadharPhoto: _selectedAadharPhoto,
-                    removeAadharPhoto: _removeAadharPhoto,
-                    removePassbookPhoto: _removePassbookPhoto,
-                  );
-                } on ApiException catch (error) {
-                  if (!mounted || !dialogContext.mounted) {
-                    return;
-                  }
-                  if (error.statusCode == 401) {
-                    Navigator.of(dialogContext).pop(false);
-                    await _handleForcedLogout();
-                    return;
-                  }
-                  setDialogState(() {
-                    errorText = error.message.trim().isEmpty
-                        ? 'Unable to change password right now.'
-                        : error.message;
-                    isSubmitting = false;
-                  });
-                  return;
-                }
-
-                if (!mounted || !dialogContext.mounted) {
-                  return;
-                }
-                Navigator.of(dialogContext).pop(true);
-              }
-
-              return AlertDialog(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                title: const Text('Change Password'),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Enter your current password and choose a new one.',
-                        style: TextStyle(fontSize: 14.5, color: Colors.black54),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: currentPasswordController,
-                        obscureText: !isCurrentPasswordVisible,
-                        decoration: InputDecoration(
-                          labelText: 'Current Password',
-                          prefixIcon: const Icon(Icons.lock_outline),
-                          suffixIcon: IconButton(
-                            onPressed: () {
-                              setDialogState(() {
-                                isCurrentPasswordVisible =
-                                    !isCurrentPasswordVisible;
-                              });
-                            },
-                            icon: Icon(
-                              isCurrentPasswordVisible
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: newPasswordController,
-                        obscureText: !isNewPasswordVisible,
-                        decoration: InputDecoration(
-                          labelText: 'New Password',
-                          prefixIcon: const Icon(Icons.lock_reset_outlined),
-                          suffixIcon: IconButton(
-                            onPressed: () {
-                              setDialogState(() {
-                                isNewPasswordVisible = !isNewPasswordVisible;
-                              });
-                            },
-                            icon: Icon(
-                              isNewPasswordVisible
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: confirmPasswordController,
-                        obscureText: !isConfirmPasswordVisible,
-                        decoration: InputDecoration(
-                          labelText: 'Confirm New Password',
-                          prefixIcon: const Icon(Icons.verified_outlined),
-                          suffixIcon: IconButton(
-                            onPressed: () {
-                              setDialogState(() {
-                                isConfirmPasswordVisible =
-                                    !isConfirmPasswordVisible;
-                              });
-                            },
-                            icon: Icon(
-                              isConfirmPasswordVisible
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                            ),
-                          ),
-                        ),
-                      ),
-                      if (errorText != null) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          errorText!,
-                          style: const TextStyle(
-                            color: kRed,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: isSubmitting
-                        ? null
-                        : () => Navigator.of(dialogContext).pop(false),
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton(
-                    onPressed: isSubmitting ? null : submitPassword,
-                    child: Text(
-                      isSubmitting ? 'Updating...' : 'Change Password',
-                    ),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-
-      if (changed == true && mounted) {
-        _showMessage('Your password was changed successfully.');
-      }
-    } finally {
-      currentPasswordController.dispose();
-      newPasswordController.dispose();
-      confirmPasswordController.dispose();
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => _ChangePasswordPage(
+          onSubmit: (currentPassword, newPassword) async {
+            await _apiClient.updateStaffProfile(
+              name: _profileNameController.text.trim(),
+              phone: _profilePhoneController.text.trim(),
+              email: _profileEmailController.text.trim(),
+              bankAccountName: _bankAccountNameController.text.trim(),
+              bankName: _bankNameController.text.trim(),
+              bankAccountNumber: _bankAccountNumberController.text.trim(),
+              bankIfscCode: _bankIfscController.text.trim(),
+              aadharNumber: _aadharNumberController.text.trim(),
+              passbookPhoto: _selectedPassbookPhoto,
+              currentPassword: currentPassword,
+              newPassword: newPassword,
+              aadharPhoto: _selectedAadharPhoto,
+              removeAadharPhoto: _removeAadharPhoto,
+              removePassbookPhoto: _removePassbookPhoto,
+            );
+          },
+          onSessionExpired: _handleForcedLogout,
+        ),
+      ),
+    );
+    if (changed == true && mounted) {
+      _showMessage('Your password was changed successfully.');
     }
   }
 
@@ -6328,22 +6153,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                             child: OutlinedButton.icon(
                               onPressed: () =>
                                   _openWhatsappChatForLead(_leads[i]),
-                              icon: Container(
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF25D366),
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                                alignment: Alignment.center,
-                                child: const Text(
-                                  'WA',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
+                              icon: const FaIcon(
+                                FontAwesomeIcons.whatsapp,
+                                color: Color(0xFF25D366),
+                                size: 18,
                               ),
                               label: const Text('WhatsApp'),
                             ),
@@ -8770,6 +8583,260 @@ class NetworkErrorView extends StatelessWidget {
   }
 }
 
+class _ChangePasswordPage extends StatefulWidget {
+  const _ChangePasswordPage({
+    required this.onSubmit,
+    required this.onSessionExpired,
+  });
+
+  final Future<void> Function(String currentPassword, String newPassword)
+  onSubmit;
+  final Future<void> Function() onSessionExpired;
+
+  @override
+  State<_ChangePasswordPage> createState() => _ChangePasswordPageState();
+}
+
+class _ChangePasswordPageState extends State<_ChangePasswordPage> {
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  bool _isSaving = false;
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+  String? _errorText;
+
+  @override
+  void dispose() {
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (_isSaving) {
+      return;
+    }
+    final currentPassword = _currentPasswordController.text;
+    final newPassword = _newPasswordController.text;
+    final confirmPassword = _confirmPasswordController.text;
+
+    if (currentPassword.trim().isEmpty ||
+        newPassword.trim().isEmpty ||
+        confirmPassword.trim().isEmpty) {
+      setState(() {
+        _errorText = 'Fill current password, new password and confirmation.';
+      });
+      return;
+    }
+    if (newPassword.length < 6) {
+      setState(() {
+        _errorText = 'New password must be at least 6 characters.';
+      });
+      return;
+    }
+    if (newPassword != confirmPassword) {
+      setState(() {
+        _errorText = 'New password and confirm password do not match.';
+      });
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+      _errorText = null;
+    });
+
+    try {
+      await widget.onSubmit(currentPassword, newPassword);
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pop(true);
+    } on ApiException catch (error) {
+      if (error.statusCode == 401) {
+        await widget.onSessionExpired();
+        if (mounted) {
+          Navigator.of(context).pop(false);
+        }
+        return;
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorText = error.message;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _errorText = 'Could not change password right now. Please try again.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: kBg,
+      appBar: AppBar(
+        title: const Text('Change Password'),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 540),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Update your password',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: kPrimaryDark,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Enter your current password and choose a new one.',
+                        style: TextStyle(fontSize: 14.5, color: Colors.black54),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: _currentPasswordController,
+                        obscureText: _obscureCurrent,
+                        textInputAction: TextInputAction.next,
+                        decoration: InputDecoration(
+                          labelText: 'Current password',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            onPressed: () {
+                              setState(() => _obscureCurrent = !_obscureCurrent);
+                            },
+                            icon: Icon(
+                              _obscureCurrent
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _newPasswordController,
+                        obscureText: _obscureNew,
+                        textInputAction: TextInputAction.next,
+                        decoration: InputDecoration(
+                          labelText: 'New password',
+                          prefixIcon: const Icon(Icons.lock_reset_outlined),
+                          suffixIcon: IconButton(
+                            onPressed: () {
+                              setState(() => _obscureNew = !_obscureNew);
+                            },
+                            icon: Icon(
+                              _obscureNew
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _confirmPasswordController,
+                        obscureText: _obscureConfirm,
+                        onSubmitted: (_) => _submit(),
+                        decoration: InputDecoration(
+                          labelText: 'Confirm new password',
+                          prefixIcon: const Icon(Icons.verified_user_outlined),
+                          suffixIcon: IconButton(
+                            onPressed: () {
+                              setState(() => _obscureConfirm = !_obscureConfirm);
+                            },
+                            icon: Icon(
+                              _obscureConfirm
+                                  ? Icons.visibility_outlined
+                                  : Icons.visibility_off_outlined,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_errorText != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          _errorText!,
+                          style: const TextStyle(
+                            color: kRed,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: _isSaving
+                                  ? null
+                                  : () => Navigator.of(context).pop(false),
+                              child: const Text('Cancel'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _isSaving ? null : _submit,
+                              icon: _isSaving
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.2,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(Icons.check_circle_outline),
+                              label: Text(
+                                _isSaving ? 'Updating...' : 'Update Password',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class RecoveredLeadResult {
   const RecoveredLeadResult({
     required this.leadId,
@@ -9136,22 +9203,10 @@ class _FollowupQueuePageState extends State<FollowupQueuePage> {
                               Expanded(
                                 child: OutlinedButton.icon(
                                   onPressed: () => _openWhatsappChat(lead),
-                                  icon: Container(
-                                    width: 20,
-                                    height: 20,
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF25D366),
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: const Text(
-                                      'WA',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
+                                  icon: const FaIcon(
+                                    FontAwesomeIcons.whatsapp,
+                                    color: Color(0xFF25D366),
+                                    size: 18,
                                   ),
                                   label: const Text('WhatsApp'),
                                 ),
