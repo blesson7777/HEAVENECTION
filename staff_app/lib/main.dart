@@ -785,10 +785,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         return;
       }
       final retryLead = _leadById(_pendingStatusLeadId);
-      final isFollowupRetry =
-          retryLead != null
-              ? _isFollowupLeadItem(retryLead)
-              : _pendingStatusFromFollowup;
+      final isFollowupRetry = retryLead != null
+          ? _isFollowupLeadItem(retryLead)
+          : _pendingStatusFromFollowup;
       setState(() {
         _activeCallId = call.id;
         _activeCallLeadId = _pendingStatusLeadId;
@@ -1125,7 +1124,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       return;
     }
     try {
-      await _updaterChannel.invokeMethod<void>('openBatteryOptimizationSettings');
+      await _updaterChannel.invokeMethod<void>(
+        'openBatteryOptimizationSettings',
+      );
     } on MissingPluginException {
       _showMessage(
         'Could not open battery settings on this device.',
@@ -1599,9 +1600,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         );
       }
     } finally {
-      if (mounted &&
-          _isRecoveringFromNetworkError &&
-          !_isNetworkErrorVisible) {
+      if (mounted && _isRecoveringFromNetworkError && !_isNetworkErrorVisible) {
         setState(() => _isRecoveringFromNetworkError = false);
       }
     }
@@ -2930,7 +2929,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     children: [
                       const Text(
                         'Personal details',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       const SizedBox(height: 14),
                       TextField(
@@ -2973,7 +2975,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     children: [
                       const Text(
                         'Bank details',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       const SizedBox(height: 14),
                       TextField(
@@ -3024,7 +3029,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                     children: [
                       const Text(
                         'Identity documents',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       const SizedBox(height: 8),
                       const Text(
@@ -3048,7 +3056,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                         documentName: originalProfile.aadharPhotoName,
                         emptyLabel: 'No Aadhaar photo added',
                         icon: Icons.badge_outlined,
-                        networkErrorLabel: 'Could not load the saved Aadhaar photo.',
+                        networkErrorLabel:
+                            'Could not load the saved Aadhaar photo.',
                       ),
                       const SizedBox(height: 12),
                       Wrap(
@@ -3061,11 +3070,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                             label: const Text('Add Aadhaar'),
                           ),
                           if (_selectedAadharPhoto != null ||
-                              (originalProfile.hasAadharPhoto && !_removeAadharPhoto))
+                              (originalProfile.hasAadharPhoto &&
+                                  !_removeAadharPhoto))
                             OutlinedButton.icon(
                               onPressed: _isProfileSaving
                                   ? null
-                                  : () => _confirmDocumentRemoval(_ProfileDocument.aadhar),
+                                  : () => _confirmDocumentRemoval(
+                                      _ProfileDocument.aadhar,
+                                    ),
                               icon: const Icon(Icons.delete_outline),
                               label: const Text('Remove Photo'),
                             ),
@@ -3074,7 +3086,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                       const SizedBox(height: 22),
                       const Text(
                         'Passbook image',
-                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       _buildDocumentPreview(
@@ -3084,7 +3099,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                         documentName: originalProfile.passbookPhotoName,
                         emptyLabel: 'No passbook photo added',
                         icon: Icons.menu_book_outlined,
-                        networkErrorLabel: 'Could not load the saved passbook photo.',
+                        networkErrorLabel:
+                            'Could not load the saved passbook photo.',
                       ),
                       const SizedBox(height: 12),
                       Wrap(
@@ -3097,11 +3113,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                             label: const Text('Add Passbook'),
                           ),
                           if (_selectedPassbookPhoto != null ||
-                              (originalProfile.hasPassbookPhoto && !_removePassbookPhoto))
+                              (originalProfile.hasPassbookPhoto &&
+                                  !_removePassbookPhoto))
                             OutlinedButton.icon(
                               onPressed: _isProfileSaving
                                   ? null
-                                  : () => _confirmDocumentRemoval(_ProfileDocument.passbook),
+                                  : () => _confirmDocumentRemoval(
+                                      _ProfileDocument.passbook,
+                                    ),
                               icon: const Icon(Icons.delete_outline),
                               label: const Text('Remove Passbook'),
                             ),
@@ -3169,7 +3188,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               final newPassword = newPasswordController.text.trim();
               final confirmPassword = confirmPasswordController.text.trim();
 
-              if (currentPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
+              if (currentPassword.isEmpty ||
+                  newPassword.isEmpty ||
+                  confirmPassword.isEmpty) {
                 setDialogState(() {
                   errorText = 'Enter the current, new, and confirm password.';
                 });
@@ -3214,7 +3235,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                       borderRadius: BorderRadius.circular(24),
                     ),
                     title: const Text('Password Updated'),
-                    content: const Text('Your password was changed successfully.'),
+                    content: const Text(
+                      'Your password was changed successfully.',
+                    ),
                     actions: [
                       ElevatedButton(
                         onPressed: () => Navigator.of(successContext).pop(),
@@ -3320,7 +3343,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               ),
               actions: [
                 TextButton(
-                  onPressed: isSubmitting ? null : () => Navigator.of(dialogContext).pop(),
+                  onPressed: isSubmitting
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(),
                   child: const Text('Cancel'),
                 ),
                 ElevatedButton(
@@ -5492,9 +5517,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     }
     AppNotificationOverlayController.instance.showLocal(
       message: message,
-      severity: isError
-          ? 'critical'
-          : (isSuccess ? 'good' : 'normal'),
+      severity: isError ? 'critical' : (isSuccess ? 'good' : 'normal'),
     );
   }
 
@@ -5639,14 +5662,14 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             ],
           ),
           body: SafeArea(
-              child: _isNetworkErrorVisible
-                  ? NetworkErrorView(
-                      message: _networkErrorMessage,
-                      onRetry: _recoverFromNetworkError,
-                      isRetrying: _isRecoveringFromNetworkError,
-                    )
-                  : pages[_tab],
-            ),
+            child: _isNetworkErrorVisible
+                ? NetworkErrorView(
+                    message: _networkErrorMessage,
+                    onRetry: _recoverFromNetworkError,
+                    isRetrying: _isRecoveringFromNetworkError,
+                  )
+                : pages[_tab],
+          ),
           bottomNavigationBar: NavigationBar(
             selectedIndex: _tab,
             onDestinationSelected: (value) {
@@ -6559,12 +6582,15 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         _hasRecoverableCustomerCall &&
         _summary.recoverableCallLeadId == lead.id;
     final callButtonLabel =
-        hasActiveCallForLead || hasPendingCallForLead || hasRecoverableCallForLead
+        hasActiveCallForLead ||
+            hasPendingCallForLead ||
+            hasRecoverableCallForLead
         ? 'Call Again'
         : 'Call';
     final showSyncIssueForLead =
         hasRecoverableCallForLead ||
-        (_isSyncingCallLog && (hasActiveCallForLead || hasRecoverableCallForLead));
+        (_isSyncingCallLog &&
+            (hasActiveCallForLead || hasRecoverableCallForLead));
     final showPendingResultForLead = hasPendingCallForLead;
     final syncSolveLabel =
         _isSyncingCallLog && _syncSolveCountdownSeconds != null
@@ -7171,6 +7197,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     final profile = _profile;
     final salarySummary = profile?.salarySummary;
     final salaryHistory = profile?.salaryHistory ?? const <SalaryHistoryItem>[];
+    final salaryHistoryByMonth = _groupSalaryHistoryByMonth(salaryHistory);
     final aadharWidget = _buildDocumentPreview(
       selectedFile: _selectedAadharPhoto,
       removeDocument: _removeAadharPhoto,
@@ -7554,7 +7581,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Credited salary records will appear here after the admin marks them as paid.',
+                    'Your credited salary records are listed here month by month.',
                     style: TextStyle(fontSize: 14.5, color: Colors.black54),
                   ),
                   const SizedBox(height: 14),
@@ -7577,115 +7604,143 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   else
                     Column(
                       children: [
-                        for (final salary in salaryHistory) ...[
+                        for (final monthGroup in salaryHistoryByMonth) ...[
                           Container(
                             width: double.infinity,
                             margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: kSoft,
-                              borderRadius: BorderRadius.circular(20),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                            decoration: BoxDecoration(
+                              color: kPrimary.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Row(
                               children: [
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        salary.paidAmountLabel.isNotEmpty
-                                            ? salary.paidAmountLabel
-                                            : 'Rs. 0.00',
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w800,
-                                          color: kPrimaryDark,
-                                        ),
-                                      ),
+                                Expanded(
+                                  child: Text(
+                                    monthGroup.label,
+                                    style: const TextStyle(
+                                      fontSize: 15.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: kPrimaryDark,
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 7,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: kPrimary.withValues(alpha: 0.10),
-                                        borderRadius: BorderRadius.circular(
-                                          999,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        salary.payoutCycleLabel,
-                                        style: const TextStyle(
-                                          color: kPrimaryDark,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  salary.periodLabel.isNotEmpty
-                                      ? salary.periodLabel
-                                      : 'Salary period',
-                                  style: const TextStyle(
-                                    fontSize: 14.5,
-                                    color: Colors.black87,
-                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                const SizedBox(height: 6),
                                 Text(
-                                  'Paid on ${salary.paidAtLabel} • ${salary.paymentMethodLabel}',
+                                  '${monthGroup.items.length} credit${monthGroup.items.length == 1 ? '' : 's'}',
                                   style: const TextStyle(
-                                    fontSize: 13.5,
-                                    color: Colors.black54,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Worked ${salary.totalHoursLabel} • Earned ${salary.finalSalaryLabel}',
-                                  style: const TextStyle(
-                                    fontSize: 13.5,
-                                    color: Colors.black54,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Paid amount: ${salary.paidAmountLabel}',
-                                  style: const TextStyle(
-                                    fontSize: 13.5,
+                                    fontSize: 13,
                                     color: Colors.black54,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                if (salary.paymentReference.isNotEmpty &&
-                                    salary.paymentReference != '--') ...[
+                              ],
+                            ),
+                          ),
+                          for (final salary in monthGroup.items) ...[
+                            Container(
+                              width: double.infinity,
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: kSoft,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          salary.paidAmountLabel.isNotEmpty
+                                              ? salary.paidAmountLabel
+                                              : 'Rs. 0.00',
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w800,
+                                            color: kPrimaryDark,
+                                          ),
+                                        ),
+                                      ),
+                                      if (salary.payoutCycleLabel.isNotEmpty)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 7,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: kPrimary.withValues(
+                                              alpha: 0.10,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            salary.payoutCycleLabel,
+                                            style: const TextStyle(
+                                              color: kPrimaryDark,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    salary.periodLabel.isNotEmpty
+                                        ? salary.periodLabel
+                                        : 'Salary period',
+                                    style: const TextStyle(
+                                      fontSize: 14.5,
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Transaction ID: ${salary.paymentReference}',
+                                    'Credited on ${salary.paidAtLabel}${salary.paymentMethodLabel.isNotEmpty ? ' | ${salary.paymentMethodLabel}' : ''}',
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Worked ${salary.totalHoursLabel} | Earned ${salary.finalSalaryLabel}',
+                                    style: const TextStyle(
+                                      fontSize: 13.5,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'Paid amount: ${salary.paidAmountLabel}',
                                     style: const TextStyle(
                                       fontSize: 13.5,
                                       color: Colors.black54,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
-                                ],
-                                if (salary.paymentNote.isNotEmpty &&
-                                    salary.paymentNote != '--') ...[
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    salary.paymentNote,
-                                    style: const TextStyle(
-                                      fontSize: 13.5,
-                                      color: Colors.black54,
+                                  if (salary.paymentReference.isNotEmpty &&
+                                      salary.paymentReference != '--') ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'Transaction ID: ${salary.paymentReference}',
+                                      style: const TextStyle(
+                                        fontSize: 13.5,
+                                        color: Colors.black54,
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ],
                     ),
@@ -7780,6 +7835,86 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     ];
     return '${value.day} ${months[value.month - 1]} ${value.year}, $hour:$minute $period';
   }
+
+  List<_SalaryHistoryMonthGroup> _groupSalaryHistoryByMonth(
+    List<SalaryHistoryItem> history,
+  ) {
+    if (history.isEmpty) return const <_SalaryHistoryMonthGroup>[];
+
+    final grouped = <String, List<SalaryHistoryItem>>{};
+    final groupSortDates = <String, DateTime>{};
+    for (final item in history) {
+      final paidAt = item.paidAt;
+      final key = paidAt == null
+          ? 'unknown'
+          : '${paidAt.year.toString().padLeft(4, '0')}-${paidAt.month.toString().padLeft(2, '0')}';
+      grouped.putIfAbsent(key, () => <SalaryHistoryItem>[]).add(item);
+      if (paidAt != null) {
+        final monthStart = DateTime(paidAt.year, paidAt.month, 1);
+        final existing = groupSortDates[key];
+        if (existing == null || monthStart.isAfter(existing)) {
+          groupSortDates[key] = monthStart;
+        }
+      } else {
+        groupSortDates.putIfAbsent(key, () => DateTime(1970, 1, 1));
+      }
+    }
+
+    final groups = <_SalaryHistoryMonthGroup>[];
+    for (final entry in grouped.entries) {
+      final key = entry.key;
+      final items = List<SalaryHistoryItem>.from(entry.value)
+        ..sort((a, b) {
+          final aTime = a.paidAt?.millisecondsSinceEpoch ?? 0;
+          final bTime = b.paidAt?.millisecondsSinceEpoch ?? 0;
+          return bTime.compareTo(aTime);
+        });
+      final sortDate = groupSortDates[key] ?? DateTime(1970, 1, 1);
+      final label = key == 'unknown'
+          ? 'Other records'
+          : _formatSalaryHistoryMonthLabel(sortDate);
+      groups.add(
+        _SalaryHistoryMonthGroup(
+          label: label,
+          sortDate: sortDate,
+          items: items,
+        ),
+      );
+    }
+
+    groups.sort((a, b) => b.sortDate.compareTo(a.sortDate));
+    return groups;
+  }
+
+  String _formatSalaryHistoryMonthLabel(DateTime value) {
+    const months = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    return '${months[value.month - 1]} ${value.year}';
+  }
+}
+
+class _SalaryHistoryMonthGroup {
+  const _SalaryHistoryMonthGroup({
+    required this.label,
+    required this.sortDate,
+    required this.items,
+  });
+
+  final String label;
+  final DateTime sortDate;
+  final List<SalaryHistoryItem> items;
 }
 
 class _TrainingLessonCard extends StatelessWidget {
@@ -8732,7 +8867,9 @@ class _FollowupQueuePageState extends State<FollowupQueuePage> {
                         border: lead.followupWarningDue
                             ? Border.all(color: kRed.withValues(alpha: 0.28))
                             : (lead.isDueNow
-                                  ? Border.all(color: kOrange.withValues(alpha: 0.32))
+                                  ? Border.all(
+                                      color: kOrange.withValues(alpha: 0.32),
+                                    )
                                   : null),
                       ),
                       child: Column(
