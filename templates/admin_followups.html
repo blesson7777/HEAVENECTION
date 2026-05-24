@@ -103,6 +103,10 @@
         A follow-up should get the first call within <strong>{{ followup_expiry_settings.uncalled_alert_hours }} hour{% if followup_expiry_settings.uncalled_alert_hours != 1 %}s{% endif %}</strong> after being marked Follow Up.
         {% endif %}
         Staff warning starts when a lead has no follow-up activity for <strong>{{ followup_expiry_settings.warning_days }} day{% if followup_expiry_settings.warning_days != 1 %}s{% endif %}</strong>.
+        {% if followup_expiry_settings.sla_gate_enabled %}
+        Normal lead calls use SLA gate mode:
+        <strong>{% if followup_expiry_settings.sla_gate_mode == 'require_one_followup_call' %}Require one follow-up call before New lead calls{% else %}Allow normal lead calls even with crossed SLA{% endif %}</strong>.
+        {% endif %}
     </div>
 
     <div class="d-flex flex-wrap gap-2 mb-3">
@@ -410,6 +414,40 @@
                             required
                         >
                         <div class="form-text">Staff app popup/highlight starts when follow-up is pending this many days.</div>
+                    </div>
+                    <hr class="my-3">
+                    <div class="mb-3">
+                        <h6 class="mb-2">Normal Lead Call Gate</h6>
+                        <p class="text-muted small mb-0">
+                            Control whether New lead calls are allowed when follow-ups crossed SLA warning days.
+                        </p>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            id="followupSlaGateEnabled"
+                            name="followup_sla_gate_enabled"
+                            {% if followup_expiry_settings.sla_gate_enabled %}checked{% endif %}
+                        >
+                        <label class="form-check-label fw-semibold" for="followupSlaGateEnabled">
+                            Enable normal lead call gate for crossed SLA follow-ups
+                        </label>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="followupSlaGateMode">Gate mode</label>
+                        <select class="form-select" id="followupSlaGateMode" name="followup_sla_gate_mode">
+                            <option value="allow_normal_calls" {% if followup_expiry_settings.sla_gate_mode == 'allow_normal_calls' %}selected{% endif %}>
+                                Allow normal lead calls even when crossed SLA exists
+                            </option>
+                            <option value="require_one_followup_call" {% if followup_expiry_settings.sla_gate_mode == 'require_one_followup_call' %}selected{% endif %}>
+                                Require at least one follow-up call first, then allow normal lead calls
+                            </option>
+                        </select>
+                        <div class="form-text">
+                            In strict mode, staff must complete one follow-up call before opening a New lead call when crossed-SLA follow-ups exist.
+                        </div>
                     </div>
                     <hr class="my-3">
                     <div class="mb-3">

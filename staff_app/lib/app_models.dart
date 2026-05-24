@@ -993,6 +993,13 @@ class DailySummary {
     required this.recoverableCallLeadName,
     required this.recoverableCallLeadPhone,
     required this.recoverableCallStartedAt,
+    required this.followupSlaCrossedCount,
+    required this.followupSlaWarningDays,
+    required this.followupSlaGateEnabled,
+    required this.followupSlaGateMode,
+    required this.followupSlaFollowupCallsToday,
+    required this.normalLeadCallsBlockedBySla,
+    required this.followupSlaBlockMessage,
   });
 
   final String activeLabel;
@@ -1017,6 +1024,13 @@ class DailySummary {
   final String recoverableCallLeadName;
   final String recoverableCallLeadPhone;
   final DateTime? recoverableCallStartedAt;
+  final int followupSlaCrossedCount;
+  final int followupSlaWarningDays;
+  final bool followupSlaGateEnabled;
+  final String followupSlaGateMode;
+  final int followupSlaFollowupCallsToday;
+  final bool normalLeadCallsBlockedBySla;
+  final String followupSlaBlockMessage;
 
   factory DailySummary.empty() {
     return const DailySummary(
@@ -1042,6 +1056,13 @@ class DailySummary {
       recoverableCallLeadName: '',
       recoverableCallLeadPhone: '',
       recoverableCallStartedAt: null,
+      followupSlaCrossedCount: 0,
+      followupSlaWarningDays: 0,
+      followupSlaGateEnabled: false,
+      followupSlaGateMode: '',
+      followupSlaFollowupCallsToday: 0,
+      normalLeadCallsBlockedBySla: false,
+      followupSlaBlockMessage: '',
     );
   }
 
@@ -1078,6 +1099,17 @@ class DailySummary {
           : DateTime.tryParse(
               json['recoverable_call_started_at'].toString(),
             )?.toLocal(),
+      followupSlaCrossedCount:
+          (json['followup_sla_crossed_count'] as num?)?.toInt() ?? 0,
+      followupSlaWarningDays:
+          (json['followup_sla_warning_days'] as num?)?.toInt() ?? 0,
+      followupSlaGateEnabled: json['followup_sla_gate_enabled'] == true,
+      followupSlaGateMode: json['followup_sla_gate_mode']?.toString() ?? '',
+      followupSlaFollowupCallsToday:
+          (json['followup_sla_followup_calls_today'] as num?)?.toInt() ?? 0,
+      normalLeadCallsBlockedBySla:
+          json['normal_lead_calls_blocked_by_sla'] == true,
+      followupSlaBlockMessage: json['followup_sla_block_message']?.toString() ?? '',
     );
   }
 }

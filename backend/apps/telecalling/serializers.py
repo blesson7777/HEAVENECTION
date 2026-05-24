@@ -850,6 +850,8 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             "followup_auto_expire_enabled",
             "followup_auto_expire_days",
             "followup_staff_warning_days",
+            "followup_sla_gate_enabled",
+            "followup_sla_gate_mode",
             "followup_uncalled_alert_enabled",
             "followup_uncalled_alert_hours",
             "work_review_zero_talk_attempt_threshold",
@@ -906,6 +908,8 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
             "followup_auto_expire_enabled",
             "followup_auto_expire_days",
             "followup_staff_warning_days",
+            "followup_sla_gate_enabled",
+            "followup_sla_gate_mode",
             "followup_uncalled_alert_enabled",
             "followup_uncalled_alert_hours",
             "work_review_zero_talk_attempt_threshold",
@@ -988,6 +992,15 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
         if warning_days > 3650:
             raise serializers.ValidationError("Follow-up warning days cannot exceed 3650.")
         return warning_days
+
+    def validate_followup_sla_gate_mode(self, value):
+        if value is None:
+            return value
+        normalized = str(value).strip()
+        valid_modes = {choice for choice, _label in CompanyProfile.FollowupSlaGateMode.choices}
+        if normalized not in valid_modes:
+            raise serializers.ValidationError("Select a valid follow-up SLA call rule mode.")
+        return normalized
 
     def validate_followup_uncalled_alert_hours(self, value):
         if value is None:

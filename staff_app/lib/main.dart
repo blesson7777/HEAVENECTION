@@ -3838,6 +3838,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         );
         return;
       }
+      if (error.statusCode == 409 &&
+          error.code == 'followup_sla_call_required') {
+        await _loadDashboardData(showLoader: false, promptTrainingGate: false);
+        _showMessage(
+          error.message.isNotEmpty
+              ? error.message
+              : 'Complete at least one crossed-SLA follow-up call first.',
+          isError: true,
+        );
+        return;
+      }
       _showMessage(error.message, isError: true);
     }
   }
@@ -6051,7 +6062,17 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           OutlinedButton.icon(
             onPressed: _openFollowupQueuePage,
             icon: const Icon(Icons.calendar_today_outlined),
-            label: const Text('Open Follow Ups'),
+            style: _summary.followupSlaCrossedCount > 0
+                ? OutlinedButton.styleFrom(
+                    foregroundColor: kRed,
+                    side: BorderSide(color: kRed.withValues(alpha: 0.45)),
+                  )
+                : null,
+            label: Text(
+              _summary.followupSlaCrossedCount > 0
+                  ? 'Open Follow Ups (${_summary.followupSlaCrossedCount} SLA)'
+                  : 'Open Follow Ups',
+            ),
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
@@ -6092,6 +6113,38 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             '${_leads.length} customer(s) are ready right now. Scheduled follow-ups appear here only on their requested date and time.',
             style: const TextStyle(fontSize: 16.5, color: Colors.black54),
           ),
+          if (_summary.followupSlaCrossedCount > 0) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF0EC),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: kRed.withValues(alpha: 0.24)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: kRed),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _summary.normalLeadCallsBlockedBySla
+                          ? (_summary.followupSlaBlockMessage.isNotEmpty
+                                ? _summary.followupSlaBlockMessage
+                                : '${_summary.followupSlaCrossedCount} follow-up lead(s) crossed SLA. Complete one follow-up call first.')
+                          : '${_summary.followupSlaCrossedCount} follow-up lead(s) crossed SLA warning (${_summary.followupSlaWarningDays}+ days). Prioritize Follow Ups.',
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: kPrimaryDark,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           if (_hasPendingCallStatus) ...[
             _buildPendingCallStatusBanner(),

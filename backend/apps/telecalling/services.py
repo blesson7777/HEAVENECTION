@@ -3202,6 +3202,17 @@ def _follow_up_queryset():
 
 def _followup_expiry_settings(*, company_profile=None):
     profile = company_profile or get_company_profile()
+    gate_mode = str(
+        getattr(
+            profile,
+            "followup_sla_gate_mode",
+            CompanyProfile.FollowupSlaGateMode.ALLOW_NORMAL_CALLS,
+        )
+        or CompanyProfile.FollowupSlaGateMode.ALLOW_NORMAL_CALLS
+    ).strip()
+    valid_gate_modes = {choice for choice, _label in CompanyProfile.FollowupSlaGateMode.choices}
+    if gate_mode not in valid_gate_modes:
+        gate_mode = CompanyProfile.FollowupSlaGateMode.ALLOW_NORMAL_CALLS
     return {
         "enabled": bool(getattr(profile, "followup_auto_expire_enabled", True)),
         "expiry_days": max(
@@ -3215,6 +3226,8 @@ def _followup_expiry_settings(*, company_profile=None):
                 or FOLLOWUP_STAFF_WARNING_DAYS
             ),
         ),
+        "sla_gate_enabled": bool(getattr(profile, "followup_sla_gate_enabled", False)),
+        "sla_gate_mode": gate_mode,
         "uncalled_alert_enabled": bool(getattr(profile, "followup_uncalled_alert_enabled", True)),
         "uncalled_alert_hours": max(
             1,
@@ -3275,6 +3288,67 @@ def _callback_tracking_queryset():
         status=Lead.Status.INTERESTED,
         callback_date__isnull=False,
     ).exclude(callback_window="")
+
+
+def build_staff_followup_sla_gate_status(staff, *, now=None, company_profile=None):
+    profile = company_profile or get_company_profile()
+    settings = _followup_expiry_settings(company_profile=profile)
+    reference = now or timezone.now()
+    warning_days = max(1, int(settings["warning_days"] or FOLLOWUP_STAFF_WARNING_DAYS))
+    cutoff = reference - timedelta(days=warning_days)
+    crossed_sla_queryset = Lead.objects.filter(
+        assigned_to=staff,
+        status__in=FOLLOW_UP_STATUSES,
+    ).filter(
+        Q(last_contacted_at__lt=cutoff)
+        | Q(last_contacted_at__isnull=True, updated_at__lt=cutoff)
+    )
+    crossed_sla_count = crossed_sla_queryset.count()
+
+    _today, start, end = _today_range(reference)
+    completed_followup_call_statuses = {
+        Call.Status.INTERESTED,
+        Call.Status.CALL_BACK,
+        Call.Status.NO_ANSWER,
+        Call.Status.NOT_INTERESTED,
+        Call.Status.CONVERTED,
+        Call.Status.INVALID_SHORT,
+    }
+    followup_calls_today = Call.objects.filter(
+        staff=staff,
+        start_time__range=(start, end),
+        status__in=completed_followup_call_statuses,
+        lead__assigned_to=staff,
+        lead__status__in=(Lead.Status.INTERESTED, Lead.Status.CALL_BACK, Lead.Status.EXPIRED_FOLLOWUP),
+    ).count()
+
+    gate_enabled = bool(settings["sla_gate_enabled"])
+    gate_mode = str(settings["sla_gate_mode"] or CompanyProfile.FollowupSlaGateMode.ALLOW_NORMAL_CALLS)
+    requires_call_before_new = (
+        gate_enabled
+        and gate_mode == CompanyProfile.FollowupSlaGateMode.REQUIRE_ONE_FOLLOWUP_CALL
+        and crossed_sla_count > 0
+    )
+    normal_lead_calls_allowed = not (requires_call_before_new and followup_calls_today < 1)
+
+    if normal_lead_calls_allowed:
+        gate_message = ""
+    else:
+        gate_message = (
+            f"{crossed_sla_count} follow-up lead(s) crossed SLA. "
+            "Complete at least one follow-up call before calling a New lead."
+        )
+
+    return {
+        "warning_days": warning_days,
+        "crossed_sla_count": crossed_sla_count,
+        "gate_enabled": gate_enabled,
+        "gate_mode": gate_mode,
+        "requires_call_before_new": requires_call_before_new,
+        "followup_calls_today": followup_calls_today,
+        "normal_lead_calls_allowed": normal_lead_calls_allowed,
+        "block_message": gate_message,
+    }
 
 
 def _staff_call_queue_queryset(queryset=None):
@@ -7746,6 +7820,8 @@ def build_followup_payload():
             "enabled": expiry_settings["enabled"],
             "expiry_days": expiry_settings["expiry_days"],
             "warning_days": expiry_settings["warning_days"],
+            "sla_gate_enabled": expiry_settings["sla_gate_enabled"],
+            "sla_gate_mode": expiry_settings["sla_gate_mode"],
             "uncalled_alert_enabled": expiry_settings["uncalled_alert_enabled"],
             "uncalled_alert_hours": expiry_settings["uncalled_alert_hours"],
         },
@@ -8844,6 +8920,7 @@ def build_staff_today_payload(staff):
     learning_payload = build_staff_learning_payload(staff)
     pending_status_call = get_pending_status_call(staff)
     recoverable_open_call = get_recoverable_open_call(staff, now=now)
+    followup_sla_gate_status = build_staff_followup_sla_gate_status(staff, now=now)
     notifications = build_staff_active_notifications_payload(staff, now=now)
 
     active_seconds = _effective_active_seconds_for_staff(
@@ -8886,6 +8963,13 @@ def build_staff_today_payload(staff):
             "recoverable_call_started_at": recoverable_open_call.start_time.isoformat()
             if recoverable_open_call
             else None,
+            "followup_sla_crossed_count": followup_sla_gate_status["crossed_sla_count"],
+            "followup_sla_warning_days": followup_sla_gate_status["warning_days"],
+            "followup_sla_gate_enabled": followup_sla_gate_status["gate_enabled"],
+            "followup_sla_gate_mode": followup_sla_gate_status["gate_mode"],
+            "followup_sla_followup_calls_today": followup_sla_gate_status["followup_calls_today"],
+            "normal_lead_calls_blocked_by_sla": not followup_sla_gate_status["normal_lead_calls_allowed"],
+            "followup_sla_block_message": followup_sla_gate_status["block_message"],
         },
         "session": {
             "id": str(open_session.id),
@@ -9039,7 +9123,14 @@ def build_staff_followups_payload(staff):
             "auto_expire_enabled": bool(expiry_settings["enabled"]),
             "auto_expire_days": int(expiry_settings["expiry_days"]),
             "warning_days": warning_days,
+            "sla_gate_enabled": bool(expiry_settings["sla_gate_enabled"]),
+            "sla_gate_mode": str(expiry_settings["sla_gate_mode"]),
         },
+        "sla_gate_status": build_staff_followup_sla_gate_status(
+            staff,
+            now=now,
+            company_profile=company_profile,
+        ),
     }
 
 

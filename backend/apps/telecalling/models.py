@@ -110,6 +110,10 @@ class CompanyProfile(models.Model):
         AGE_DAYS = "age_days", "Delete by age"
         OLDEST_COUNT = "oldest_count", "Delete by oldest count"
 
+    class FollowupSlaGateMode(models.TextChoices):
+        ALLOW_NORMAL_CALLS = "allow_normal_calls", "Allow normal lead calls"
+        REQUIRE_ONE_FOLLOWUP_CALL = "require_one_followup_call", "Require one follow-up call first"
+
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     company_name = models.CharField(max_length=150, default="Heavenection")
     legal_name = models.CharField(max_length=200, blank=True)
@@ -134,6 +138,12 @@ class CompanyProfile(models.Model):
     followup_auto_expire_enabled = models.BooleanField(default=True)
     followup_auto_expire_days = models.PositiveIntegerField(default=14)
     followup_staff_warning_days = models.PositiveIntegerField(default=7)
+    followup_sla_gate_enabled = models.BooleanField(default=False)
+    followup_sla_gate_mode = models.CharField(
+        max_length=40,
+        choices=FollowupSlaGateMode.choices,
+        default=FollowupSlaGateMode.ALLOW_NORMAL_CALLS,
+    )
     followup_uncalled_alert_enabled = models.BooleanField(default=True)
     followup_uncalled_alert_hours = models.PositiveIntegerField(default=24)
     work_review_zero_talk_attempt_threshold = models.PositiveIntegerField(default=10)

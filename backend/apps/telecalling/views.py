@@ -114,6 +114,7 @@ from backend.apps.telecalling.services import (
     build_staff_profile_payload,
     build_staff_learning_payload,
     build_staff_followups_payload,
+    build_staff_followup_sla_gate_status,
     build_staff_active_notifications_payload,
     build_staff_today_payload,
     build_team_management_payload,
@@ -1878,6 +1879,8 @@ def followups_page(request):
                 "followup_auto_expire_enabled": request.POST.get("followup_auto_expire_enabled") == "on",
                 "followup_auto_expire_days": (request.POST.get("followup_auto_expire_days") or "").strip(),
                 "followup_staff_warning_days": (request.POST.get("followup_staff_warning_days") or "").strip(),
+                "followup_sla_gate_enabled": request.POST.get("followup_sla_gate_enabled") == "on",
+                "followup_sla_gate_mode": (request.POST.get("followup_sla_gate_mode") or "").strip(),
                 "followup_uncalled_alert_enabled": request.POST.get("followup_uncalled_alert_enabled") == "on",
                 "followup_uncalled_alert_hours": (request.POST.get("followup_uncalled_alert_hours") or "").strip(),
                 "work_review_followup_expired_penalty_points": (
@@ -1896,6 +1899,7 @@ def followups_page(request):
                         "Follow-up controls updated. "
                         f"Auto-expiry: {settings_data['followup_auto_expire_days']} day(s). "
                         f"Warning: {settings_data['followup_staff_warning_days']} day(s). "
+                        f"SLA gate: {settings_data['followup_sla_gate_mode'] or 'allow_normal_calls'}. "
                         f"Uncalled alert: {settings_data['followup_uncalled_alert_hours']} hour(s).",
                     )
                 else:
@@ -3626,6 +3630,20 @@ def start_call_api(request):
             },
             status=409,
         )
+
+    if not serializer.validated_data.get("from_followup_menu", False) and lead.status == Lead.Status.NEW:
+        sla_gate_status = build_staff_followup_sla_gate_status(request.user)
+        if not sla_gate_status["normal_lead_calls_allowed"]:
+            return Response(
+                {
+                    "detail": sla_gate_status["block_message"]
+                    or "Complete at least one crossed-SLA follow-up call before calling a New lead.",
+                    "code": "followup_sla_call_required",
+                    "sla_gate_status": sla_gate_status,
+                    "summary": build_staff_today_payload(request.user)["summary"],
+                },
+                status=409,
+            )
 
     try:
         call = start_staff_call(request.user, lead)
