@@ -22,6 +22,7 @@ from backend.apps.telecalling.models import (
 )
 from backend.apps.telecalling.services import (
     build_staff_current_salary_summary,
+    build_staff_salary_history_rows,
     build_staff_document_url,
 )
 
@@ -333,6 +334,7 @@ class StaffProfileSerializer(serializers.ModelSerializer):
     passbook_photo_url = serializers.SerializerMethodField()
     passbook_photo_name = serializers.SerializerMethodField()
     salary_summary = serializers.SerializerMethodField()
+    salary_history = serializers.SerializerMethodField()
     referral_program_enabled = serializers.SerializerMethodField()
     referral_required_hours_label = serializers.SerializerMethodField()
     referral_reward_amount_label = serializers.SerializerMethodField()
@@ -358,6 +360,7 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             "passbook_photo_name",
             "last_seen_at",
             "salary_summary",
+            "salary_history",
             "referral_program_enabled",
             "referral_required_hours_label",
             "referral_reward_amount_label",
@@ -393,6 +396,9 @@ class StaffProfileSerializer(serializers.ModelSerializer):
 
     def get_salary_summary(self, obj):
         return build_staff_current_salary_summary(obj)
+
+    def get_salary_history(self, obj):
+        return build_staff_salary_history_rows(obj, limit=40)
 
     def get_referral_program_enabled(self, obj):
         return CompanyProfile.objects.filter(pk=1).values_list(
