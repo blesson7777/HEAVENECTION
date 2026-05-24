@@ -307,7 +307,6 @@ class _NotificationBannerCard extends StatelessWidget {
                         ),
                     icon: const Icon(Icons.close_rounded, color: Colors.white),
                     splashRadius: 18,
-                    tooltip: 'Close',
                   ),
                 ],
               ],
