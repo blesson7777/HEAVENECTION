@@ -3180,6 +3180,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     try {
       final changed = await showDialog<bool>(
         context: context,
+        barrierDismissible: false,
         builder: (dialogContext) {
           return StatefulBuilder(
             builder: (context, setDialogState) {
@@ -3209,17 +3210,42 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                   isSubmitting = true;
                 });
 
-                final updated = await _saveProfile(
-                  currentPassword: currentPassword,
-                  newPassword: newPassword,
-                  showSuccessMessage: false,
-                );
-
-                if (!mounted || !dialogContext.mounted) {
+                try {
+                  await _apiClient.updateStaffProfile(
+                    name: _profileNameController.text.trim(),
+                    phone: _profilePhoneController.text.trim(),
+                    email: _profileEmailController.text.trim(),
+                    bankAccountName: _bankAccountNameController.text.trim(),
+                    bankName: _bankNameController.text.trim(),
+                    bankAccountNumber: _bankAccountNumberController.text.trim(),
+                    bankIfscCode: _bankIfscController.text.trim(),
+                    aadharNumber: _aadharNumberController.text.trim(),
+                    passbookPhoto: _selectedPassbookPhoto,
+                    currentPassword: currentPassword,
+                    newPassword: newPassword,
+                    aadharPhoto: _selectedAadharPhoto,
+                    removeAadharPhoto: _removeAadharPhoto,
+                    removePassbookPhoto: _removePassbookPhoto,
+                  );
+                } on ApiException catch (error) {
+                  if (!mounted || !dialogContext.mounted) {
+                    return;
+                  }
+                  if (error.statusCode == 401) {
+                    Navigator.of(dialogContext).pop(false);
+                    await _handleForcedLogout();
+                    return;
+                  }
+                  setDialogState(() {
+                    errorText = error.message.trim().isEmpty
+                        ? 'Unable to change password right now.'
+                        : error.message;
+                    isSubmitting = false;
+                  });
                   return;
                 }
-                if (!updated) {
-                  setDialogState(() => isSubmitting = false);
+
+                if (!mounted || !dialogContext.mounted) {
                   return;
                 }
                 Navigator.of(dialogContext).pop(true);
@@ -5623,6 +5649,12 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                 IconButton(
                   onPressed: _recoverPendingCallStatusPrompt,
                   icon: const Icon(Icons.assignment_late),
+                ),
+              if (_tab == 1)
+                IconButton(
+                  onPressed: _openCustomerRecoveryPage,
+                  icon: const Icon(Icons.person_search),
+                  tooltip: 'Search previous customer',
                 ),
               IconButton(
                 onPressed: _isLoadingData
@@ -8756,6 +8788,35 @@ class _FollowupQueuePageState extends State<FollowupQueuePage> {
     }
   }
 
+  String _normalizeWhatsappPhone(String rawPhone) {
+    final digitsOnly = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digitsOnly.length == 10) {
+      return '91$digitsOnly';
+    }
+    return digitsOnly;
+  }
+
+  Future<void> _openWhatsappChat(LeadItem lead) async {
+    final phone = _normalizeWhatsappPhone(lead.phone);
+    if (phone.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Phone number is not valid for WhatsApp chat.'),
+          ),
+        );
+      }
+      return;
+    }
+    final uri = Uri.parse('https://wa.me/$phone');
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open WhatsApp chat.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -9015,6 +9076,30 @@ class _FollowupQueuePageState extends State<FollowupQueuePage> {
                                         ? 'Call Highlighted Follow Up'
                                         : 'Open Follow Up',
                                   ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () => _openWhatsappChat(lead),
+                                  icon: Container(
+                                    width: 20,
+                                    height: 20,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF25D366),
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: const Text(
+                                      'WA',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                  label: const Text('WhatsApp'),
                                 ),
                               ),
                             ],
