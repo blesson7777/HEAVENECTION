@@ -286,6 +286,49 @@
             <div class="hc-summary-card hc-staff-profile-review mb-4">
                 <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
                     <div>
+                        <span class="mf-db2-kicker">Salary History</span>
+                        <h5 class="mb-1">Monthly salary history</h5>
+                        <p class="text-muted mb-0">Month-wise salary totals from staff payout records.</p>
+                    </div>
+                    <a href="{{ salary_history_summary.salary_detail_url }}" class="btn btn-outline-primary btn-sm">Open Salary Details</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table hc-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Month</th>
+                                <th>Tracked Hours</th>
+                                <th>Earned</th>
+                                <th>Paid</th>
+                                <th>Balance</th>
+                                <th>Last Paid</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in monthly_salary_history_rows %}
+                            <tr>
+                                <td>
+                                    <strong>{{ row.month_label }}</strong>
+                                    <div class="small text-muted">{{ row.period_label }}</div>
+                                    <div class="small text-muted">{{ row.paid_entry_count }} paid / {{ row.entry_count }} records</div>
+                                </td>
+                                <td>{{ row.total_hours_label }}</td>
+                                <td>{{ row.earned_total_label }}</td>
+                                <td>{{ row.paid_total_label }}</td>
+                                <td>{{ row.balance_total_label }}</td>
+                                <td>{{ row.last_paid_at }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr><td colspan="6" class="text-center py-4">No salary history is available yet for this staff member.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="hc-summary-card hc-staff-profile-review mb-4">
+                <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                    <div>
                         <span class="mf-db2-kicker">Performance Report</span>
                         <h5 class="mb-1">Download monthly PDF</h5>
                         <p class="text-muted mb-0">Includes earnings, calls, and full staff summary.</p>

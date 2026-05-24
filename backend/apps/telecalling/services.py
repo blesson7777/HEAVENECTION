@@ -2114,6 +2114,68 @@ def build_staff_salary_history_rows(staff, limit=20):
     return rows
 
 
+def build_staff_monthly_salary_history_rows(staff, limit=12):
+    records = list(
+        Salary.objects.filter(staff=staff)
+        .order_by("-period_end", "-period_start")
+    )
+    monthly_rows = []
+    monthly_map = {}
+
+    for record in records:
+        month_key = record.period_end.strftime("%Y-%m")
+        row = monthly_map.get(month_key)
+        if row is None:
+            row = {
+                "month_key": month_key,
+                "month_label": record.period_end.strftime("%b %Y"),
+                "period_start": record.period_start,
+                "period_end": record.period_end,
+                "total_hours": Decimal("0.00"),
+                "earned_total": Decimal("0.00"),
+                "paid_total": Decimal("0.00"),
+                "entry_count": 0,
+                "paid_entry_count": 0,
+                "last_paid_at": None,
+            }
+            monthly_map[month_key] = row
+            monthly_rows.append(row)
+
+        row["period_start"] = min(row["period_start"], record.period_start)
+        row["period_end"] = max(row["period_end"], record.period_end)
+        row["total_hours"] += _quantized_decimal(record.total_hours or 0)
+        row["earned_total"] += _money(record.final_salary or 0)
+        row["paid_total"] += _money(record.paid_amount or 0)
+        row["entry_count"] += 1
+        if record.is_paid:
+            row["paid_entry_count"] += 1
+        if record.paid_at and (row["last_paid_at"] is None or record.paid_at > row["last_paid_at"]):
+            row["last_paid_at"] = record.paid_at
+
+    formatted_rows = []
+    for row in monthly_rows[: max(1, int(limit or 12))]:
+        balance_total = max(row["earned_total"] - row["paid_total"], Decimal("0.00"))
+        formatted_rows.append(
+            {
+                "month_key": row["month_key"],
+                "month_label": row["month_label"],
+                "period_label": (
+                    f"{row['period_start'].strftime('%d %b %Y')} to {row['period_end'].strftime('%d %b %Y')}"
+                ),
+                "entry_count": row["entry_count"],
+                "paid_entry_count": row["paid_entry_count"],
+                "total_hours_label": _format_work_duration_label(
+                    _seconds_from_decimal_hours(row["total_hours"])
+                ),
+                "earned_total_label": _format_currency(row["earned_total"]),
+                "paid_total_label": _format_currency(row["paid_total"]),
+                "balance_total_label": _format_currency(balance_total),
+                "last_paid_at": _format_datetime(row["last_paid_at"]),
+            }
+        )
+    return formatted_rows
+
+
 def _conversion_reward_rows_for_period(staff, *, period_start, period_end):
     start_at, end_at = _date_range_bounds(period_start, period_end)
     reward_amount = _money(staff.bonus_per_conversion)
@@ -6338,6 +6400,8 @@ def build_staff_profile_payload(request, staff):
         range_start=current_month_start,
         range_end=current_month_end,
     ).get(staff.id, {})
+    monthly_salary_history_rows = build_staff_monthly_salary_history_rows(staff, limit=12)
+    salary_history_rows = build_staff_salary_history_rows(staff, limit=12)
     review_lead_rows = _staff_review_call_rows(staff)
 
     active_seconds_today = _effective_active_seconds_for_staff(
@@ -6501,6 +6565,13 @@ def build_staff_profile_payload(request, staff):
         },
         "review_lead_rows": review_lead_rows,
         "quality_history_rows": build_staff_quality_history(staff, months=6),
+        "monthly_salary_history_rows": monthly_salary_history_rows,
+        "salary_history_rows": salary_history_rows,
+        "salary_history_summary": {
+            "month_count": len(monthly_salary_history_rows),
+            "payment_count": len(salary_history_rows),
+            "salary_detail_url": reverse("salary-detail-page", args=[staff.id]),
+        },
         "report_month_default": report_month_default,
         "report_month_options": _month_option_rows(
             reference_date=today,
