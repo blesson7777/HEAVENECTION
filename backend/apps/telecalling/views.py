@@ -397,6 +397,10 @@ def _fallback_work_hours_payload():
             "idle_gap_seconds": int(company_profile.work_review_idle_gap_seconds or 60),
             "connected_cooldown_seconds": int(company_profile.work_review_connected_cooldown_seconds or 90),
             "attempt_threshold": int(company_profile.work_review_zero_talk_attempt_threshold or 10),
+            "followup_expired_penalty_points": int(
+                company_profile.work_review_followup_expired_penalty_points or 4
+            ),
+            "followup_expired_penalty_cap": int(company_profile.work_review_followup_expired_penalty_cap or 24),
         },
         "summary_rows": summary_rows,
         "session_rows": [],
@@ -438,6 +442,10 @@ def _fallback_work_review_payload():
             "attempt_threshold": int(company_profile.work_review_zero_talk_attempt_threshold or 10),
             "idle_gap_seconds": int(company_profile.work_review_idle_gap_seconds or 60),
             "connected_cooldown_seconds": int(company_profile.work_review_connected_cooldown_seconds or 90),
+            "followup_expired_penalty_points": int(
+                company_profile.work_review_followup_expired_penalty_points or 4
+            ),
+            "followup_expired_penalty_cap": int(company_profile.work_review_followup_expired_penalty_cap or 24),
         },
         "review_summary": {
             "total_staff": len(review_rows),
@@ -450,6 +458,7 @@ def _fallback_work_review_payload():
             "invalid_short_total": 0,
             "missed_callbacks_total": 0,
             "flagged_day_total": 0,
+            "expired_followup_total": 0,
         },
         "review_rows": review_rows,
         "zero_talk_staff_rows": [],
@@ -1868,6 +1877,14 @@ def followups_page(request):
             settings_data = {
                 "followup_auto_expire_enabled": request.POST.get("followup_auto_expire_enabled") == "on",
                 "followup_auto_expire_days": (request.POST.get("followup_auto_expire_days") or "").strip(),
+                "followup_uncalled_alert_enabled": request.POST.get("followup_uncalled_alert_enabled") == "on",
+                "followup_uncalled_alert_hours": (request.POST.get("followup_uncalled_alert_hours") or "").strip(),
+                "work_review_followup_expired_penalty_points": (
+                    request.POST.get("work_review_followup_expired_penalty_points") or ""
+                ).strip(),
+                "work_review_followup_expired_penalty_cap": (
+                    request.POST.get("work_review_followup_expired_penalty_cap") or ""
+                ).strip(),
             }
             serializer = CompanyProfileUpdateSerializer(company_profile, data=settings_data, partial=True)
             if serializer.is_valid():
@@ -1875,10 +1892,12 @@ def followups_page(request):
                 if settings_data["followup_auto_expire_enabled"]:
                     messages.success(
                         request,
-                        f"Follow-up auto-expiry enabled with {settings_data['followup_auto_expire_days']} day limit.",
+                        "Follow-up controls updated. "
+                        f"Auto-expiry: {settings_data['followup_auto_expire_days']} day(s). "
+                        f"Uncalled alert: {settings_data['followup_uncalled_alert_hours']} hour(s).",
                     )
                 else:
-                    messages.success(request, "Follow-up auto-expiry disabled.")
+                    messages.success(request, "Follow-up controls updated. Auto-expiry disabled.")
             else:
                 messages.error(
                     request,
@@ -2236,6 +2255,12 @@ def work_review_page(request):
             "work_review_idle_gap_seconds": request.POST.get("work_review_idle_gap_seconds", "").strip(),
             "work_review_connected_cooldown_seconds": request.POST.get(
                 "work_review_connected_cooldown_seconds", ""
+            ).strip(),
+            "work_review_followup_expired_penalty_points": request.POST.get(
+                "work_review_followup_expired_penalty_points", ""
+            ).strip(),
+            "work_review_followup_expired_penalty_cap": request.POST.get(
+                "work_review_followup_expired_penalty_cap", ""
             ).strip(),
         }
         serializer = CompanyProfileUpdateSerializer(company_profile, data=update_payload, partial=True)

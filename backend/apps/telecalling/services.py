@@ -74,6 +74,9 @@ CALLBACK_EVENING_HOURS = range(16, 20)
 CALLBACK_NIGHT_HOURS = range(20, 24)
 FOLLOWUP_NO_RESPONSE_LIMIT = 3
 FOLLOWUP_STALE_EXPIRY_DAYS = 14
+FOLLOWUP_UNCALLED_ALERT_HOURS = 24
+FOLLOWUP_EXPIRED_SCORE_PENALTY_POINTS = 4
+FOLLOWUP_EXPIRED_SCORE_PENALTY_CAP = 24
 ACTIVE_QUEUE_STATUSES = (
     Lead.Status.NEW,
     Lead.Status.INTERESTED,
@@ -225,10 +228,34 @@ def _work_review_rules():
         0,
         int(getattr(profile, "work_review_connected_cooldown_seconds", CONNECTED_CALL_COOLDOWN_SECONDS) or 0),
     )
+    followup_expired_penalty_points = max(
+        0,
+        int(
+            getattr(
+                profile,
+                "work_review_followup_expired_penalty_points",
+                FOLLOWUP_EXPIRED_SCORE_PENALTY_POINTS,
+            )
+            or 0
+        ),
+    )
+    followup_expired_penalty_cap = max(
+        0,
+        int(
+            getattr(
+                profile,
+                "work_review_followup_expired_penalty_cap",
+                FOLLOWUP_EXPIRED_SCORE_PENALTY_CAP,
+            )
+            or 0
+        ),
+    )
     return {
         "attempt_threshold": attempt_threshold,
         "idle_gap_seconds": idle_gap_seconds,
         "connected_cooldown_seconds": connected_cooldown_seconds,
+        "followup_expired_penalty_points": followup_expired_penalty_points,
+        "followup_expired_penalty_cap": followup_expired_penalty_cap,
     }
 
 
@@ -3180,6 +3207,14 @@ def _followup_expiry_settings(*, company_profile=None):
             1,
             int(getattr(profile, "followup_auto_expire_days", FOLLOWUP_STALE_EXPIRY_DAYS) or FOLLOWUP_STALE_EXPIRY_DAYS),
         ),
+        "uncalled_alert_enabled": bool(getattr(profile, "followup_uncalled_alert_enabled", True)),
+        "uncalled_alert_hours": max(
+            1,
+            int(
+                getattr(profile, "followup_uncalled_alert_hours", FOLLOWUP_UNCALLED_ALERT_HOURS)
+                or FOLLOWUP_UNCALLED_ALERT_HOURS
+            ),
+        ),
     }
 
 
@@ -3452,6 +3487,12 @@ def _is_scheduled_followup(lead):
     return bool(_is_followup_status(getattr(lead, "status", "")) and lead.callback_date and lead.callback_window)
 
 
+def _call_activity_stamp(call_row):
+    if not call_row:
+        return None
+    return call_row.get("end_time") or call_row.get("start_time") or call_row.get("created_at")
+
+
 def _followup_no_answer_attempt_count(lead, *, staff=None, exclude_call_id=None):
     return _followup_no_response_progress(
         lead,
@@ -3460,29 +3501,12 @@ def _followup_no_answer_attempt_count(lead, *, staff=None, exclude_call_id=None)
     )["attempt_count"]
 
 
-def _followup_no_response_progress(
-    lead,
-    *,
-    staff=None,
-    exclude_call_id=None,
-    include_attempt_at=None,
-):
-    queryset = lead.calls.all()
-    if staff is not None:
-        queryset = queryset.filter(staff=staff)
-    if exclude_call_id:
-        queryset = queryset.exclude(id=exclude_call_id)
-
+def _followup_no_response_progress_from_rows(rows, *, include_attempt_at=None):
     attempt_times = []
-    for row in queryset.order_by("-start_time", "-created_at").values(
-        "status",
-        "end_time",
-        "start_time",
-        "created_at",
-    ):
+    for row in rows:
         status = row["status"]
         if status == Call.Status.NO_ANSWER:
-            stamp = row["end_time"] or row["start_time"] or row["created_at"]
+            stamp = _call_activity_stamp(row)
             if stamp:
                 attempt_times.append(timezone.localtime(stamp))
             continue
@@ -3499,8 +3523,6 @@ def _followup_no_response_progress(
     date_count = len(unique_dates)
     time_count = len(unique_times)
     ready_threshold = FOLLOWUP_NO_RESPONSE_LIMIT
-    # Follow-up closure rule: close as rejected after 3 unanswered attempts.
-    # Keep date/time counters for monitoring display only.
     can_close = attempt_count >= ready_threshold
     remaining = max(0, ready_threshold - attempt_count)
     return {
@@ -3510,6 +3532,39 @@ def _followup_no_response_progress(
         "can_close": can_close,
         "remaining": remaining,
     }
+
+
+def _followup_no_response_progress(
+    lead,
+    *,
+    staff=None,
+    exclude_call_id=None,
+    include_attempt_at=None,
+    preloaded_rows=None,
+):
+    if preloaded_rows is None:
+        queryset = lead.calls.all()
+        if staff is not None:
+            queryset = queryset.filter(staff=staff)
+        if exclude_call_id:
+            queryset = queryset.exclude(id=exclude_call_id)
+        rows = list(
+            queryset.order_by("-start_time", "-created_at").values(
+                "id",
+                "staff_id",
+                "status",
+                "end_time",
+                "start_time",
+                "created_at",
+            )
+        )
+    else:
+        rows = list(preloaded_rows)
+        if staff is not None:
+            rows = [row for row in rows if row.get("staff_id") == getattr(staff, "id", staff)]
+        if exclude_call_id:
+            rows = [row for row in rows if str(row.get("id")) != str(exclude_call_id)]
+    return _followup_no_response_progress_from_rows(rows, include_attempt_at=include_attempt_at)
 
 
 def _quality_tone(score):
@@ -3537,6 +3592,7 @@ def _quality_label(score, *, has_activity):
 def _build_quality_note(
     *,
     missed_callback_count,
+    expired_followup_count,
     suspicious_block_count,
     suspicious_attempt_count,
     zero_only_block_count,
@@ -3571,6 +3627,11 @@ def _build_quality_note(
         )
     if missed_callback_count:
         return f"{missed_callback_count} scheduled follow-up lead(s) need review."
+    if expired_followup_count:
+        return (
+            f"{expired_followup_count} follow-up lead(s) auto-expired in this review period, "
+            "so response speed should be improved."
+        )
     return "Build more recent call activity for a fuller review."
 
 
@@ -3579,6 +3640,14 @@ def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range
         return {}
     active_rules = rules or _work_review_rules()
     attempt_threshold = int(active_rules.get("attempt_threshold", MIN_REAL_CALLS_PER_ATTEMPT_BLOCK) or 1)
+    followup_expired_penalty_points = max(
+        0,
+        int(active_rules.get("followup_expired_penalty_points", FOLLOWUP_EXPIRED_SCORE_PENALTY_POINTS) or 0),
+    )
+    followup_expired_penalty_cap = max(
+        0,
+        int(active_rules.get("followup_expired_penalty_cap", FOLLOWUP_EXPIRED_SCORE_PENALTY_CAP) or 0),
+    )
 
     current_time = timezone.localtime(range_end or now or timezone.now())
     if range_start:
@@ -3613,6 +3682,14 @@ def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range
         status=Lead.Status.INTERESTED,
         callback_date__isnull=False,
     ).exclude(callback_window="").values("assigned_to_id", "last_contacted_at")
+    expired_followup_rows = Lead.objects.filter(
+        assigned_to_id__in=staff_ids,
+        status=Lead.Status.EXPIRED_FOLLOWUP,
+        updated_at__gte=lookback_start,
+    )
+    if range_end:
+        expired_followup_rows = expired_followup_rows.filter(updated_at__lte=range_end)
+    expired_followup_rows = expired_followup_rows.values("assigned_to_id")
 
     metrics = {
         staff_id: {
@@ -3630,6 +3707,7 @@ def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range
             "zero_only_block_count": 0,
             "suspicious_attempt_count": 0,
             "long_away_count": 0,
+            "expired_followup_count": 0,
         }
         for staff_id in staff_ids
     }
@@ -3673,6 +3751,12 @@ def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range
         last_contacted_at = row["last_contacted_at"]
         if not last_contacted_at or timezone.localtime(last_contacted_at) <= missed_callback_cutoff:
             metrics[staff_id]["missed_callbacks"] += 1
+
+    for row in expired_followup_rows:
+        staff_id = row["assigned_to_id"]
+        if staff_id not in metrics:
+            continue
+        metrics[staff_id]["expired_followup_count"] += 1
 
     away_end_actions = {
         StaffAction.ActionType.APP_FOREGROUNDED,
@@ -3739,6 +3823,7 @@ def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range
         zero_only_block_count = staff_metrics["zero_only_block_count"]
         suspicious_attempt_count = staff_metrics["suspicious_attempt_count"]
         long_away_count = staff_metrics["long_away_count"]
+        expired_followup_count = staff_metrics["expired_followup_count"]
         real_call_ratio = (
             Decimal(real_call_count) / Decimal(verified_attempt_count)
             if verified_attempt_count > 0
@@ -3774,8 +3859,17 @@ def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range
         else:
             overall_score = 0
 
-        penalty_points = min((suspicious_block_count * 12) + (zero_only_block_count * 10), 40)
-        overall_score = max(overall_score - penalty_points, 0)
+        pattern_penalty_points = min((suspicious_block_count * 12) + (zero_only_block_count * 10), 40)
+        expired_followup_penalty_points = 0
+        if followup_expired_penalty_points > 0 and expired_followup_count > 0:
+            expired_followup_penalty_points = expired_followup_count * followup_expired_penalty_points
+            if followup_expired_penalty_cap > 0:
+                expired_followup_penalty_points = min(
+                    expired_followup_penalty_points,
+                    followup_expired_penalty_cap,
+                )
+        total_penalty_points = pattern_penalty_points + expired_followup_penalty_points
+        overall_score = max(overall_score - total_penalty_points, 0)
         if verified_attempt_count >= attempt_threshold:
             if real_call_count == 0:
                 overall_score = min(overall_score, 25)
@@ -3807,6 +3901,7 @@ def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range
             "tone": _quality_tone(overall_score) if has_activity else "muted",
             "note": _build_quality_note(
                 missed_callback_count=missed_callback_count,
+                expired_followup_count=expired_followup_count,
                 suspicious_block_count=suspicious_block_count,
                 suspicious_attempt_count=suspicious_attempt_count,
                 zero_only_block_count=zero_only_block_count,
@@ -3829,6 +3924,10 @@ def _build_staff_quality_metrics(staff_ids, *, now=None, range_start=None, range
             "suspicious_block_count": suspicious_block_count,
             "zero_only_block_count": zero_only_block_count,
             "suspicious_attempt_count": suspicious_attempt_count,
+            "expired_followup_count": expired_followup_count,
+            "pattern_penalty_points": pattern_penalty_points,
+            "expired_followup_penalty_points": expired_followup_penalty_points,
+            "total_penalty_points": total_penalty_points,
             "attempt_review_label": attempt_review_label,
             "away_review_label": away_review_label,
             "long_away_count": long_away_count,
@@ -5708,6 +5807,9 @@ def build_team_management_payload(*, quality_range_start=None, quality_range_end
                 "zero_only_block_count": quality.get("zero_only_block_count", 0),
                 "zero_second_attempt_count": quality.get("zero_second_attempt_count", 0),
                 "real_call_count": quality.get("real_call_count", 0),
+                "expired_followup_count": quality.get("expired_followup_count", 0),
+                "expired_followup_penalty_points": quality.get("expired_followup_penalty_points", 0),
+                "total_penalty_points": quality.get("total_penalty_points", 0),
             }
         )
 
@@ -5771,6 +5873,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
     invalid_short_total = 0
     missed_callbacks_total = 0
     flagged_day_total = 0
+    expired_followup_total = 0
 
     review_rows = []
     zero_talk_blocks = _zero_talk_block_details_by_staff(
@@ -5798,6 +5901,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
         suspicious_block_count = int(row.get("suspicious_block_count") or 0)
         zero_only_block_count = int(row.get("zero_only_block_count") or 0)
         missed_callbacks = int(row.get("missed_callbacks") or 0)
+        expired_followup_count = int(row.get("expired_followup_count") or 0)
 
         review_state = "stable"
         review_state_label = "Stable"
@@ -5824,6 +5928,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
             or invalid_short_count > 0
             or zero_second_attempt_count > 0
             or missed_callbacks > 0
+            or expired_followup_count > 0
         ):
             review_state = "attention"
             review_state_label = "Needs Attention"
@@ -5842,6 +5947,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
         zero_talk_total += zero_only_block_count
         invalid_short_total += invalid_short_count
         missed_callbacks_total += missed_callbacks
+        expired_followup_total += expired_followup_count
 
         preview_payload = day_previews.get(uuid.UUID(str(row["id"])), {"count": 0, "rows": []})
         flagged_day_total += int(preview_payload.get("count") or 0)
@@ -5876,6 +5982,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
                     review_state_note,
                     row.get("attempt_review_label", ""),
                     row.get("away_review_label", ""),
+                    f"{expired_followup_count} expired follow ups",
                 )
                 if part
             ),
@@ -5934,6 +6041,12 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
             "connected_cooldown_seconds": int(
                 rules.get("connected_cooldown_seconds", CONNECTED_CALL_COOLDOWN_SECONDS) or 0
             ),
+            "followup_expired_penalty_points": int(
+                rules.get("followup_expired_penalty_points", FOLLOWUP_EXPIRED_SCORE_PENALTY_POINTS) or 0
+            ),
+            "followup_expired_penalty_cap": int(
+                rules.get("followup_expired_penalty_cap", FOLLOWUP_EXPIRED_SCORE_PENALTY_CAP) or 0
+            ),
         },
         "review_summary": {
             "total_staff": len(team_rows),
@@ -5946,6 +6059,7 @@ def build_work_review_payload(*, search_query="", review_filter="all", now=None,
             "invalid_short_total": invalid_short_total,
             "missed_callbacks_total": missed_callbacks_total,
             "flagged_day_total": flagged_day_total,
+            "expired_followup_total": expired_followup_total,
         },
         "review_rows": review_rows,
         "zero_talk_staff_rows": zero_talk_staff_rows,
@@ -6281,6 +6395,9 @@ def build_staff_profile_payload(request, staff):
             "real_call_count": quality.get("real_call_count", 0),
             "verified_attempt_count": quality.get("verified_attempt_count", 0),
             "long_away_count": quality.get("long_away_count", 0),
+            "expired_followup_count": quality.get("expired_followup_count", 0),
+            "expired_followup_penalty_points": quality.get("expired_followup_penalty_points", 0),
+            "total_penalty_points": quality.get("total_penalty_points", 0),
         },
         "identity_details": {
             "email": staff.email or "--",
@@ -7061,6 +7178,7 @@ def build_lead_management_payload():
 def build_followup_payload():
     company_profile = get_company_profile()
     expiry_settings = _followup_expiry_settings(company_profile=company_profile)
+    work_review_rules = _work_review_rules()
     expire_stale_followups(
         company_profile=company_profile,
         enabled=expiry_settings["enabled"],
@@ -7093,6 +7211,25 @@ def build_followup_payload():
     owner_lookup_ids.extend(lead.id for lead in rejected_candidates)
     owner_lookup_ids.extend(lead.id for lead in closed_candidates)
     owner_lookup_ids.extend(lead.id for lead in expired_candidates)
+    owner_lookup_ids = list(dict.fromkeys(owner_lookup_ids))
+    call_rows_by_lead = defaultdict(list)
+    if owner_lookup_ids:
+        progress_call_rows = (
+            Call.objects.filter(lead_id__in=owner_lookup_ids)
+            .values(
+                "id",
+                "lead_id",
+                "staff_id",
+                "status",
+                "start_time",
+                "end_time",
+                "created_at",
+            )
+            .order_by("lead_id", "-start_time", "-created_at")
+        )
+        for row in progress_call_rows:
+            call_rows_by_lead[row["lead_id"]].append(row)
+
     latest_call_owner_map = {}
     if owner_lookup_ids:
         owner_statuses = (
@@ -7119,15 +7256,70 @@ def build_followup_payload():
             return interested_detail.staff
         return latest_call_owner_map.get(lead.id)
 
+    mark_statuses = {Call.Status.INTERESTED, Call.Status.CALL_BACK}
+    uncalled_alert_enabled = bool(expiry_settings["uncalled_alert_enabled"])
+    uncalled_alert_hours = max(1, int(expiry_settings["uncalled_alert_hours"] or 1))
+
+    def _followup_mark_tracking(lead, call_rows):
+        latest_mark_index = None
+        latest_mark_stamp = None
+        for index, row in enumerate(call_rows):
+            if row.get("status") not in mark_statuses:
+                continue
+            stamp = _call_activity_stamp(row)
+            if not stamp:
+                continue
+            latest_mark_index = index
+            latest_mark_stamp = timezone.localtime(stamp)
+            break
+
+        anchor_at = latest_mark_stamp
+        if anchor_at is None:
+            fallback_anchor = lead.last_contacted_at or lead.updated_at or lead.created_at
+            anchor_at = timezone.localtime(fallback_anchor) if fallback_anchor else timezone.localtime(reference)
+
+        has_followup_call_after_mark = False
+        if latest_mark_index is not None:
+            for row in call_rows[:latest_mark_index]:
+                if row.get("status") != Call.Status.STARTED:
+                    has_followup_call_after_mark = True
+                    break
+
+        due_at = anchor_at + timedelta(hours=uncalled_alert_hours)
+        is_uncalled_after_mark = not has_followup_call_after_mark
+        is_uncalled_overdue = bool(
+            uncalled_alert_enabled and is_uncalled_after_mark and timezone.localtime(reference) >= due_at
+        )
+        if not is_uncalled_after_mark:
+            state_label = "Follow-up contacted"
+            state_tone = "success"
+        elif is_uncalled_overdue:
+            state_label = "No call after follow-up mark"
+            state_tone = "danger"
+        else:
+            state_label = "Waiting first follow-up call"
+            state_tone = "warning"
+
+        return {
+            "latest_mark_at": anchor_at,
+            "due_at": due_at,
+            "is_uncalled_after_mark": is_uncalled_after_mark,
+            "is_uncalled_overdue": is_uncalled_overdue,
+            "state_label": state_label,
+            "state_tone": state_tone,
+        }
+
     followup_rows = []
     for lead in followups:
         owner_staff = _followup_owner(lead)
+        lead_call_rows = call_rows_by_lead.get(lead.id, [])
         is_scheduled = _is_scheduled_followup(lead)
         is_due_today = bool(lead.callback_date and lead.callback_date == today)
         is_due_now = _is_callback_due(lead.callback_date, lead.callback_window, now=reference)
         is_overdue = bool(lead.callback_date and lead.callback_date < today)
         is_unscheduled = not is_scheduled
-        followup_progress = _followup_no_response_progress(lead)
+        followup_progress = _followup_no_response_progress(lead, preloaded_rows=lead_call_rows)
+        mark_tracking = _followup_mark_tracking(lead, lead_call_rows)
         followup_attempt_count = followup_progress["attempt_count"]
         attempts_remaining = followup_progress["remaining"]
         can_close_as_no_response = followup_progress["can_close"]
@@ -7190,6 +7382,12 @@ def build_followup_payload():
                 "can_close_as_no_response": can_close_as_no_response,
                 "followup_attempt_unique_dates": followup_progress["unique_date_count"],
                 "followup_attempt_unique_times": followup_progress["unique_time_count"],
+                "is_uncalled_after_mark": mark_tracking["is_uncalled_after_mark"],
+                "is_uncalled_overdue": mark_tracking["is_uncalled_overdue"],
+                "uncalled_state_label": mark_tracking["state_label"],
+                "uncalled_state_tone": mark_tracking["state_tone"],
+                "followup_marked_at": _format_datetime(mark_tracking["latest_mark_at"]),
+                "followup_mark_due_at": _format_datetime(mark_tracking["due_at"]),
             }
         )
 
@@ -7224,7 +7422,10 @@ def build_followup_payload():
         if lead.id not in rejected_with_followup_history:
             continue
         owner_staff = _followup_owner(lead)
-        progress = _followup_no_response_progress(lead)
+        progress = _followup_no_response_progress(
+            lead,
+            preloaded_rows=call_rows_by_lead.get(lead.id, []),
+        )
         rejected_followup_rows.append(
             {
                 "id": str(lead.id),
@@ -7262,7 +7463,10 @@ def build_followup_payload():
     )
     for lead in closed_candidates:
         owner_staff = _followup_owner(lead)
-        progress = _followup_no_response_progress(lead)
+        progress = _followup_no_response_progress(
+            lead,
+            preloaded_rows=call_rows_by_lead.get(lead.id, []),
+        )
         if progress["attempt_count"] < FOLLOWUP_NO_RESPONSE_LIMIT or not progress["can_close"]:
             continue
         if lead.id not in closed_with_followup_history:
@@ -7316,6 +7520,104 @@ def build_followup_payload():
     expired_followup_rows.sort(
         key=lambda row: row.get("updated_at_sort", ""),
         reverse=True,
+    )
+
+    uncalled_after_mark_count = sum(1 for row in followup_rows if row["is_uncalled_after_mark"])
+    uncalled_overdue_count = sum(1 for row in followup_rows if row["is_uncalled_overdue"])
+    uncalled_waiting_count = max(uncalled_after_mark_count - uncalled_overdue_count, 0)
+
+    performance_by_staff = {}
+    for staff in _staff_queryset().filter(is_active=True):
+        performance_by_staff[str(staff.id)] = {
+            "staff_id": str(staff.id),
+            "staff_name": staff.name,
+            "active_followups": 0,
+            "due_now_count": 0,
+            "overdue_count": 0,
+            "uncalled_after_mark_count": 0,
+            "uncalled_overdue_count": 0,
+            "close_ready_count": 0,
+            "expired_count": 0,
+        }
+
+    def _resolve_staff_bucket(staff_id, staff_name):
+        if not staff_id:
+            staff_id = "unassigned"
+            staff_name = "Unassigned"
+        if staff_id and staff_id in performance_by_staff:
+            return performance_by_staff[staff_id]
+        if staff_id and staff_id not in performance_by_staff:
+            performance_by_staff[staff_id] = {
+                "staff_id": staff_id,
+                "staff_name": staff_name or "Unknown Staff",
+                "active_followups": 0,
+                "due_now_count": 0,
+                "overdue_count": 0,
+                "uncalled_after_mark_count": 0,
+                "uncalled_overdue_count": 0,
+                "close_ready_count": 0,
+                "expired_count": 0,
+            }
+            return performance_by_staff[staff_id]
+        return None
+
+    for row in followup_rows:
+        bucket = _resolve_staff_bucket(row.get("assigned_to_id"), row.get("assigned_to"))
+        if not bucket:
+            continue
+        bucket["active_followups"] += 1
+        if row.get("is_due_now"):
+            bucket["due_now_count"] += 1
+        if row.get("is_overdue"):
+            bucket["overdue_count"] += 1
+        if row.get("is_uncalled_after_mark"):
+            bucket["uncalled_after_mark_count"] += 1
+        if row.get("is_uncalled_overdue"):
+            bucket["uncalled_overdue_count"] += 1
+        if row.get("can_close_as_no_response"):
+            bucket["close_ready_count"] += 1
+
+    for row in expired_followup_rows:
+        bucket = _resolve_staff_bucket(row.get("assigned_to_id"), row.get("assigned_to"))
+        if not bucket:
+            continue
+        bucket["expired_count"] += 1
+
+    followup_performance_rows = []
+    for bucket in performance_by_staff.values():
+        active_followups = int(bucket["active_followups"])
+        overdue_penalty = int(bucket["overdue_count"]) + int(bucket["uncalled_overdue_count"])
+        expired_penalty = int(bucket["expired_count"]) * 2
+        base_score = 100
+        health_score = max(base_score - (overdue_penalty * 8) - expired_penalty - int(bucket["close_ready_count"] * 2), 0)
+        if active_followups == 0 and bucket["expired_count"] == 0:
+            health_label = "No load"
+            health_tone = "muted"
+        elif health_score >= 80:
+            health_label = "Strong"
+            health_tone = "success"
+        elif health_score >= 60:
+            health_label = "Watch"
+            health_tone = "warning"
+        else:
+            health_label = "Critical"
+            health_tone = "danger"
+        followup_performance_rows.append(
+            {
+                **bucket,
+                "health_score": health_score,
+                "health_label": health_label,
+                "health_tone": health_tone,
+            }
+        )
+
+    followup_performance_rows.sort(
+        key=lambda row: (
+            row["health_score"],
+            -row["active_followups"],
+            -row["expired_count"],
+            row["staff_name"].lower(),
+        )
     )
 
     return {
@@ -7387,11 +7689,25 @@ def build_followup_payload():
             "assigned_count": sum(1 for row in followup_rows if row["assigned_to_id"]),
             "unassigned_count": sum(1 for row in followup_rows if not row["assigned_to_id"]),
             "with_notes_count": sum(1 for row in followup_rows if row["notes"]),
+            "uncalled_after_mark_count": uncalled_after_mark_count,
+            "uncalled_waiting_count": uncalled_waiting_count,
+            "uncalled_overdue_count": uncalled_overdue_count,
         },
         "followup_expiry_settings": {
             "enabled": expiry_settings["enabled"],
             "expiry_days": expiry_settings["expiry_days"],
+            "uncalled_alert_enabled": expiry_settings["uncalled_alert_enabled"],
+            "uncalled_alert_hours": expiry_settings["uncalled_alert_hours"],
         },
+        "work_review_rules": {
+            "followup_expired_penalty_points": int(
+                work_review_rules.get("followup_expired_penalty_points", FOLLOWUP_EXPIRED_SCORE_PENALTY_POINTS) or 0
+            ),
+            "followup_expired_penalty_cap": int(
+                work_review_rules.get("followup_expired_penalty_cap", FOLLOWUP_EXPIRED_SCORE_PENALTY_CAP) or 0
+            ),
+        },
+        "followup_performance_rows": followup_performance_rows,
     }
 
 def reassign_unassigned_followup_owners():

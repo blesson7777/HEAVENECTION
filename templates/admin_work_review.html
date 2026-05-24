@@ -48,7 +48,10 @@
         <div class="hc-summary-card h-100">
             <span class="mf-db2-kicker">Callback Review</span>
             <h3 class="mb-1">{{ review_summary.missed_callbacks_total }}</h3>
-            <p class="mb-0 text-muted">{{ review_summary.stable_count }} staff currently look stable.</p>
+            <p class="mb-0 text-muted">
+                {{ review_summary.expired_followup_total }} expired follow-up{% if review_summary.expired_followup_total != 1 %}s{% endif %}
+                in this period. {{ review_summary.stable_count }} staff currently look stable.
+            </p>
         </div>
     </div>
 </section>
@@ -240,9 +243,13 @@
                                 <span class="hc-work-review-chip">{{ row.zero_second_attempt_count }} zero-second</span>
                                 <span class="hc-work-review-chip">{{ row.invalid_short_count }} invalid short</span>
                                 <span class="hc-work-review-chip">{{ row.missed_callbacks }} callback review</span>
+                                <span class="hc-work-review-chip">{{ row.expired_followup_count }} expired follow-up</span>
                             </div>
                             <div class="hc-work-review-caption">
                                 {{ row.suspicious_block_count }} review block(s) and {{ row.zero_only_block_count }} zero-talk block(s)
+                            </div>
+                            <div class="hc-work-review-caption">
+                                Score penalty this period: {{ row.total_penalty_points }} points (expired follow-up: {{ row.expired_followup_penalty_points }})
                             </div>
                             {% if row.zero_only_block_details %}
                             <button
@@ -473,6 +480,35 @@
                             required
                         >
                         <div class="form-text">Extra paid/covered buffer after a block before gap time becomes uncounted.</div>
+                    </div>
+                    <hr class="my-3">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="workReviewExpiredPenaltyInput">Expired follow-up penalty (points per lead)</label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            class="form-control"
+                            id="workReviewExpiredPenaltyInput"
+                            name="work_review_followup_expired_penalty_points"
+                            value="{{ work_review_rules.followup_expired_penalty_points }}"
+                            required
+                        >
+                        <div class="form-text">Deduct these points from quality score for each follow-up that expires in the selected review period.</div>
+                    </div>
+                    <div class="mb-1">
+                        <label class="form-label fw-semibold" for="workReviewExpiredPenaltyCapInput">Expired follow-up penalty cap (max points)</label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            class="form-control"
+                            id="workReviewExpiredPenaltyCapInput"
+                            name="work_review_followup_expired_penalty_cap"
+                            value="{{ work_review_rules.followup_expired_penalty_cap }}"
+                            required
+                        >
+                        <div class="form-text">Maximum total points that expired follow-up penalties can deduct in one review period.</div>
                     </div>
                 </div>
                 <div class="modal-footer border-0 pt-0">

@@ -849,9 +849,13 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             "hourly_call_bonus_rate",
             "followup_auto_expire_enabled",
             "followup_auto_expire_days",
+            "followup_uncalled_alert_enabled",
+            "followup_uncalled_alert_hours",
             "work_review_zero_talk_attempt_threshold",
             "work_review_idle_gap_seconds",
             "work_review_connected_cooldown_seconds",
+            "work_review_followup_expired_penalty_points",
+            "work_review_followup_expired_penalty_cap",
             "lead_auto_delete_enabled",
             "lead_auto_delete_mode",
             "lead_auto_delete_days",
@@ -900,9 +904,13 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
             "hourly_call_bonus_rate",
             "followup_auto_expire_enabled",
             "followup_auto_expire_days",
+            "followup_uncalled_alert_enabled",
+            "followup_uncalled_alert_hours",
             "work_review_zero_talk_attempt_threshold",
             "work_review_idle_gap_seconds",
             "work_review_connected_cooldown_seconds",
+            "work_review_followup_expired_penalty_points",
+            "work_review_followup_expired_penalty_cap",
             "lead_auto_delete_enabled",
             "lead_auto_delete_mode",
             "lead_auto_delete_days",
@@ -968,6 +976,36 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
         if expiry_days > 3650:
             raise serializers.ValidationError("Follow-up auto-expire days cannot exceed 3650.")
         return expiry_days
+
+    def validate_followup_uncalled_alert_hours(self, value):
+        if value is None:
+            return value
+        alert_hours = int(value)
+        if alert_hours < 1:
+            raise serializers.ValidationError("Follow-up uncalled alert hours must be at least 1.")
+        if alert_hours > 24 * 120:
+            raise serializers.ValidationError("Follow-up uncalled alert hours cannot exceed 2880.")
+        return alert_hours
+
+    def validate_work_review_followup_expired_penalty_points(self, value):
+        if value is None:
+            return value
+        penalty_points = int(value)
+        if penalty_points < 0:
+            raise serializers.ValidationError("Expired follow-up penalty points cannot be negative.")
+        if penalty_points > 100:
+            raise serializers.ValidationError("Expired follow-up penalty points cannot exceed 100.")
+        return penalty_points
+
+    def validate_work_review_followup_expired_penalty_cap(self, value):
+        if value is None:
+            return value
+        penalty_cap = int(value)
+        if penalty_cap < 0:
+            raise serializers.ValidationError("Expired follow-up penalty cap cannot be negative.")
+        if penalty_cap > 100:
+            raise serializers.ValidationError("Expired follow-up penalty cap cannot exceed 100.")
+        return penalty_cap
 
     def validate_lead_auto_delete_days(self, value):
         if value is None:

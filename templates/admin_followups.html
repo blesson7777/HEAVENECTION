@@ -5,7 +5,7 @@
 <a href="{% url 'followups-page' %}?download=csv" class="btn btn-outline-primary btn-sm">Download CSV</a>
 <a href="{% url 'followups-page' %}?download=xlsx" class="btn btn-outline-primary btn-sm">Download Excel</a>
 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#followupUpdateModal">CSV Update</button>
-<button type="button" class="btn btn-outline-dark btn-sm" data-bs-toggle="modal" data-bs-target="#followupExpirySettingsModal">Expiry Settings</button>
+<button type="button" class="btn btn-outline-dark btn-sm" data-bs-toggle="modal" data-bs-target="#followupExpirySettingsModal">Follow-Up Controls</button>
 {% endblock %}
 
 {% block admin_content %}
@@ -66,6 +66,20 @@
                 </p>
             </div>
         </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">No Call After Mark</span>
+                <h3 class="mb-1">{{ followup_summary.uncalled_after_mark_count }}</h3>
+                <p class="mb-0 text-muted">
+                    {{ followup_summary.uncalled_overdue_count }} crossed SLA.
+                    {% if followup_expiry_settings.uncalled_alert_enabled %}
+                    SLA: {{ followup_expiry_settings.uncalled_alert_hours }} hour{% if followup_expiry_settings.uncalled_alert_hours != 1 %}s{% endif %}.
+                    {% else %}
+                    SLA alert is disabled.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
     </div>
 
     <div class="alert alert-primary border-0 mb-4" role="alert">
@@ -75,6 +89,18 @@
         {% else %}
         Auto-expiry is currently <strong>disabled</strong>.
         {% endif %}
+        {% if followup_expiry_settings.uncalled_alert_enabled %}
+        A follow-up should get the first call within <strong>{{ followup_expiry_settings.uncalled_alert_hours }} hour{% if followup_expiry_settings.uncalled_alert_hours != 1 %}s{% endif %}</strong> after being marked Follow Up.
+        {% endif %}
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <button type="button" class="btn btn-sm btn-outline-secondary js-followup-view is-active" data-view="all">All</button>
+        <button type="button" class="btn btn-sm btn-outline-warning js-followup-view" data-view="due_now">Due Now</button>
+        <button type="button" class="btn btn-sm btn-outline-danger js-followup-view" data-view="overdue">Overdue</button>
+        <button type="button" class="btn btn-sm btn-outline-danger js-followup-view" data-view="uncalled_overdue">No Call SLA Crossed</button>
+        <button type="button" class="btn btn-sm btn-outline-primary js-followup-view" data-view="unscheduled">No Time Set</button>
+        <button type="button" class="btn btn-sm btn-outline-dark js-followup-view" data-view="close_ready">Ready To Close</button>
     </div>
 
     <div class="hc-search-box">
@@ -97,7 +123,14 @@
             </thead>
             <tbody id="followupTableBody">
                 {% for lead in followup_rows %}
-                <tr data-status="{{ lead.status }}">
+                <tr
+                    data-status="{{ lead.status }}"
+                    data-followup-view-due-now="{% if lead.is_due_now %}1{% else %}0{% endif %}"
+                    data-followup-view-overdue="{% if lead.is_overdue %}1{% else %}0{% endif %}"
+                    data-followup-view-unscheduled="{% if lead.is_unscheduled %}1{% else %}0{% endif %}"
+                    data-followup-view-uncalled-overdue="{% if lead.is_uncalled_overdue %}1{% else %}0{% endif %}"
+                    data-followup-view-close-ready="{% if lead.can_close_as_no_response %}1{% else %}0{% endif %}"
+                >
                     <td>
                         <strong>{{ lead.name }}</strong>
                         <div class="small text-muted">{{ lead.phone }}</div>
@@ -122,6 +155,11 @@
                         {% else %}
                         <div class="small text-muted mt-1">{{ lead.attempts_remaining }} tries remaining before closing</div>
                         {% endif %}
+                        <div class="small mt-1">
+                            <span class="hc-status hc-status-{{ lead.uncalled_state_tone }}">{{ lead.uncalled_state_label }}</span>
+                        </div>
+                        <div class="small text-muted mt-1">Marked at: {{ lead.followup_marked_at }}</div>
+                        <div class="small text-muted mt-1">SLA due at: {{ lead.followup_mark_due_at }}</div>
                         <div class="small text-muted mt-1">Last contact: {{ lead.last_contacted }}</div>
                     </td>
                     <td>
@@ -162,6 +200,55 @@
                 </tr>
                 {% empty %}
                 <tr><td colspan="7" class="text-center py-4">No follow-up leads are in the queue right now.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="hc-surface-card animate-on-scroll mt-4">
+    <div class="mf-db2-panel-head mb-3">
+        <div>
+            <span class="mf-db2-kicker">Performance Monitor</span>
+            <h5>Follow-up performance by staff</h5>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Staff</th>
+                    <th>Health</th>
+                    <th>Active Follow-Ups</th>
+                    <th>Due/Overdue</th>
+                    <th>No Call After Mark</th>
+                    <th>Close/Expired</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in followup_performance_rows %}
+                <tr>
+                    <td><strong>{{ row.staff_name }}</strong></td>
+                    <td>
+                        <span class="hc-status hc-status-{{ row.health_tone }}">{{ row.health_label }}</span>
+                        <div class="small text-muted mt-1">{{ row.health_score }} / 100</div>
+                    </td>
+                    <td>{{ row.active_followups }}</td>
+                    <td>
+                        <div>{{ row.due_now_count }} due now</div>
+                        <div class="small text-muted">{{ row.overdue_count }} overdue</div>
+                    </td>
+                    <td>
+                        <div>{{ row.uncalled_after_mark_count }} waiting</div>
+                        <div class="small text-danger">{{ row.uncalled_overdue_count }} SLA crossed</div>
+                    </td>
+                    <td>
+                        <div>{{ row.close_ready_count }} ready to close</div>
+                        <div class="small text-muted">{{ row.expired_count }} expired</div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="6" class="text-center py-4">No staff follow-up performance data is available.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -246,7 +333,7 @@
             <div class="modal-header border-0 pb-0">
                 <div>
                     <span class="mf-db2-kicker">Follow-Up Rules</span>
-                    <h5 class="modal-title mt-1">Auto-Expiry Settings</h5>
+                    <h5 class="modal-title mt-1">Follow-Up Control Center</h5>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -254,6 +341,10 @@
                 <form method="post" action="{% url 'followups-page' %}">
                     {% csrf_token %}
                     <input type="hidden" name="followup_action" value="update_followup_expiry_settings">
+                    <div class="mb-3">
+                        <h6 class="mb-2">Expiry Rule</h6>
+                        <p class="text-muted small mb-0">Auto-expire stale follow-ups that are inactive for too long.</p>
+                    </div>
                     <div class="form-check form-switch mb-3">
                         <input
                             class="form-check-input"
@@ -280,6 +371,69 @@
                             required
                         >
                         <div class="form-text">Follow-ups without updates older than this limit move to Expired Follow Up.</div>
+                    </div>
+                    <hr class="my-3">
+                    <div class="mb-3">
+                        <h6 class="mb-2">No-Call SLA Rule</h6>
+                        <p class="text-muted small mb-0">Track leads that were marked Follow Up but did not get a next follow-up call in time.</p>
+                    </div>
+                    <div class="form-check form-switch mb-3">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            role="switch"
+                            id="followupUncalledAlertEnabled"
+                            name="followup_uncalled_alert_enabled"
+                            {% if followup_expiry_settings.uncalled_alert_enabled %}checked{% endif %}
+                        >
+                        <label class="form-check-label fw-semibold" for="followupUncalledAlertEnabled">
+                            Enable no-call SLA alert
+                        </label>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="followupUncalledAlertHours">First follow-up call due in (hours)</label>
+                        <input
+                            type="number"
+                            min="1"
+                            max="2880"
+                            class="form-control"
+                            id="followupUncalledAlertHours"
+                            name="followup_uncalled_alert_hours"
+                            value="{{ followup_expiry_settings.uncalled_alert_hours }}"
+                            required
+                        >
+                        <div class="form-text">If no new follow-up call is logged within this time, the lead is flagged in red.</div>
+                    </div>
+                    <hr class="my-3">
+                    <div class="mb-3">
+                        <h6 class="mb-2">Work Review Penalty</h6>
+                        <p class="text-muted small mb-0">Apply score deduction for follow-ups that finally expire.</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="followupExpiredPenaltyPoints">Penalty points per expired follow-up</label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            class="form-control"
+                            id="followupExpiredPenaltyPoints"
+                            name="work_review_followup_expired_penalty_points"
+                            value="{{ work_review_rules.followup_expired_penalty_points }}"
+                            required
+                        >
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="followupExpiredPenaltyCap">Max penalty cap in one review period</label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            class="form-control"
+                            id="followupExpiredPenaltyCap"
+                            name="work_review_followup_expired_penalty_cap"
+                            value="{{ work_review_rules.followup_expired_penalty_cap }}"
+                            required
+                        >
                     </div>
                     <div class="d-flex justify-content-end gap-2 mt-4">
                         <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
@@ -583,4 +737,41 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const viewButtons = Array.from(document.querySelectorAll(".js-followup-view"));
+        const tableBody = document.getElementById("followupTableBody");
+        if (!viewButtons.length || !tableBody) {
+            return;
+        }
+
+        const rows = Array.from(tableBody.querySelectorAll("tr"));
+        const applyView = (view) => {
+            viewButtons.forEach((button) => {
+                const isActive = (button.dataset.view || "all") === view;
+                button.classList.toggle("active", isActive);
+            });
+            rows.forEach((row) => {
+                if (view === "all") {
+                    row.hidden = false;
+                    return;
+                }
+                const attrName = `followupView${view.replace(/(^|_)([a-z])/g, (_, p1, p2) => p2.toUpperCase())}`;
+                const flag = row.dataset[attrName] || "0";
+                row.hidden = flag !== "1";
+            });
+        };
+
+        viewButtons.forEach((button) => {
+            button.addEventListener("click", function () {
+                applyView(button.dataset.view || "all");
+            });
+        });
+
+        applyView("all");
+    });
+</script>
 {% endblock %}
