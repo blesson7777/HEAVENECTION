@@ -240,17 +240,10 @@ class ApiClient {
         .toList();
   }
 
-  Future<List<LeadItem>> fetchFollowups() async {
+  Future<FollowupInboxPayload> fetchFollowups() async {
     final response = await _send('GET', '/api/staff/followups/');
     final payload = _decodeMap(response.body);
-    final rows = payload['followups'];
-    if (rows is! List) {
-      return const [];
-    }
-    return rows
-        .whereType<Map<String, dynamic>>()
-        .map(LeadItem.fromJson)
-        .toList();
+    return FollowupInboxPayload.fromJson(payload);
   }
 
   Future<List<LeadItem>> searchCustomerHistory({String query = ''}) async {

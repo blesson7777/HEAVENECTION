@@ -1877,6 +1877,7 @@ def followups_page(request):
             settings_data = {
                 "followup_auto_expire_enabled": request.POST.get("followup_auto_expire_enabled") == "on",
                 "followup_auto_expire_days": (request.POST.get("followup_auto_expire_days") or "").strip(),
+                "followup_staff_warning_days": (request.POST.get("followup_staff_warning_days") or "").strip(),
                 "followup_uncalled_alert_enabled": request.POST.get("followup_uncalled_alert_enabled") == "on",
                 "followup_uncalled_alert_hours": (request.POST.get("followup_uncalled_alert_hours") or "").strip(),
                 "work_review_followup_expired_penalty_points": (
@@ -1894,6 +1895,7 @@ def followups_page(request):
                         request,
                         "Follow-up controls updated. "
                         f"Auto-expiry: {settings_data['followup_auto_expire_days']} day(s). "
+                        f"Warning: {settings_data['followup_staff_warning_days']} day(s). "
                         f"Uncalled alert: {settings_data['followup_uncalled_alert_hours']} hour(s).",
                     )
                 else:

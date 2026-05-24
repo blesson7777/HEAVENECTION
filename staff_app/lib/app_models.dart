@@ -783,6 +783,14 @@ class LeadItem {
     this.followupAttemptsRemaining = 3,
     this.canMarkFollowupNoResponse = false,
     this.isScheduledFollowup = false,
+    this.followupWarningDue = false,
+    this.followupWarningDays = 0,
+    this.followupStaleDays = 0,
+    this.followupWarningLabel = '',
+    this.daysToAutoExpiry,
+    this.followupWorkSeconds = 0,
+    this.followupWorkLabel = '',
+    this.followupCallCount = 0,
   });
 
   final String id;
@@ -804,6 +812,14 @@ class LeadItem {
   final int followupAttemptsRemaining;
   final bool canMarkFollowupNoResponse;
   final bool isScheduledFollowup;
+  final bool followupWarningDue;
+  final int followupWarningDays;
+  final int followupStaleDays;
+  final String followupWarningLabel;
+  final int? daysToAutoExpiry;
+  final int followupWorkSeconds;
+  final String followupWorkLabel;
+  final int followupCallCount;
 
   bool get isRecoveryLead =>
       status == 'no_answer' || status == 'not_interested';
@@ -852,6 +868,71 @@ class LeadItem {
       ),
       canMarkFollowupNoResponse: json['can_mark_followup_no_response'] == true,
       isScheduledFollowup: json['is_scheduled_followup'] == true,
+      followupWarningDue: json['followup_warning_due'] == true,
+      followupWarningDays: _asInt(json['followup_warning_days']),
+      followupStaleDays: _asInt(json['followup_stale_days']),
+      followupWarningLabel: json['followup_warning_label']?.toString() ?? '',
+      daysToAutoExpiry: json['days_to_auto_expiry'] == null
+          ? null
+          : _asInt(json['days_to_auto_expiry']),
+      followupWorkSeconds: _asInt(json['followup_work_seconds']),
+      followupWorkLabel: json['followup_work_label']?.toString() ?? '',
+      followupCallCount: _asInt(json['followup_call_count']),
+    );
+  }
+}
+
+class FollowupWarningSummary {
+  const FollowupWarningSummary({
+    this.warningDays = 0,
+    this.warningCount = 0,
+    this.oldestWarningDays = 0,
+    this.popupRequired = false,
+    this.title = '',
+    this.message = '',
+  });
+
+  final int warningDays;
+  final int warningCount;
+  final int oldestWarningDays;
+  final bool popupRequired;
+  final String title;
+  final String message;
+
+  factory FollowupWarningSummary.fromJson(Map<String, dynamic> json) {
+    return FollowupWarningSummary(
+      warningDays: _asInt(json['warning_days']),
+      warningCount: _asInt(json['warning_count']),
+      oldestWarningDays: _asInt(json['oldest_warning_days']),
+      popupRequired: json['popup_required'] == true,
+      title: json['title']?.toString() ?? '',
+      message: json['message']?.toString() ?? '',
+    );
+  }
+}
+
+class FollowupInboxPayload {
+  const FollowupInboxPayload({
+    required this.followups,
+    required this.warningSummary,
+  });
+
+  final List<LeadItem> followups;
+  final FollowupWarningSummary warningSummary;
+
+  factory FollowupInboxPayload.fromJson(Map<String, dynamic> json) {
+    final rows = json['followups'];
+    final warning = json['warning_summary'];
+    return FollowupInboxPayload(
+      followups:
+          (rows as List?)
+              ?.whereType<Map<String, dynamic>>()
+              .map(LeadItem.fromJson)
+              .toList() ??
+          const [],
+      warningSummary: FollowupWarningSummary.fromJson(
+        warning is Map<String, dynamic> ? warning : const {},
+      ),
     );
   }
 }

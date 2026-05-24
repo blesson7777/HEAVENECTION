@@ -192,6 +192,8 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   StaffProfile? _profile;
   DailySummary _summary = DailySummary.empty();
   LearningSummary _learningSummary = LearningSummary.empty();
+  FollowupWarningSummary _followupWarningSummary =
+      const FollowupWarningSummary();
   List<LeadItem> _leads = const [];
   List<LeadItem> _followups = const [];
   List<TrainingLesson> _lessons = const [];
@@ -234,6 +236,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   DateTime? _backgroundedAt;
   BuildContext? _idleWarningDialogContext;
   BuildContext? _callStatusDialogContext;
+  String _lastFollowupWarningPromptKey = '';
   bool _isIdleWarningVisible = false;
   bool _isHeartbeatRequestInFlight = false;
   bool _isNotificationPollRequestInFlight = false;
@@ -1682,17 +1685,20 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
         return;
       }
       final todayPayload = results[0] as StaffTodayPayload;
+      final followupPayload = results[2] as FollowupInboxPayload;
       setState(() {
         _applySummarySnapshot(todayPayload.summary);
         _applyStaffNotifications(todayPayload.notifications);
         _leads = results[1] as List<LeadItem>;
-        _followups = results[2] as List<LeadItem>;
+        _followups = followupPayload.followups;
+        _followupWarningSummary = followupPayload.warningSummary;
         _applyLearningPayload(results[3] as LearningCenterPayload);
         _isNetworkErrorVisible = false;
         if (_leadIndex >= _leads.length) {
           _leadIndex = _leads.isEmpty ? 0 : _leads.length - 1;
         }
       });
+      unawaited(_maybePromptFollowupWarning(followupPayload.warningSummary));
       _syncPresenceMonitoring();
       if (_summary.pendingCallStatusRequired) {
         if (_requiredPermissionsGranted == true) {
@@ -1742,6 +1748,56 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       }
     }
     _maybePromptMandatoryTraining();
+  }
+
+  Future<void> _maybePromptFollowupWarning(
+    FollowupWarningSummary warningSummary,
+  ) async {
+    if (!mounted) {
+      return;
+    }
+    if (!warningSummary.popupRequired || warningSummary.warningCount <= 0) {
+      return;
+    }
+    if (_lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    final promptKey =
+        '${warningSummary.warningDays}:${warningSummary.warningCount}:${warningSummary.oldestWarningDays}:${DateTime.now().toIso8601String().substring(0, 10)}';
+    if (_lastFollowupWarningPromptKey == promptKey) {
+      return;
+    }
+    _lastFollowupWarningPromptKey = promptKey;
+    final shouldOpenFollowups = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(
+            warningSummary.title.trim().isEmpty
+                ? 'Follow-up calls pending'
+                : warningSummary.title,
+          ),
+          content: Text(
+            warningSummary.message.trim().isEmpty
+                ? '${warningSummary.warningCount} follow-up lead(s) are pending for ${warningSummary.warningDays}+ day(s). Open Follow Ups and complete them now.'
+                : warningSummary.message,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Not now'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Open Follow Ups'),
+            ),
+          ],
+        );
+      },
+    );
+    if (shouldOpenFollowups == true && mounted) {
+      await _openFollowupQueuePage();
+    }
   }
 
   Future<AppVersionInfo> _readCurrentVersionInfo() async {
@@ -2293,6 +2349,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       MaterialPageRoute<void>(
         builder: (_) => FollowupQueuePage(
           apiClient: _apiClient,
+          initialWarningSummary: _followupWarningSummary,
           onCall: (lead) async {
             _registerInteraction(syncServer: false);
             await _showCallScreenForLead(lead, fromFollowup: true);
@@ -5950,6 +6007,34 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
             color: kOrange,
             icon: Icons.calendar_today_outlined,
           ),
+          if (_followupWarningSummary.warningCount > 0) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF0EC),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: kRed.withValues(alpha: 0.22)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.warning_amber_rounded, color: kRed),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '${_followupWarningSummary.warningCount} follow-up lead(s) are pending for ${_followupWarningSummary.warningDays}+ day(s). Open Follow Ups now.',
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w700,
+                        color: kPrimaryDark,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           ElevatedButton.icon(
             onPressed: () {
@@ -8446,10 +8531,12 @@ class FollowupQueuePage extends StatefulWidget {
   const FollowupQueuePage({
     super.key,
     required this.apiClient,
+    required this.initialWarningSummary,
     required this.onCall,
   });
 
   final ApiClient apiClient;
+  final FollowupWarningSummary initialWarningSummary;
   final Future<void> Function(LeadItem lead) onCall;
 
   @override
@@ -8458,12 +8545,14 @@ class FollowupQueuePage extends StatefulWidget {
 
 class _FollowupQueuePageState extends State<FollowupQueuePage> {
   List<LeadItem> _rows = const [];
+  FollowupWarningSummary _warningSummary = const FollowupWarningSummary();
   bool _isLoading = true;
   String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
+    _warningSummary = widget.initialWarningSummary;
     _loadFollowups();
   }
 
@@ -8475,12 +8564,13 @@ class _FollowupQueuePageState extends State<FollowupQueuePage> {
       });
     }
     try {
-      final rows = await widget.apiClient.fetchFollowups();
+      final payload = await widget.apiClient.fetchFollowups();
       if (!mounted) {
         return;
       }
       setState(() {
-        _rows = rows;
+        _rows = payload.followups;
+        _warningSummary = payload.warningSummary;
         _isLoading = false;
         _errorMessage = null;
       });
@@ -8516,6 +8606,34 @@ class _FollowupQueuePageState extends State<FollowupQueuePage> {
                     : '${_rows.length} follow-up(s) are saved here. Scheduled ones are highlighted once their date starts.',
                 style: const TextStyle(fontSize: 16.5, color: Colors.black54),
               ),
+              if (_warningSummary.warningCount > 0) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF0EC),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: kRed.withValues(alpha: 0.22)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: kRed),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '${_warningSummary.warningCount} follow-up lead(s) are pending for ${_warningSummary.warningDays}+ day(s). Prioritize these calls first.',
+                          style: const TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w700,
+                            color: kPrimaryDark,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               if (_errorMessage != null) ...[
                 const SizedBox(height: 12),
                 Container(
@@ -8552,13 +8670,17 @@ class _FollowupQueuePageState extends State<FollowupQueuePage> {
                     child: Container(
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                        color: lead.isDueNow
-                            ? const Color(0xFFFFF6EA)
-                            : Colors.white,
+                        color: lead.followupWarningDue
+                            ? const Color(0xFFFFF1ED)
+                            : (lead.isDueNow
+                                  ? const Color(0xFFFFF6EA)
+                                  : Colors.white),
                         borderRadius: BorderRadius.circular(24),
-                        border: lead.isDueNow
-                            ? Border.all(color: kOrange.withValues(alpha: 0.32))
-                            : null,
+                        border: lead.followupWarningDue
+                            ? Border.all(color: kRed.withValues(alpha: 0.28))
+                            : (lead.isDueNow
+                                  ? Border.all(color: kOrange.withValues(alpha: 0.32))
+                                  : null),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -8593,7 +8715,9 @@ class _FollowupQueuePageState extends State<FollowupQueuePage> {
                                 ),
                               ),
                               StatusPill(
-                                label: lead.isDueNow ? 'Due now' : 'Scheduled',
+                                label: lead.followupWarningDue
+                                    ? 'Expiring'
+                                    : (lead.isDueNow ? 'Due now' : 'Scheduled'),
                               ),
                             ],
                           ),
@@ -8607,6 +8731,28 @@ class _FollowupQueuePageState extends State<FollowupQueuePage> {
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
+                          ],
+                          if (lead.followupWarningDue) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              lead.followupWarningLabel.isNotEmpty
+                                  ? lead.followupWarningLabel
+                                  : 'Pending for ${lead.followupStaleDays} day(s). Call now.',
+                              style: const TextStyle(
+                                fontSize: 14.5,
+                                color: kRed,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (lead.daysToAutoExpiry != null)
+                              Text(
+                                'Auto-expiry in ${lead.daysToAutoExpiry} day(s).',
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  color: Colors.black54,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                           ],
                           const SizedBox(height: 10),
                           Wrap(
@@ -8629,6 +8775,40 @@ class _FollowupQueuePageState extends State<FollowupQueuePage> {
                                 ),
                                 child: Text(
                                   'Tries: ${lead.followupAttemptCount}/3',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: kPrimaryDark,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: kSoft,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  'Calls: ${lead.followupCallCount}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: kPrimaryDark,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: kSoft,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  'Work: ${lead.followupWorkLabel.isEmpty ? '0s' : lead.followupWorkLabel}',
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w700,
                                     color: kPrimaryDark,

@@ -849,6 +849,7 @@ class CompanyProfileSerializer(serializers.ModelSerializer):
             "hourly_call_bonus_rate",
             "followup_auto_expire_enabled",
             "followup_auto_expire_days",
+            "followup_staff_warning_days",
             "followup_uncalled_alert_enabled",
             "followup_uncalled_alert_hours",
             "work_review_zero_talk_attempt_threshold",
@@ -904,6 +905,7 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
             "hourly_call_bonus_rate",
             "followup_auto_expire_enabled",
             "followup_auto_expire_days",
+            "followup_staff_warning_days",
             "followup_uncalled_alert_enabled",
             "followup_uncalled_alert_hours",
             "work_review_zero_talk_attempt_threshold",
@@ -976,6 +978,16 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
         if expiry_days > 3650:
             raise serializers.ValidationError("Follow-up auto-expire days cannot exceed 3650.")
         return expiry_days
+
+    def validate_followup_staff_warning_days(self, value):
+        if value is None:
+            return value
+        warning_days = int(value)
+        if warning_days < 1:
+            raise serializers.ValidationError("Follow-up warning days must be at least 1.")
+        if warning_days > 3650:
+            raise serializers.ValidationError("Follow-up warning days cannot exceed 3650.")
+        return warning_days
 
     def validate_followup_uncalled_alert_hours(self, value):
         if value is None:

@@ -74,6 +74,7 @@ CALLBACK_EVENING_HOURS = range(16, 20)
 CALLBACK_NIGHT_HOURS = range(20, 24)
 FOLLOWUP_NO_RESPONSE_LIMIT = 3
 FOLLOWUP_STALE_EXPIRY_DAYS = 14
+FOLLOWUP_STAFF_WARNING_DAYS = 7
 FOLLOWUP_UNCALLED_ALERT_HOURS = 24
 FOLLOWUP_EXPIRED_SCORE_PENALTY_POINTS = 4
 FOLLOWUP_EXPIRED_SCORE_PENALTY_CAP = 24
@@ -3206,6 +3207,13 @@ def _followup_expiry_settings(*, company_profile=None):
         "expiry_days": max(
             1,
             int(getattr(profile, "followup_auto_expire_days", FOLLOWUP_STALE_EXPIRY_DAYS) or FOLLOWUP_STALE_EXPIRY_DAYS),
+        ),
+        "warning_days": max(
+            1,
+            int(
+                getattr(profile, "followup_staff_warning_days", FOLLOWUP_STAFF_WARNING_DAYS)
+                or FOLLOWUP_STAFF_WARNING_DAYS
+            ),
         ),
         "uncalled_alert_enabled": bool(getattr(profile, "followup_uncalled_alert_enabled", True)),
         "uncalled_alert_hours": max(
@@ -7221,6 +7229,7 @@ def build_followup_payload():
                 "lead_id",
                 "staff_id",
                 "status",
+                "duration_seconds",
                 "start_time",
                 "end_time",
                 "created_at",
@@ -7259,6 +7268,8 @@ def build_followup_payload():
     mark_statuses = {Call.Status.INTERESTED, Call.Status.CALL_BACK}
     uncalled_alert_enabled = bool(expiry_settings["uncalled_alert_enabled"])
     uncalled_alert_hours = max(1, int(expiry_settings["uncalled_alert_hours"] or 1))
+    warning_days = max(1, int(expiry_settings["warning_days"] or FOLLOWUP_STAFF_WARNING_DAYS))
+    call_status_labels = dict(Call.Status.choices)
 
     def _followup_mark_tracking(lead, call_rows):
         latest_mark_index = None
@@ -7320,6 +7331,34 @@ def build_followup_payload():
         is_unscheduled = not is_scheduled
         followup_progress = _followup_no_response_progress(lead, preloaded_rows=lead_call_rows)
         mark_tracking = _followup_mark_tracking(lead, lead_call_rows)
+        activity_anchor = lead.last_contacted_at or lead.updated_at or lead.created_at
+        days_since_update = max(
+            0,
+            (timezone.localdate(reference) - timezone.localdate(activity_anchor)).days,
+        )
+        is_warning_due = days_since_update >= warning_days
+        days_to_auto_expiry = max(0, int(expiry_settings["expiry_days"]) - days_since_update)
+        completed_owner_calls = [
+            row
+            for row in lead_call_rows
+            if row.get("status") != Call.Status.STARTED
+            and (
+                not owner_staff
+                or str(row.get("staff_id") or "") == str(owner_staff.id)
+            )
+        ]
+        followup_call_count = len(completed_owner_calls)
+        followup_work_seconds = sum(max(0, int(row.get("duration_seconds") or 0)) for row in completed_owner_calls)
+        recent_call_details = []
+        for call_row in completed_owner_calls[:3]:
+            call_stamp = _call_activity_stamp(call_row)
+            recent_call_details.append(
+                {
+                    "status_label": call_status_labels.get(call_row.get("status"), str(call_row.get("status") or "--")),
+                    "time_label": _format_datetime(call_stamp),
+                    "duration_label": _format_duration(call_row.get("duration_seconds") or 0),
+                }
+            )
         followup_attempt_count = followup_progress["attempt_count"]
         attempts_remaining = followup_progress["remaining"]
         can_close_as_no_response = followup_progress["can_close"]
@@ -7388,6 +7427,14 @@ def build_followup_payload():
                 "uncalled_state_tone": mark_tracking["state_tone"],
                 "followup_marked_at": _format_datetime(mark_tracking["latest_mark_at"]),
                 "followup_mark_due_at": _format_datetime(mark_tracking["due_at"]),
+                "days_since_followup_update": days_since_update,
+                "is_warning_due": is_warning_due,
+                "warning_days": warning_days,
+                "days_to_auto_expiry": days_to_auto_expiry,
+                "followup_call_count": followup_call_count,
+                "followup_work_seconds": followup_work_seconds,
+                "followup_work_label": _format_duration(followup_work_seconds),
+                "recent_call_details": recent_call_details,
             }
         )
 
@@ -7525,6 +7572,7 @@ def build_followup_payload():
     uncalled_after_mark_count = sum(1 for row in followup_rows if row["is_uncalled_after_mark"])
     uncalled_overdue_count = sum(1 for row in followup_rows if row["is_uncalled_overdue"])
     uncalled_waiting_count = max(uncalled_after_mark_count - uncalled_overdue_count, 0)
+    warning_due_count = sum(1 for row in followup_rows if row["is_warning_due"])
 
     performance_by_staff = {}
     for staff in _staff_queryset().filter(is_active=True):
@@ -7692,10 +7740,12 @@ def build_followup_payload():
             "uncalled_after_mark_count": uncalled_after_mark_count,
             "uncalled_waiting_count": uncalled_waiting_count,
             "uncalled_overdue_count": uncalled_overdue_count,
+            "warning_due_count": warning_due_count,
         },
         "followup_expiry_settings": {
             "enabled": expiry_settings["enabled"],
             "expiry_days": expiry_settings["expiry_days"],
+            "warning_days": expiry_settings["warning_days"],
             "uncalled_alert_enabled": expiry_settings["uncalled_alert_enabled"],
             "uncalled_alert_hours": expiry_settings["uncalled_alert_hours"],
         },
@@ -8852,9 +8902,16 @@ def build_staff_today_payload(staff):
 
 
 def build_staff_followups_payload(staff):
-    expire_stale_followups()
+    company_profile = get_company_profile()
+    expiry_settings = _followup_expiry_settings(company_profile=company_profile)
+    expire_stale_followups(
+        company_profile=company_profile,
+        enabled=expiry_settings["enabled"],
+        expiry_days=expiry_settings["expiry_days"],
+    )
     now = timezone.now()
-    followups = (
+    warning_days = max(1, int(expiry_settings["warning_days"] or FOLLOWUP_STAFF_WARNING_DAYS))
+    followups = list(
         Lead.objects.select_related("assigned_to")
         .filter(
             assigned_to=staff,
@@ -8862,12 +8919,56 @@ def build_staff_followups_payload(staff):
         )
         .order_by("callback_date", "callback_window", "-updated_at", "-last_contacted_at")
     )
+    lead_ids = [lead.id for lead in followups]
+    call_rows_by_lead = defaultdict(list)
+    if lead_ids:
+        call_rows = (
+            Call.objects.filter(lead_id__in=lead_ids, staff=staff)
+            .values(
+                "id",
+                "lead_id",
+                "staff_id",
+                "status",
+                "duration_seconds",
+                "start_time",
+                "end_time",
+                "created_at",
+            )
+            .order_by("lead_id", "-start_time", "-created_at")
+        )
+        for row in call_rows:
+            call_rows_by_lead[row["lead_id"]].append(row)
+
     rows = []
+    warning_count = 0
+    oldest_warning_days = 0
     for lead in followups:
-        followup_progress = _followup_no_response_progress(lead, staff=staff)
+        lead_call_rows = call_rows_by_lead.get(lead.id, [])
+        followup_progress = _followup_no_response_progress(
+            lead,
+            staff=staff,
+            preloaded_rows=lead_call_rows,
+        )
         no_answer_attempt_count = followup_progress["attempt_count"]
         is_scheduled_followup = _is_scheduled_followup(lead)
         is_due_now = _is_followup_highlighted(lead, now=now) if is_scheduled_followup else False
+        activity_anchor = lead.last_contacted_at or lead.updated_at or lead.created_at
+        days_since_update = max(
+            0,
+            (timezone.localdate(now) - timezone.localdate(activity_anchor)).days,
+        )
+        is_warning_due = days_since_update >= warning_days
+        if is_warning_due:
+            warning_count += 1
+            oldest_warning_days = max(oldest_warning_days, days_since_update)
+        days_to_auto_expiry = max(0, int(expiry_settings["expiry_days"]) - days_since_update)
+        completed_staff_calls = [
+            row for row in lead_call_rows if row.get("status") != Call.Status.STARTED
+        ]
+        followup_work_seconds = sum(
+            max(0, int(row.get("duration_seconds") or 0)) for row in completed_staff_calls
+        )
+
         rows.append(
             {
                 "id": str(lead.id),
@@ -8893,10 +8994,25 @@ def build_staff_followups_payload(staff):
                 "followup_attempt_unique_dates": followup_progress["unique_date_count"],
                 "followup_attempt_unique_times": followup_progress["unique_time_count"],
                 "is_scheduled_followup": is_scheduled_followup,
+                "followup_warning_due": is_warning_due,
+                "followup_warning_days": warning_days,
+                "followup_stale_days": days_since_update,
+                "followup_warning_label": (
+                    f"Pending for {days_since_update} day(s). Call now."
+                    if is_warning_due
+                    else ""
+                ),
+                "days_to_auto_expiry": (
+                    days_to_auto_expiry if expiry_settings["enabled"] else None
+                ),
+                "followup_work_seconds": followup_work_seconds,
+                "followup_work_label": _format_duration(followup_work_seconds),
+                "followup_call_count": len(completed_staff_calls),
             }
         )
     rows.sort(
         key=lambda row: (
+            0 if row["followup_warning_due"] else 1,
             0 if row["is_due_now"] else 1,
             0 if row["is_scheduled_followup"] else 1,
             row["callback_date"] or "9999-12-31",
@@ -8904,7 +9020,27 @@ def build_staff_followups_payload(staff):
             row["updated_at"],
         )
     )
-    return {"followups": rows}
+    return {
+        "followups": rows,
+        "warning_summary": {
+            "warning_days": warning_days,
+            "warning_count": warning_count,
+            "oldest_warning_days": oldest_warning_days,
+            "popup_required": warning_count > 0,
+            "title": "Follow-up calls pending",
+            "message": (
+                f"{warning_count} follow-up lead(s) have been pending for {warning_days} day(s) or more. "
+                "Open Follow Ups now and complete those calls."
+                if warning_count > 0
+                else "No pending follow-up warning items right now."
+            ),
+        },
+        "followup_settings": {
+            "auto_expire_enabled": bool(expiry_settings["enabled"]),
+            "auto_expire_days": int(expiry_settings["expiry_days"]),
+            "warning_days": warning_days,
+        },
+    }
 
 
 def save_interested_lead_detail(
