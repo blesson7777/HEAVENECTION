@@ -2362,6 +2362,27 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     await _loadDashboardData(showLoader: false, promptTrainingGate: false);
   }
 
+  String _normalizeWhatsappPhoneForChat(String rawPhone) {
+    final digitsOnly = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digitsOnly.length == 10) {
+      return '91$digitsOnly';
+    }
+    return digitsOnly;
+  }
+
+  Future<void> _openWhatsappChatForLead(LeadItem lead) async {
+    final phone = _normalizeWhatsappPhoneForChat(lead.phone);
+    if (phone.isEmpty) {
+      _showMessage('Phone number is not valid for WhatsApp chat.', isError: true);
+      return;
+    }
+    final uri = Uri.parse('https://wa.me/$phone');
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened) {
+      _showMessage('Could not open WhatsApp chat.', isError: true);
+    }
+  }
+
   Future<bool> _submitInterestedLeadDetail({
     required String callId,
     required String customerName,
@@ -5653,7 +5674,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
               if (_tab == 1)
                 IconButton(
                   onPressed: _openCustomerRecoveryPage,
-                  icon: const Icon(Icons.person_search),
+                  icon: const Icon(Icons.search),
                   tooltip: 'Search previous customer',
                 ),
               IconButton(
@@ -6292,10 +6313,43 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
                       ),
                     ],
                     const SizedBox(height: 14),
-                    ElevatedButton.icon(
-                      onPressed: () => _openCallScreenForLead(i),
-                      icon: const Icon(Icons.call),
-                      label: const Text('Open Call Screen'),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: () => _openCallScreenForLead(i),
+                            icon: const Icon(Icons.call),
+                            label: const Text('Open Call Screen'),
+                          ),
+                        ),
+                        if (_isFollowupLeadItem(_leads[i])) ...[
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () =>
+                                  _openWhatsappChatForLead(_leads[i]),
+                              icon: Container(
+                                width: 20,
+                                height: 20,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF25D366),
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                alignment: Alignment.center,
+                                child: const Text(
+                                  'WA',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              label: const Text('WhatsApp'),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
