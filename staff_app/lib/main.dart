@@ -100,13 +100,10 @@ class HeavenectionApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: kBrandName,
       builder: (context, child) {
-        if (child == null) {
-          return const SizedBox.shrink();
-        }
-        return Overlay(
-          initialEntries: [
-            OverlayEntry(builder: (_) => child),
-            OverlayEntry(builder: (_) => const AppNotificationOverlay()),
+        return Stack(
+          children: [
+            child ?? const SizedBox.shrink(),
+            const AppNotificationOverlay(),
           ],
         );
       },
