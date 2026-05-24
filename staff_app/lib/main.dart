@@ -3167,8 +3167,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   }
 
   Future<void> _openChangePasswordDialog() async {
-    final profile = _profile;
-    if (profile == null || !mounted) {
+    if (_profile == null || !mounted) {
       return;
     }
 
@@ -3181,190 +3180,174 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     var isNewPasswordVisible = false;
     var isConfirmPasswordVisible = false;
 
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            Future<void> submitPassword() async {
-              final currentPassword = currentPasswordController.text.trim();
-              final newPassword = newPasswordController.text.trim();
-              final confirmPassword = confirmPasswordController.text.trim();
+    try {
+      final changed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              Future<void> submitPassword() async {
+                final currentPassword = currentPasswordController.text.trim();
+                final newPassword = newPasswordController.text.trim();
+                final confirmPassword = confirmPasswordController.text.trim();
 
-              if (currentPassword.isEmpty ||
-                  newPassword.isEmpty ||
-                  confirmPassword.isEmpty) {
+                if (currentPassword.isEmpty ||
+                    newPassword.isEmpty ||
+                    confirmPassword.isEmpty) {
+                  setDialogState(() {
+                    errorText = 'Enter the current, new, and confirm password.';
+                  });
+                  return;
+                }
+                if (newPassword != confirmPassword) {
+                  setDialogState(() {
+                    errorText =
+                        'New password and confirm password must match.';
+                  });
+                  return;
+                }
+
                 setDialogState(() {
-                  errorText = 'Enter the current, new, and confirm password.';
+                  errorText = null;
+                  isSubmitting = true;
                 });
-                return;
-              }
-              if (newPassword != confirmPassword) {
-                setDialogState(() {
-                  errorText = 'New password and confirm password must match.';
-                });
-                return;
-              }
 
-              setDialogState(() {
-                errorText = null;
-                isSubmitting = true;
-              });
+                final updated = await _saveProfile(
+                  currentPassword: currentPassword,
+                  newPassword: newPassword,
+                  showSuccessMessage: false,
+                );
 
-              final changed = await _saveProfile(
-                currentPassword: currentPassword,
-                newPassword: newPassword,
-                showSuccessMessage: false,
-              );
-
-              if (!mounted) {
-                return;
-              }
-              if (!dialogContext.mounted) {
-                return;
+                if (!mounted || !dialogContext.mounted) {
+                  return;
+                }
+                if (!updated) {
+                  setDialogState(() => isSubmitting = false);
+                  return;
+                }
+                Navigator.of(dialogContext).pop(true);
               }
 
-              setDialogState(() => isSubmitting = false);
-              if (!changed) {
-                return;
-              }
-
-              Navigator.of(dialogContext).pop();
-              await showDialog<void>(
-                context: context,
-                builder: (successContext) {
-                  return AlertDialog(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    title: const Text('Password Updated'),
-                    content: const Text(
-                      'Your password was changed successfully.',
-                    ),
-                    actions: [
-                      ElevatedButton(
-                        onPressed: () => Navigator.of(successContext).pop(),
-                        child: const Text('OK'),
+              return AlertDialog(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                title: const Text('Change Password'),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Enter your current password and choose a new one.',
+                        style: TextStyle(fontSize: 14.5, color: Colors.black54),
                       ),
-                    ],
-                  );
-                },
-              );
-            }
-
-            return AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              title: const Text('Change Password'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Enter your current password and choose a new one.',
-                      style: TextStyle(fontSize: 14.5, color: Colors.black54),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: currentPasswordController,
-                      obscureText: !isCurrentPasswordVisible,
-                      decoration: InputDecoration(
-                        labelText: 'Current Password',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          onPressed: () {
-                            setDialogState(() {
-                              isCurrentPasswordVisible =
-                                  !isCurrentPasswordVisible;
-                            });
-                          },
-                          icon: Icon(
-                            isCurrentPasswordVisible
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: currentPasswordController,
+                        obscureText: !isCurrentPasswordVisible,
+                        decoration: InputDecoration(
+                          labelText: 'Current Password',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            onPressed: () {
+                              setDialogState(() {
+                                isCurrentPasswordVisible =
+                                    !isCurrentPasswordVisible;
+                              });
+                            },
+                            icon: Icon(
+                              isCurrentPasswordVisible
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: newPasswordController,
-                      obscureText: !isNewPasswordVisible,
-                      decoration: InputDecoration(
-                        labelText: 'New Password',
-                        prefixIcon: const Icon(Icons.lock_reset_outlined),
-                        suffixIcon: IconButton(
-                          onPressed: () {
-                            setDialogState(() {
-                              isNewPasswordVisible = !isNewPasswordVisible;
-                            });
-                          },
-                          icon: Icon(
-                            isNewPasswordVisible
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: confirmPasswordController,
-                      obscureText: !isConfirmPasswordVisible,
-                      decoration: InputDecoration(
-                        labelText: 'Confirm New Password',
-                        prefixIcon: const Icon(Icons.verified_outlined),
-                        suffixIcon: IconButton(
-                          onPressed: () {
-                            setDialogState(() {
-                              isConfirmPasswordVisible =
-                                  !isConfirmPasswordVisible;
-                            });
-                          },
-                          icon: Icon(
-                            isConfirmPasswordVisible
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (errorText != null) ...[
                       const SizedBox(height: 12),
-                      Text(
-                        errorText!,
-                        style: const TextStyle(
-                          color: kRed,
-                          fontWeight: FontWeight.w700,
+                      TextField(
+                        controller: newPasswordController,
+                        obscureText: !isNewPasswordVisible,
+                        decoration: InputDecoration(
+                          labelText: 'New Password',
+                          prefixIcon: const Icon(Icons.lock_reset_outlined),
+                          suffixIcon: IconButton(
+                            onPressed: () {
+                              setDialogState(() {
+                                isNewPasswordVisible = !isNewPasswordVisible;
+                              });
+                            },
+                            icon: Icon(
+                              isNewPasswordVisible
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
+                          ),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: confirmPasswordController,
+                        obscureText: !isConfirmPasswordVisible,
+                        decoration: InputDecoration(
+                          labelText: 'Confirm New Password',
+                          prefixIcon: const Icon(Icons.verified_outlined),
+                          suffixIcon: IconButton(
+                            onPressed: () {
+                              setDialogState(() {
+                                isConfirmPasswordVisible =
+                                    !isConfirmPasswordVisible;
+                              });
+                            },
+                            icon: Icon(
+                              isConfirmPasswordVisible
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (errorText != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          errorText!,
+                          style: const TextStyle(
+                            color: kRed,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: isSubmitting
-                      ? null
-                      : () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: isSubmitting ? null : submitPassword,
-                  child: Text(isSubmitting ? 'Updating...' : 'Change Password'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
+                actions: [
+                  TextButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () => Navigator.of(dialogContext).pop(false),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: isSubmitting ? null : submitPassword,
+                    child: Text(
+                      isSubmitting ? 'Updating...' : 'Change Password',
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
 
-    currentPasswordController.dispose();
-    newPasswordController.dispose();
-    confirmPasswordController.dispose();
+      if (changed == true && mounted) {
+        _showMessage('Your password was changed successfully.');
+      }
+    } finally {
+      currentPasswordController.dispose();
+      newPasswordController.dispose();
+      confirmPasswordController.dispose();
+    }
   }
 
   Future<void> _openReferralDialog() async {
