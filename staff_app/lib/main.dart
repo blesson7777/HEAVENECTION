@@ -254,6 +254,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   bool _hasConnection = true;
   bool _isLoginPasswordVisible = false;
   Timer? _networkErrorTimer;
+  Timer? _appUpdateDownloadMonitorTimer;
   DateTime? _lastActiveCallAutoCheckAt;
   String? _pendingNetworkErrorMessage;
   AppUpdateInfo? _pendingAppUpdate;
@@ -298,6 +299,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _idleMonitorTimer?.cancel();
     _syncSolveCountdownTimer?.cancel();
     _networkErrorTimer?.cancel();
+    _appUpdateDownloadMonitorTimer?.cancel();
     _connectivitySubscription?.cancel();
     SystemChrome.setPreferredOrientations(DeviceOrientation.values);
     super.dispose();
@@ -316,6 +318,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       if (_pendingNetworkErrorMessage != null && !_hasConnection) {
         _scheduleNetworkError(_pendingNetworkErrorMessage!);
       }
+      unawaited(_syncPendingUpdateDownloadIfNeeded());
       unawaited(_handleResumeState());
     } else if (_isBackgroundState(state)) {
       _notificationPollTimer?.cancel();
@@ -1881,24 +1884,97 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     await _showAppUpdatePrompt(update);
   }
 
-  Future<bool> _hasDownloadedAppUpdate(AppUpdateInfo update) async {
+  Future<Map<String, dynamic>> _readDownloadedAppUpdateStatus(
+    AppUpdateInfo update,
+  ) async {
     try {
-      final payload =
-          await _updaterChannel.invokeMapMethod<String, dynamic>(
-            'getDownloadedUpdateStatus',
-            <String, dynamic>{'versionCode': update.versionCode},
-          ) ??
-          const <String, dynamic>{};
-      return payload['isDownloaded'] == true;
+      return Map<String, dynamic>.from(
+        await _updaterChannel.invokeMapMethod<String, dynamic>(
+              'getDownloadedUpdateStatus',
+              <String, dynamic>{'versionCode': update.versionCode},
+            ) ??
+            const <String, dynamic>{},
+      );
     } on MissingPluginException {
-      return false;
+      return const <String, dynamic>{};
     } on PlatformException {
-      return false;
+      return const <String, dynamic>{};
     }
+  }
+
+  Future<void> _syncPendingUpdateDownloadIfNeeded() async {
+    final update = _pendingAppUpdate;
+    if (update == null || _user == null || !mounted) {
+      return;
+    }
+    await _checkDownloadedUpdateProgress(update, reopenPromptOnReady: false);
+  }
+
+  void _stopAppUpdateDownloadMonitor() {
+    _appUpdateDownloadMonitorTimer?.cancel();
+    _appUpdateDownloadMonitorTimer = null;
+  }
+
+  void _startAppUpdateDownloadMonitor(AppUpdateInfo update) {
+    _stopAppUpdateDownloadMonitor();
+    _appUpdateDownloadMonitorTimer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) {
+        unawaited(
+          _checkDownloadedUpdateProgress(update, reopenPromptOnReady: true),
+        );
+      },
+    );
+  }
+
+  Future<void> _checkDownloadedUpdateProgress(
+    AppUpdateInfo update, {
+    required bool reopenPromptOnReady,
+  }) async {
+    final activeUpdate = _pendingAppUpdate;
+    if (activeUpdate == null ||
+        activeUpdate.versionCode != update.versionCode) {
+      _stopAppUpdateDownloadMonitor();
+      return;
+    }
+    final status = await _readDownloadedAppUpdateStatus(update);
+    if (!mounted) {
+      return;
+    }
+    if (status['isDownloaded'] == true) {
+      _stopAppUpdateDownloadMonitor();
+      _isDownloadingUpdate = false;
+      if (!_isUpdateDialogVisible &&
+          reopenPromptOnReady &&
+          _lifecycleState == AppLifecycleState.resumed) {
+        _showMessage('Update file downloaded. Please install to continue.');
+        unawaited(_showAppUpdatePrompt(update));
+      }
+      return;
+    }
+    if (status['hasFailed'] == true) {
+      _stopAppUpdateDownloadMonitor();
+      _isDownloadingUpdate = false;
+      _showMessage(
+        status['message']?.toString() ?? 'Update download failed.',
+        isError: true,
+      );
+      return;
+    }
+    if (status['isDownloading'] != true) {
+      _stopAppUpdateDownloadMonitor();
+      _isDownloadingUpdate = false;
+    }
+  }
+
+  Future<bool> _hasDownloadedAppUpdate(AppUpdateInfo update) async {
+    final status = await _readDownloadedAppUpdateStatus(update);
+    return status['isDownloaded'] == true;
   }
 
   Future<bool> _installDownloadedAppUpdate(AppUpdateInfo update) async {
     try {
+      _stopAppUpdateDownloadMonitor();
       final response =
           await _updaterChannel.invokeMapMethod<String, dynamic>(
             'installDownloadedUpdate',
@@ -2175,6 +2251,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
           'Your phone will guide you through the update once the file is ready.';
       if (status == 'started') {
         _showMessage(message);
+        _startAppUpdateDownloadMonitor(update);
         return true;
       }
       _showMessage(message, isError: true);
@@ -2192,7 +2269,9 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
       );
       return false;
     } finally {
-      _isDownloadingUpdate = false;
+      if (_appUpdateDownloadMonitorTimer == null) {
+        _isDownloadingUpdate = false;
+      }
     }
   }
 
@@ -2374,7 +2453,10 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
   Future<void> _openWhatsappChatForLead(LeadItem lead) async {
     final phone = _normalizeWhatsappPhoneForChat(lead.phone);
     if (phone.isEmpty) {
-      _showMessage('Phone number is not valid for WhatsApp chat.', isError: true);
+      _showMessage(
+        'Phone number is not valid for WhatsApp chat.',
+        isError: true,
+      );
       return;
     }
     final uri = Uri.parse('https://wa.me/$phone');
@@ -2524,6 +2606,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _heartbeatTimer?.cancel();
     _notificationPollTimer?.cancel();
     _idleMonitorTimer?.cancel();
+    _appUpdateDownloadMonitorTimer?.cancel();
     _dismissIdleWarning();
     _dismissPendingCallStatusPrompt();
     AppNotificationOverlayController.instance.clearAll();
@@ -2569,6 +2652,7 @@ class _HeavenectionHomeState extends State<HeavenectionHome>
     _heartbeatTimer?.cancel();
     _notificationPollTimer?.cancel();
     _idleMonitorTimer?.cancel();
+    _appUpdateDownloadMonitorTimer?.cancel();
     _dismissIdleWarning();
     _dismissPendingCallStatusPrompt();
     AppNotificationOverlayController.instance.clearAll();
@@ -8690,9 +8774,7 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kBg,
-      appBar: AppBar(
-        title: const Text('Change Password'),
-      ),
+      appBar: AppBar(title: const Text('Change Password')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
@@ -8733,7 +8815,9 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
                             onPressed: () {
-                              setState(() => _obscureCurrent = !_obscureCurrent);
+                              setState(
+                                () => _obscureCurrent = !_obscureCurrent,
+                              );
                             },
                             icon: Icon(
                               _obscureCurrent
@@ -8773,7 +8857,9 @@ class _ChangePasswordPageState extends State<_ChangePasswordPage> {
                           prefixIcon: const Icon(Icons.verified_user_outlined),
                           suffixIcon: IconButton(
                             onPressed: () {
-                              setState(() => _obscureConfirm = !_obscureConfirm);
+                              setState(
+                                () => _obscureConfirm = !_obscureConfirm,
+                              );
                             },
                             icon: Icon(
                               _obscureConfirm

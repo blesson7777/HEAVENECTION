@@ -22,6 +22,7 @@ import android.telephony.TelephonyManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
@@ -32,6 +33,7 @@ class MainActivity : FlutterActivity() {
     private var pendingDownloadId: Long? = null
     private var pendingInstallFilePath: String? = null
     private var pendingDownloadedVersionCode: Int? = null
+    private var pendingDownloadErrorMessage: String? = null
     private var isDownloadReceiverRegistered = false
     private var resumeInstallAfterSettings = false
     private var pendingPhoneStatePermissionResult: MethodChannel.Result? = null
@@ -161,37 +163,65 @@ class MainActivity : FlutterActivity() {
             targetFile.delete()
         }
 
-        val downloadManager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
-        pendingDownloadId?.let { existingDownloadId ->
-            downloadManager.remove(existingDownloadId)
-        }
+        try {
+            val parsedUrl = Uri.parse(url)
+            if (parsedUrl.scheme.isNullOrBlank()) {
+                result.success(
+                    mapOf(
+                        "status" to "error",
+                        "message" to "The update link is not valid.",
+                    ),
+                )
+                return
+            }
 
-        val request = DownloadManager.Request(Uri.parse(url)).apply {
-            setTitle(title)
-            setDescription(description)
-            setMimeType(APK_MIME_TYPE)
-            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            setAllowedOverMetered(true)
-            setAllowedOverRoaming(true)
-            setDestinationInExternalFilesDir(
-                this@MainActivity,
-                Environment.DIRECTORY_DOWNLOADS,
-                fileName,
+            val downloadManager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
+            pendingDownloadId?.let { existingDownloadId ->
+                downloadManager.remove(existingDownloadId)
+            }
+
+            val request = DownloadManager.Request(parsedUrl).apply {
+                setTitle(title)
+                setDescription(description)
+                setMimeType(APK_MIME_TYPE)
+                setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                setAllowedOverMetered(true)
+                setAllowedOverRoaming(true)
+                setDestinationInExternalFilesDir(
+                    this@MainActivity,
+                    Environment.DIRECTORY_DOWNLOADS,
+                    fileName,
+                )
+            }
+
+            val downloadId = downloadManager.enqueue(request)
+            pendingDownloadId = downloadId
+            pendingInstallFilePath = targetFile.absolutePath
+            pendingDownloadedVersionCode = versionCode
+            pendingDownloadErrorMessage = null
+            persistPendingUpdate()
+            result.success(
+                mapOf(
+                    "status" to "started",
+                    "message" to "Update download started. Android will ask to install it when the APK is ready.",
+                    "downloadId" to downloadId,
+                ),
+            )
+        } catch (_: IllegalArgumentException) {
+            result.success(
+                mapOf(
+                    "status" to "error",
+                    "message" to "The update link is invalid.",
+                ),
+            )
+        } catch (_: SecurityException) {
+            result.success(
+                mapOf(
+                    "status" to "error",
+                    "message" to "Android blocked this download. Check app permissions and try again.",
+                ),
             )
         }
-
-        val downloadId = downloadManager.enqueue(request)
-        pendingDownloadId = downloadId
-        pendingInstallFilePath = targetFile.absolutePath
-        pendingDownloadedVersionCode = versionCode
-        persistPendingUpdate()
-        result.success(
-            mapOf(
-                "status" to "started",
-                "message" to "Update download started. Android will ask to install it when the APK is ready.",
-                "downloadId" to downloadId,
-            ),
-        )
     }
 
     private fun handlePhoneStatePermissionRequest(result: MethodChannel.Result) {
@@ -256,33 +286,34 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun handleCompletedDownload(downloadId: Long) {
-        val downloadManager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
-        val cursor = downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
-        cursor.use {
-            if (!it.moveToFirst()) {
-                pendingDownloadId = null
-                persistPendingUpdate()
-                return
-            }
-            val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-            if (status != DownloadManager.STATUS_SUCCESSFUL) {
-                clearPersistedPendingUpdate()
-                return
-            }
-            val localUriIndex = it.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
-            if (localUriIndex != -1) {
-                val localUriValue = it.getString(localUriIndex)
-                if (!localUriValue.isNullOrBlank()) {
-                    val parsedUri = Uri.parse(localUriValue)
-                    if (parsedUri.scheme == "file" && !parsedUri.path.isNullOrBlank()) {
-                        pendingInstallFilePath = parsedUri.path
-                    }
-                }
-            }
+        val snapshot = readDownloadSnapshot(downloadId)
+        if (snapshot == null) {
+            pendingDownloadId = null
+            persistPendingUpdate()
+            return
+        }
+        if (snapshot.status != DownloadManager.STATUS_SUCCESSFUL) {
+            pendingDownloadId = null
+            pendingInstallFilePath = null
+            pendingDownloadErrorMessage = downloadFailureMessage(snapshot.reason)
+            persistPendingUpdate()
+            return
+        }
+
+        val uriPath = snapshot.localUri?.let { localUri ->
+            val parsedUri = Uri.parse(localUri)
+            if (parsedUri.scheme == "file") parsedUri.path else null
+        }
+        if (!uriPath.isNullOrBlank()) {
+            pendingInstallFilePath = uriPath
         }
         pendingDownloadId = null
+        pendingDownloadErrorMessage = null
         persistPendingUpdate()
-        attemptInstallDownloadedApk()
+
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            attemptInstallDownloadedApk()
+        }
     }
 
     private fun attemptInstallDownloadedApk() {
@@ -326,7 +357,13 @@ class MainActivity : FlutterActivity() {
         } else {
             fallbackIntent
         }
-        startActivity(launchIntent)
+        try {
+            startActivity(launchIntent)
+        } catch (_: ActivityNotFoundException) {
+            // Install page is unavailable on this device right now.
+        } catch (_: SecurityException) {
+            // Android blocked this launch. Flutter side can ask user to retry from foreground.
+        }
     }
 
     private fun openUnknownAppSourcesSettings() {
@@ -486,6 +523,12 @@ class MainActivity : FlutterActivity() {
     private fun startInstallForDownloadedUpdate(): Map<String, Any> {
         val status = buildDownloadedUpdateStatus(null)
         if (status["isDownloaded"] != true) {
+            if (status["hasFailed"] == true) {
+                return mapOf(
+                    "status" to "error",
+                    "message" to (status["message"] ?: "Update download failed."),
+                )
+            }
             return mapOf(
                 "status" to "missing",
                 "message" to "The downloaded update file is no longer available on this device.",
@@ -503,17 +546,94 @@ class MainActivity : FlutterActivity() {
         val storedVersionCode = pendingDownloadedVersionCode ?: 0
         if (storedVersionCode > 0 && readInstalledVersionCode() >= storedVersionCode) {
             clearPersistedPendingUpdate()
-            return mapOf("isDownloaded" to false, "versionCode" to 0)
+            return mapOf(
+                "isDownloaded" to false,
+                "isDownloading" to false,
+                "hasFailed" to false,
+                "versionCode" to 0,
+            )
         }
 
         val matchesRequestedVersion =
             requestedVersionCode == null || requestedVersionCode <= 0 || requestedVersionCode == storedVersionCode
         if (!matchesRequestedVersion) {
-            return mapOf("isDownloaded" to false, "versionCode" to storedVersionCode)
+            return mapOf(
+                "isDownloaded" to false,
+                "isDownloading" to false,
+                "hasFailed" to false,
+                "versionCode" to storedVersionCode,
+            )
         }
 
-        if (pendingDownloadId != null && !isDownloadSuccessful(pendingDownloadId!!)) {
-            return mapOf("isDownloaded" to false, "versionCode" to storedVersionCode)
+        if (!pendingDownloadErrorMessage.isNullOrBlank()) {
+            return mapOf(
+                "isDownloaded" to false,
+                "isDownloading" to false,
+                "hasFailed" to true,
+                "message" to (pendingDownloadErrorMessage ?: "Update download failed."),
+                "versionCode" to storedVersionCode,
+            )
+        }
+
+        pendingDownloadId?.let { activeDownloadId ->
+            val snapshot = readDownloadSnapshot(activeDownloadId)
+            if (snapshot == null) {
+                pendingDownloadId = null
+                persistPendingUpdate()
+            } else {
+                when (snapshot.status) {
+                    DownloadManager.STATUS_SUCCESSFUL -> {
+                        val uriPath = snapshot.localUri?.let { localUri ->
+                            val parsedUri = Uri.parse(localUri)
+                            if (parsedUri.scheme == "file") parsedUri.path else null
+                        }
+                        if (!uriPath.isNullOrBlank()) {
+                            pendingInstallFilePath = uriPath
+                        }
+                        pendingDownloadId = null
+                        pendingDownloadErrorMessage = null
+                        persistPendingUpdate()
+                    }
+                    DownloadManager.STATUS_FAILED -> {
+                        pendingDownloadId = null
+                        pendingInstallFilePath = null
+                        pendingDownloadErrorMessage = downloadFailureMessage(snapshot.reason)
+                        persistPendingUpdate()
+                        return mapOf(
+                            "isDownloaded" to false,
+                            "isDownloading" to false,
+                            "hasFailed" to true,
+                            "message" to (pendingDownloadErrorMessage ?: "Update download failed."),
+                            "versionCode" to storedVersionCode,
+                            "downloadStatus" to snapshot.status,
+                            "downloadReason" to snapshot.reason,
+                        )
+                    }
+                    DownloadManager.STATUS_PENDING,
+                    DownloadManager.STATUS_RUNNING,
+                    DownloadManager.STATUS_PAUSED -> {
+                        return mapOf(
+                            "isDownloaded" to false,
+                            "isDownloading" to true,
+                            "hasFailed" to false,
+                            "message" to downloadProgressMessage(snapshot.status, snapshot.reason),
+                            "versionCode" to storedVersionCode,
+                            "downloadStatus" to snapshot.status,
+                            "downloadReason" to snapshot.reason,
+                        )
+                    }
+                    else -> {
+                        return mapOf(
+                            "isDownloaded" to false,
+                            "isDownloading" to false,
+                            "hasFailed" to false,
+                            "versionCode" to storedVersionCode,
+                            "downloadStatus" to snapshot.status,
+                            "downloadReason" to snapshot.reason,
+                        )
+                    }
+                }
+            }
         }
 
         val fileExists = !pendingInstallFilePath.isNullOrBlank() && File(pendingInstallFilePath!!).exists()
@@ -521,29 +641,68 @@ class MainActivity : FlutterActivity() {
             if (pendingDownloadId == null) {
                 clearPersistedPendingUpdate()
             }
-            return mapOf("isDownloaded" to false, "versionCode" to storedVersionCode)
+            return mapOf(
+                "isDownloaded" to false,
+                "isDownloading" to false,
+                "hasFailed" to false,
+                "versionCode" to storedVersionCode,
+            )
         }
 
-        if (pendingDownloadId != null) {
-            pendingDownloadId = null
-            persistPendingUpdate()
-        }
         return mapOf(
             "isDownloaded" to true,
+            "isDownloading" to false,
+            "hasFailed" to false,
             "versionCode" to storedVersionCode,
             "filePath" to (pendingInstallFilePath ?: ""),
         )
     }
 
-    private fun isDownloadSuccessful(downloadId: Long): Boolean {
+    private fun readDownloadSnapshot(downloadId: Long): DownloadSnapshot? {
         val downloadManager = getSystemService(DOWNLOAD_SERVICE) as DownloadManager
         val cursor = downloadManager.query(DownloadManager.Query().setFilterById(downloadId))
         cursor.use {
             if (!it.moveToFirst()) {
-                return false
+                return null
             }
             val status = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
-            return status == DownloadManager.STATUS_SUCCESSFUL
+            val reason = it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+            val localUriIndex = it.getColumnIndex(DownloadManager.COLUMN_LOCAL_URI)
+            val localUri = if (localUriIndex != -1) it.getString(localUriIndex) else null
+            return DownloadSnapshot(status = status, reason = reason, localUri = localUri)
+        }
+    }
+
+    private fun downloadProgressMessage(status: Int, reason: Int): String {
+        return when (status) {
+            DownloadManager.STATUS_PENDING -> "Waiting to start update download."
+            DownloadManager.STATUS_RUNNING -> "Update download is in progress."
+            DownloadManager.STATUS_PAUSED -> when (reason) {
+                DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "Waiting for internet to continue update download."
+                DownloadManager.PAUSED_WAITING_TO_RETRY -> "Retrying update download."
+                DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "Waiting for Wi-Fi to continue update download."
+                else -> "Update download is temporarily paused."
+            }
+            else -> "Preparing update download."
+        }
+    }
+
+    private fun downloadFailureMessage(reason: Int): String {
+        return when (reason) {
+            DownloadManager.ERROR_CANNOT_RESUME -> "Update download failed because Android cannot resume this file."
+            DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Update download failed because storage is not available."
+            DownloadManager.ERROR_FILE_ALREADY_EXISTS -> "Update file already exists. Please retry the update."
+            DownloadManager.ERROR_FILE_ERROR -> "Update download failed due to a file storage error."
+            DownloadManager.ERROR_HTTP_DATA_ERROR -> "Update download failed because of a server response error."
+            DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Update download failed because storage space is low."
+            DownloadManager.ERROR_TOO_MANY_REDIRECTS -> "Update download failed due to too many redirects."
+            DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "Update download failed because the server rejected the request."
+            DownloadManager.ERROR_UNKNOWN -> "Update download failed due to an unknown Android error."
+            else -> if (reason in 100..599) {
+                "Update download failed with server error $reason."
+            } else {
+                "Update download failed. Please check internet and retry."
+            }
         }
     }
 
@@ -553,6 +712,7 @@ class MainActivity : FlutterActivity() {
             .putLong(KEY_PENDING_DOWNLOAD_ID, pendingDownloadId ?: -1L)
             .putString(KEY_PENDING_FILE_PATH, pendingInstallFilePath)
             .putInt(KEY_PENDING_VERSION_CODE, pendingDownloadedVersionCode ?: 0)
+            .putString(KEY_PENDING_ERROR_MESSAGE, pendingDownloadErrorMessage)
             .apply()
     }
 
@@ -561,17 +721,20 @@ class MainActivity : FlutterActivity() {
         pendingDownloadId = preferences.getLong(KEY_PENDING_DOWNLOAD_ID, -1L).takeIf { it > 0L }
         pendingInstallFilePath = preferences.getString(KEY_PENDING_FILE_PATH, null)
         pendingDownloadedVersionCode = preferences.getInt(KEY_PENDING_VERSION_CODE, 0).takeIf { it > 0 }
+        pendingDownloadErrorMessage = preferences.getString(KEY_PENDING_ERROR_MESSAGE, null)
     }
 
     private fun clearPersistedPendingUpdate() {
         pendingDownloadId = null
         pendingInstallFilePath = null
         pendingDownloadedVersionCode = null
+        pendingDownloadErrorMessage = null
         updaterPreferences()
             .edit()
             .remove(KEY_PENDING_DOWNLOAD_ID)
             .remove(KEY_PENDING_FILE_PATH)
             .remove(KEY_PENDING_VERSION_CODE)
+            .remove(KEY_PENDING_ERROR_MESSAGE)
             .apply()
     }
 
@@ -680,6 +843,12 @@ class MainActivity : FlutterActivity() {
         return if (sanitized.endsWith(".apk", ignoreCase = true)) sanitized else "$sanitized.apk"
     }
 
+    private data class DownloadSnapshot(
+        val status: Int,
+        val reason: Int,
+        val localUri: String?,
+    )
+
     companion object {
         private const val CHANNEL_NAME = "heavenection/updater"
         private const val APK_MIME_TYPE = "application/vnd.android.package-archive"
@@ -687,6 +856,7 @@ class MainActivity : FlutterActivity() {
         private const val KEY_PENDING_DOWNLOAD_ID = "pending_download_id"
         private const val KEY_PENDING_FILE_PATH = "pending_file_path"
         private const val KEY_PENDING_VERSION_CODE = "pending_version_code"
+        private const val KEY_PENDING_ERROR_MESSAGE = "pending_error_message"
         private const val REQUEST_READ_PHONE_STATE_PERMISSION = 4201
         private const val REQUEST_REQUIRED_PERMISSIONS = 4202
     }
