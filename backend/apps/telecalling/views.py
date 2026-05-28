@@ -1158,6 +1158,21 @@ def staff_profile_page(request, staff_id):
 
             staff_errors = _normalize_errors(serializer.errors)
             messages.error(request, "Unable to change the staff account status.")
+        elif staff_action == "toggle_lead_intake":
+            desired_receives = request.POST.get("set_receives_new_leads") == "1"
+            serializer = UpdateStaffSerializer(staff, data={"receives_new_leads": desired_receives}, partial=True)
+            if serializer.is_valid():
+                staff = serializer.save()
+                if staff.receives_new_leads:
+                    messages.success(request, f"{staff.name} will receive new leads again.")
+                    if staff.is_active:
+                        auto_allocate_leads(target_staff=staff)
+                else:
+                    messages.success(request, f"{staff.name} will stay active, but new leads are paused.")
+                return redirect("staff-profile-page", staff_id=staff.id)
+
+            staff_errors = _normalize_errors(serializer.errors)
+            messages.error(request, "Unable to update lead intake control.")
         elif staff_action == "reassign_review_leads":
             summary = reassign_staff_review_leads(staff)
             if summary["review_count"] <= 0:

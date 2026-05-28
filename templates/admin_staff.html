@@ -249,6 +249,18 @@
                         <i class="bi {% if staff.is_active %}bi-pause-circle{% else %}bi-play-circle{% endif %}"></i>
                         <span>{% if staff.is_active %}Deactivate{% else %}Activate{% endif %}</span>
                     </button>
+                    {% if staff.is_active %}
+                    <button
+                        type="button"
+                        class="btn btn-sm {% if staff.receives_new_leads %}btn-outline-secondary{% else %}btn-outline-success{% endif %} js-toggle-staff-leads"
+                        data-staff-id="{{ staff.id }}"
+                        data-name="{{ staff.name }}"
+                        data-receives-new-leads="{% if staff.receives_new_leads %}true{% else %}false{% endif %}"
+                    >
+                        <i class="bi {% if staff.receives_new_leads %}bi-pause-circle{% else %}bi-play-circle{% endif %}"></i>
+                        <span>{% if staff.receives_new_leads %}Pause Leads{% else %}Resume Leads{% endif %}</span>
+                    </button>
+                    {% endif %}
                     <button type="button" class="btn btn-outline-danger btn-sm js-delete-staff" data-staff-id="{{ staff.id }}" data-name="{{ staff.name }}">
                         <i class="bi bi-trash3"></i>
                         <span>Delete</span>
@@ -310,11 +322,11 @@
                         <input class="form-check-input" type="checkbox" id="staffIsActive" checked>
                         <label class="form-check-label" for="staffIsActive">Active account</label>
                     </div>
-                    <div class="form-check mt-2">
-                        <input class="form-check-input" type="checkbox" id="staffReceivesNewLeads" checked>
-                        <label class="form-check-label" for="staffReceivesNewLeads">Receive new leads</label>
-                        <div class="form-text">Uncheck this to pause fresh lead assignment while keeping the staff account active.</div>
-                    </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" id="staffReceivesNewLeads" checked>
+                    <label class="form-check-label" for="staffReceivesNewLeads">Receive new leads</label>
+                    <div class="form-text">Uncheck this to pause fresh lead assignment while keeping the staff account active.</div>
+                </div>
                     <div id="staffFormFeedback" class="hc-form-feedback d-none mt-3"></div>
                     <div class="d-flex justify-content-end gap-2 mt-4">
                         <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>

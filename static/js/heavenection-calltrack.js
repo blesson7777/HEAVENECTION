@@ -167,6 +167,8 @@
             delete: '<i class="bi bi-trash3-fill"></i>',
             activate: '<i class="bi bi-play-circle-fill"></i>',
             deactivate: '<i class="bi bi-pause-circle-fill"></i>',
+            "pause-leads": '<i class="bi bi-pause-circle-fill"></i>',
+            "resume-leads": '<i class="bi bi-play-circle-fill"></i>',
             edit: '<i class="bi bi-pencil-square"></i>',
             profile: '<i class="bi bi-person-vcard-fill"></i>',
         }[actionType] || '<i class="bi bi-stars"></i>';
@@ -176,6 +178,8 @@
             delete: "Sending to bin",
             activate: "Waking account",
             deactivate: "Cooling account",
+            "pause-leads": "Pausing lead intake",
+            "resume-leads": "Resuming lead intake",
             edit: "Opening editor",
             profile: "Opening profile",
         }[actionType] || "Working";
@@ -537,6 +541,34 @@
                     await requestJson(`${config.teamMembersUrl}${staffId}/`, {
                         method: "PATCH",
                         body: JSON.stringify({ is_active: !isActive }),
+                    });
+                    window.location.reload();
+                } catch (error) {
+                    window.alert(error.message);
+                }
+            });
+        });
+
+        document.querySelectorAll(".js-toggle-staff-leads").forEach((button) => {
+            button.addEventListener("click", async () => {
+                const staffId = button.dataset.staffId;
+                const staffName = button.dataset.name || "this staff member";
+                const receivesNewLeads = button.dataset.receivesNewLeads === "true";
+                const confirmed = await confirmAction(
+                    `${receivesNewLeads ? "Pause" : "Resume"} new leads for ${staffName}?`,
+                    {
+                        title: `${receivesNewLeads ? "Pause" : "Resume"} lead intake`,
+                        confirmText: receivesNewLeads ? "Pause" : "Resume",
+                    }
+                );
+                if (!staffId || !confirmed) {
+                    return;
+                }
+                try {
+                    await playStaffActionAnimation(button, receivesNewLeads ? "pause-leads" : "resume-leads");
+                    await requestJson(`${config.teamMembersUrl}${staffId}/`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ receives_new_leads: !receivesNewLeads }),
                     });
                     window.location.reload();
                 } catch (error) {
