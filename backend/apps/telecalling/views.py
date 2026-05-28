@@ -3,13 +3,16 @@ import mimetypes
 from pathlib import Path
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
+from urllib.parse import urlencode
 
 from django.conf import settings
+from django.core.paginator import EmptyPage, Paginator
 from django.db.models import Count, Q
 from django.core.exceptions import ValidationError
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.contrib import messages
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
@@ -1987,16 +1990,17 @@ def followups_page(request):
             return redirect("followups-page")
         if followup_action == "reallocate_expired_followup":
             lead_id = (request.POST.get("lead_id") or "").strip()
+            return_query = _expired_followup_redirect_query(request)
             try:
                 summary = reallocate_expired_followup_to_owner(lead_id)
             except ValueError as error:
                 messages.error(request, str(error))
-                return redirect("expired-followups-page")
+                return redirect(reverse("expired-followups-page") + return_query)
             messages.success(
                 request,
                 f"{summary['lead_name']} moved back to the active queue under {summary['owner_name']}.",
             )
-            return redirect("expired-followups-page")
+            return redirect(reverse("expired-followups-page") + return_query)
         if followup_action == "mark_rejected":
             lead_id = (request.POST.get("lead_id") or "").strip()
             if not lead_id:
@@ -2159,11 +2163,64 @@ def callbacks_page(request):
     return redirect("followups-page")
 
 
+def _expired_followup_redirect_query(request):
+    query_params = {}
+    for key in ("page", "page_size", "sort_by", "sort_dir"):
+        value = (request.POST.get(f"return_{key}") or "").strip()
+        if value:
+            query_params[key] = value
+    return f"?{urlencode(query_params)}" if query_params else ""
+
+
 @require_GET
 def expired_followups_page(request):
     current_user = _get_admin_user_or_redirect(request)
     if not current_user:
         return redirect("web-login")
+
+    payload = build_followup_payload()
+    expired_rows = list(payload.get("expired_followup_rows", []))
+    try:
+        normalized_page_size = int(request.GET.get("page_size", 25) or 25)
+    except (TypeError, ValueError):
+        normalized_page_size = 25
+    normalized_page_size = max(10, min(normalized_page_size, 100))
+    normalized_sort_by = (request.GET.get("sort_by", "updated_at") or "updated_at").strip()
+    normalized_sort_dir = (request.GET.get("sort_dir", "desc") or "desc").strip().lower()
+    normalized_sort_dir = "asc" if normalized_sort_dir == "asc" else "desc"
+    valid_sort_fields = {"updated_at", "days_idle", "name", "phone", "assigned_to", "last_contacted"}
+    if normalized_sort_by not in valid_sort_fields:
+        normalized_sort_by = "updated_at"
+
+    reverse_sort = normalized_sort_dir == "desc"
+    if normalized_sort_by == "days_idle":
+        expired_rows.sort(key=lambda row: int(row.get("days_idle") or 0), reverse=reverse_sort)
+    elif normalized_sort_by == "name":
+        expired_rows.sort(key=lambda row: str(row.get("name") or "").lower(), reverse=reverse_sort)
+    elif normalized_sort_by == "phone":
+        expired_rows.sort(key=lambda row: str(row.get("phone") or ""), reverse=reverse_sort)
+    elif normalized_sort_by == "assigned_to":
+        expired_rows.sort(key=lambda row: str(row.get("assigned_to") or "").lower(), reverse=reverse_sort)
+    elif normalized_sort_by == "last_contacted":
+        expired_rows.sort(key=lambda row: str(row.get("last_contacted_sort") or ""), reverse=reverse_sort)
+    else:
+        expired_rows.sort(key=lambda row: str(row.get("updated_at_sort") or ""), reverse=reverse_sort)
+
+    paginator = Paginator(expired_rows, normalized_page_size)
+    try:
+        page_obj = paginator.page(request.GET.get("page", 1) or 1)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages or 1)
+
+    page_window = 2
+    start_page = max(1, page_obj.number - page_window)
+    end_page = min(paginator.num_pages or 1, page_obj.number + page_window)
+    base_query_params = [
+        ("page_size", str(normalized_page_size)),
+        ("sort_by", normalized_sort_by),
+        ("sort_dir", normalized_sort_dir),
+    ]
+    base_querystring = f"?{urlencode(base_query_params)}" if base_query_params else ""
 
     context = _admin_web_context(
         request,
@@ -2172,7 +2229,51 @@ def expired_followups_page(request):
         page_title="Expired Follow-Ups",
         page_heading="Expired Follow-Ups",
         page_subtitle="Review follow-up leads that aged out, then move them back to the active queue when needed.",
-        extra_context=build_followup_payload(),
+        extra_context={
+            **payload,
+            "expired_followup_rows": list(page_obj.object_list),
+            "expired_followup_filters": {
+                "page_size": normalized_page_size,
+                "sort_by": normalized_sort_by,
+                "sort_dir": normalized_sort_dir,
+            },
+            "expired_followup_filter_options": {
+                "sort_fields": [
+                    {"value": "updated_at", "label": "Updated time"},
+                    {"value": "days_idle", "label": "Days idle"},
+                    {"value": "name", "label": "Lead name"},
+                    {"value": "phone", "label": "Phone number"},
+                    {"value": "assigned_to", "label": "Last owner"},
+                    {"value": "last_contacted", "label": "Last contact"},
+                ],
+                "sort_directions": [
+                    {"value": "desc", "label": "Newest / highest first"},
+                    {"value": "asc", "label": "Oldest / lowest first"},
+                ],
+                "page_sizes": [
+                    {"value": 25, "label": "25 per page"},
+                    {"value": 50, "label": "50 per page"},
+                    {"value": 100, "label": "100 per page"},
+                ],
+            },
+            "expired_followup_pagination": {
+                "page_number": page_obj.number,
+                "num_pages": paginator.num_pages or 1,
+                "filtered_count": len(expired_rows),
+                "has_previous": page_obj.has_previous(),
+                "has_next": page_obj.has_next(),
+                "previous_page_number": page_obj.previous_page_number() if page_obj.has_previous() else 1,
+                "next_page_number": page_obj.next_page_number() if page_obj.has_next() else (paginator.num_pages or 1),
+                "start_index": page_obj.start_index() if expired_rows else 0,
+                "end_index": page_obj.end_index() if expired_rows else 0,
+                "page_numbers": [
+                    {"number": page_number, "is_current": page_number == page_obj.number}
+                    for page_number in range(start_page, end_page + 1)
+                ],
+                "base_querystring": base_querystring,
+            },
+            "expired_followup_return_query": reverse("expired-followups-page") + base_querystring,
+        },
     )
     return render(request, "admin_expired_followups.html", context)
 

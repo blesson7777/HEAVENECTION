@@ -53,6 +53,41 @@
         <input type="search" id="expiredFollowupSearchInput" placeholder="Search expired lead, phone, owner, or note">
     </div>
 
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-3">
+        <div class="text-muted small">
+            Showing {{ expired_followup_pagination.start_index }} to {{ expired_followup_pagination.end_index }} of {{ expired_followup_pagination.filtered_count }} expired lead(s).
+        </div>
+        <form method="get" action="{% url 'expired-followups-page' %}" class="row g-2 align-items-end">
+            <div class="col-6 col-lg-auto">
+                <label class="form-label fw-semibold" for="expiredFollowupSortBy">Sort by</label>
+                <select class="form-select form-select-sm" id="expiredFollowupSortBy" name="sort_by">
+                    {% for option in expired_followup_filter_options.sort_fields %}
+                    <option value="{{ option.value }}"{% if expired_followup_filters.sort_by == option.value %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-lg-auto">
+                <label class="form-label fw-semibold" for="expiredFollowupSortDir">Order</label>
+                <select class="form-select form-select-sm" id="expiredFollowupSortDir" name="sort_dir">
+                    {% for option in expired_followup_filter_options.sort_directions %}
+                    <option value="{{ option.value }}"{% if expired_followup_filters.sort_dir == option.value %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-lg-auto">
+                <label class="form-label fw-semibold" for="expiredFollowupPageSize">Page size</label>
+                <select class="form-select form-select-sm" id="expiredFollowupPageSize" name="page_size">
+                    {% for option in expired_followup_filter_options.page_sizes %}
+                    <option value="{{ option.value }}"{% if expired_followup_filters.page_size == option.value %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-lg-auto">
+                <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+            </div>
+        </form>
+    </div>
+
     <div class="table-responsive">
         <table class="table hc-table align-middle mb-0">
             <thead>
@@ -97,6 +132,10 @@
                             {% csrf_token %}
                             <input type="hidden" name="followup_action" value="reallocate_expired_followup">
                             <input type="hidden" name="lead_id" value="{{ row.id }}">
+                            <input type="hidden" name="return_page" value="{{ expired_followup_pagination.page_number }}">
+                            <input type="hidden" name="return_page_size" value="{{ expired_followup_filters.page_size }}">
+                            <input type="hidden" name="return_sort_by" value="{{ expired_followup_filters.sort_by }}">
+                            <input type="hidden" name="return_sort_dir" value="{{ expired_followup_filters.sort_dir }}">
                             <button type="submit" class="btn btn-sm btn-outline-warning">Move Back</button>
                         </form>
                         {% else %}
@@ -109,6 +148,27 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+
+    <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mt-3">
+        <div class="text-muted small">
+            Page {{ expired_followup_pagination.page_number }} of {{ expired_followup_pagination.num_pages }}
+        </div>
+        <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
+            {% if expired_followup_pagination.has_previous %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'expired-followups-page' %}{{ expired_followup_pagination.base_querystring }}&page={{ expired_followup_pagination.previous_page_number }}">Previous</a>
+            {% endif %}
+            {% for page_item in expired_followup_pagination.page_numbers %}
+            {% if page_item.is_current %}
+            <span class="btn btn-primary btn-sm disabled">{{ page_item.number }}</span>
+            {% else %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'expired-followups-page' %}{{ expired_followup_pagination.base_querystring }}&page={{ page_item.number }}">{{ page_item.number }}</a>
+            {% endif %}
+            {% endfor %}
+            {% if expired_followup_pagination.has_next %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'expired-followups-page' %}{{ expired_followup_pagination.base_querystring }}&page={{ expired_followup_pagination.next_page_number }}">Next</a>
+            {% endif %}
+        </div>
     </div>
 </section>
 {% endblock %}

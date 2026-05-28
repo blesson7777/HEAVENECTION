@@ -7975,6 +7975,7 @@ def build_followup_payload(*, paginate=False, page=1, page_size=25):
                 "assigned_to_phone": owner_staff.phone if owner_staff else "",
                 "notes": lead.notes,
                 "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
+                "last_contacted_sort": lead.last_contacted_at.isoformat() if lead.last_contacted_at else "",
                 "updated_at": _format_datetime(lead.updated_at),
                 "updated_at_sort": lead.updated_at.isoformat() if lead.updated_at else "",
                 "days_idle": days_idle,
