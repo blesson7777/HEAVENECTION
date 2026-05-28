@@ -95,6 +95,7 @@
                     <th>Lead</th>
                     <th>Last Owner</th>
                     <th>Idle</th>
+                    <th>Moved Back</th>
                     <th>Updated</th>
                     <th>Action</th>
                 </tr>
@@ -116,6 +117,9 @@
                     <td>
                         <div><strong>{{ row.days_idle }}</strong> days</div>
                         <div class="small text-muted">Last contact: {{ row.last_contacted }}</div>
+                    </td>
+                    <td>
+                        <div>{{ row.followup_moved_back_at }}</div>
                     </td>
                     <td>{{ row.updated_at }}</td>
                     <td>
@@ -144,7 +148,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="5" class="text-center py-4">No expired follow-up leads right now.</td></tr>
+                <tr><td colspan="6" class="text-center py-4">No expired follow-up leads right now.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

@@ -7979,6 +7979,8 @@ def build_followup_payload(*, paginate=False, page=1, page_size=25):
                 "notes": lead.notes,
                 "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
                 "last_contacted_sort": lead.last_contacted_at.isoformat() if lead.last_contacted_at else "",
+                "followup_moved_back_at": _format_datetime(lead.followup_moved_back_at, fallback="Not moved back yet"),
+                "followup_moved_back_sort": lead.followup_moved_back_at.isoformat() if lead.followup_moved_back_at else "",
                 "updated_at": _format_datetime(lead.updated_at),
                 "updated_at_sort": lead.updated_at.isoformat() if lead.updated_at else "",
                 "days_idle": days_idle,
