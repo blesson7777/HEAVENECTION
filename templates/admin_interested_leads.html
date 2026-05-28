@@ -10,7 +10,7 @@
     <div class="mf-db2-panel-head mb-3">
         <div>
             <span class="mf-db2-kicker">Interested Leads</span>
-            <h5>One simple list with success and unsuccess actions</h5>
+            <h5>Pending, successful, and unsuccessful leads in separate lists</h5>
         </div>
     </div>
 
@@ -73,7 +73,7 @@
         </div>
         <div class="col-xl-3 col-md-6">
             <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Still Open</span>
+                <span class="mf-db2-kicker">Pending</span>
                 <h3 class="mb-1">{{ interested_lead_summary.open_count }}</h3>
                 <p class="mb-0 text-muted">{{ interested_lead_summary.staff_count }} staff are holding these leads.</p>
             </div>
@@ -112,6 +112,15 @@
                 <option value="open"{% if interested_filter_outcome == "open" %} selected{% endif %}>Interested only</option>
                 <option value="successful"{% if interested_filter_outcome == "successful" %} selected{% endif %}>Successful only</option>
                 <option value="unsuccessful"{% if interested_filter_outcome == "unsuccessful" %} selected{% endif %}>Unsuccessful only</option>
+            </select>
+        </div>
+        <div class="col-xl-2 col-md-6">
+            <label class="form-label fw-semibold" for="interestedTrackerPageSize">Rows</label>
+            <select class="form-select" id="interestedTrackerPageSize" name="page_size">
+                <option value="10"{% if interested_page_size == 10 %} selected{% endif %}>10</option>
+                <option value="25"{% if interested_page_size == 25 %} selected{% endif %}>25</option>
+                <option value="50"{% if interested_page_size == 50 %} selected{% endif %}>50</option>
+                <option value="100"{% if interested_page_size == 100 %} selected{% endif %}>100</option>
             </select>
         </div>
         <div class="col-xl-1 col-md-6 d-grid">
@@ -167,96 +176,296 @@
     <div class="hc-surface-card border mb-4">
         <div class="mf-db2-panel-head mb-3">
             <div>
-                <span class="mf-db2-kicker">Interested List</span>
-                <h6 class="mb-0">Open leads and closed leads in one place</h6>
+                <span class="mf-db2-kicker">Pending Interested</span>
+                <h6 class="mb-0">Leads waiting for the next action</h6>
             </div>
         </div>
         <div class="table-responsive">
-        <table class="table hc-table align-middle mb-0">
-            <thead>
-                <tr>
-                    <th>Customer</th>
-                    <th>Product</th>
-                    <th>Preferred Call Time</th>
-                    <th>Notes</th>
-                    <th>Staff</th>
-                    <th>Outcome</th>
-                    <th>Reward</th>
-                    <th>Updated</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in interested_all_rows %}
-                <tr>
-                    <td>
-                        <strong>{{ row.customer_name }}</strong>
-                        <div class="small text-muted">{{ row.customer_phone }}</div>
-                        <div class="small text-muted">Tracked from {{ row.created_at }}</div>
-                    </td>
-                    <td>{{ row.product_enquired }}</td>
-                    <td>{{ row.preferred_call_time|default:"Not set" }}</td>
-                    <td>{{ row.enquiry_notes|default:"No notes" }}</td>
-                    <td>
-                        <strong>{{ row.staff_name }}</strong>
-                        <div class="small text-muted">{{ row.staff_phone }}</div>
-                    </td>
-                    <td>
-                        <span class="hc-status hc-status-{{ row.lead_status_tone }}">{{ row.lead_status_label }}</span>
-                    </td>
-                    <td>
-                        {% if row.reward_amount_label %}
-                        <span class="hc-status hc-status-success">{{ row.reward_amount_label }}</span>
-                        {% else %}
-                        <span class="small text-muted">--</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <div>{{ row.result_at }}</div>
-                        <div class="small text-muted">Lead {{ row.lead_id }}</div>
-                    </td>
-                    <td>
-                        <div class="d-flex gap-2 flex-wrap align-items-center">
-                            {% if row.lead_status == "not_interested" or row.lead_status == "no_answer" or row.lead_status == "expired_followup" %}
-                            <button
-                                type="button"
-                                class="btn btn-outline-warning btn-sm js-interested-recover"
-                                data-lead-id="{{ row.lead_id }}"
-                                data-lead-name="{{ row.customer_name }}"
-                            >Recover to Interested</button>
-                            {% endif %}
-                            <button
-                                type="button"
-                                class="btn btn-outline-dark btn-sm js-open-lead-route-map"
-                                data-lead-route-map-id="{{ row.lead_id }}"
-                                data-lead-route-map-name="{{ row.customer_name }}"
-                            >Lead Journey</button>
-                            {% if row.lead_status == "interested" %}
-                            <button
-                                type="button"
-                                class="btn btn-outline-success btn-sm js-interested-success"
-                                data-lead-id="{{ row.lead_id }}"
-                                data-lead-name="{{ row.customer_name }}"
-                            >Set Successful</button>
-                            <button
-                                type="button"
-                                class="btn btn-outline-secondary btn-sm js-interested-unsuccessful"
-                                data-lead-id="{{ row.lead_id }}"
-                                data-lead-name="{{ row.customer_name }}"
-                                data-current-status="{{ row.lead_status }}"
-                            >Set Unsuccessful</button>
+            <table class="table hc-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Customer</th>
+                        <th>Product</th>
+                        <th>Preferred Call Time</th>
+                        <th>Notes</th>
+                        <th>Staff</th>
+                        <th>Outcome</th>
+                        <th>Reward</th>
+                        <th>Updated</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in interested_pending_rows %}
+                    <tr>
+                        <td>
+                            <strong>{{ row.customer_name }}</strong>
+                            <div class="small text-muted">{{ row.customer_phone }}</div>
+                            <div class="small text-muted">Tracked from {{ row.created_at }}</div>
+                        </td>
+                        <td>{{ row.product_enquired }}</td>
+                        <td>{{ row.preferred_call_time|default:"Not set" }}</td>
+                        <td>{{ row.enquiry_notes|default:"No notes" }}</td>
+                        <td>
+                            <strong>{{ row.staff_name }}</strong>
+                            <div class="small text-muted">{{ row.staff_phone }}</div>
+                        </td>
+                        <td>
+                            <span class="hc-status hc-status-{{ row.lead_status_tone }}">{{ row.lead_status_label }}</span>
+                        </td>
+                        <td>
+                            {% if row.reward_amount_label %}
+                            <span class="hc-status hc-status-success">{{ row.reward_amount_label }}</span>
                             {% else %}
-                            <span class="small text-muted">Closed</span>
+                            <span class="small text-muted">--</span>
                             {% endif %}
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="9" class="text-center py-4">No interested leads match the current filter.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                        </td>
+                        <td>
+                            <div>{{ row.result_at }}</div>
+                            <div class="small text-muted">Lead {{ row.lead_id }}</div>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-2 flex-wrap align-items-center">
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-dark btn-sm js-open-lead-route-map"
+                                    data-lead-route-map-id="{{ row.lead_id }}"
+                                    data-lead-route-map-name="{{ row.customer_name }}"
+                                >Lead Journey</button>
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-success btn-sm js-interested-success"
+                                    data-lead-id="{{ row.lead_id }}"
+                                    data-lead-name="{{ row.customer_name }}"
+                                >Set Successful</button>
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-secondary btn-sm js-interested-unsuccessful"
+                                    data-lead-id="{{ row.lead_id }}"
+                                    data-lead-name="{{ row.customer_name }}"
+                                    data-current-status="{{ row.lead_status }}"
+                                >Set Unsuccessful</button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="9" class="text-center py-4">No pending interested leads match the current filter.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if interested_pending_pagination.num_pages > 1 %}
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-3">
+            <div class="small text-muted">
+                Showing {{ interested_pending_pagination.start_index }}-{{ interested_pending_pagination.end_index }} of {{ interested_pending_pagination.total_count }}
+            </div>
+            <nav aria-label="Pending interested pagination">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item{% if not interested_pending_pagination.has_previous %} disabled{% endif %}">
+                        <a class="page-link" href="{{ interested_pending_pagination.previous_url|default:'#' }}">Previous</a>
+                    </li>
+                    {% for page_link in interested_pending_pagination.page_links %}
+                    <li class="page-item{% if page_link.is_current %} active{% endif %}">
+                        <a class="page-link" href="{{ page_link.url }}">{{ page_link.number }}</a>
+                    </li>
+                    {% endfor %}
+                    <li class="page-item{% if not interested_pending_pagination.has_next %} disabled{% endif %}">
+                        <a class="page-link" href="{{ interested_pending_pagination.next_url|default:'#' }}">Next</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
     </div>
+
+    <div class="hc-surface-card border mb-4">
+        <div class="mf-db2-panel-head mb-3">
+            <div>
+                <span class="mf-db2-kicker">Successful</span>
+                <h6 class="mb-0">Converted interested leads</h6>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table hc-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Customer</th>
+                        <th>Product</th>
+                        <th>Preferred Call Time</th>
+                        <th>Notes</th>
+                        <th>Staff</th>
+                        <th>Outcome</th>
+                        <th>Reward</th>
+                        <th>Updated</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in interested_success_rows_page %}
+                    <tr>
+                        <td>
+                            <strong>{{ row.customer_name }}</strong>
+                            <div class="small text-muted">{{ row.customer_phone }}</div>
+                            <div class="small text-muted">Tracked from {{ row.created_at }}</div>
+                        </td>
+                        <td>{{ row.product_enquired }}</td>
+                        <td>{{ row.preferred_call_time|default:"Not set" }}</td>
+                        <td>{{ row.enquiry_notes|default:"No notes" }}</td>
+                        <td>
+                            <strong>{{ row.staff_name }}</strong>
+                            <div class="small text-muted">{{ row.staff_phone }}</div>
+                        </td>
+                        <td>
+                            <span class="hc-status hc-status-{{ row.lead_status_tone }}">{{ row.lead_status_label }}</span>
+                        </td>
+                        <td>
+                            {% if row.reward_amount_label %}
+                            <span class="hc-status hc-status-success">{{ row.reward_amount_label }}</span>
+                            {% else %}
+                            <span class="small text-muted">--</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div>{{ row.result_at }}</div>
+                            <div class="small text-muted">Lead {{ row.lead_id }}</div>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-2 flex-wrap align-items-center">
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-dark btn-sm js-open-lead-route-map"
+                                    data-lead-route-map-id="{{ row.lead_id }}"
+                                    data-lead-route-map-name="{{ row.customer_name }}"
+                                >Lead Journey</button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="9" class="text-center py-4">No successful interested leads match the current filter.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if interested_success_pagination.num_pages > 1 %}
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-3">
+            <div class="small text-muted">
+                Showing {{ interested_success_pagination.start_index }}-{{ interested_success_pagination.end_index }} of {{ interested_success_pagination.total_count }}
+            </div>
+            <nav aria-label="Successful interested pagination">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item{% if not interested_success_pagination.has_previous %} disabled{% endif %}">
+                        <a class="page-link" href="{{ interested_success_pagination.previous_url|default:'#' }}">Previous</a>
+                    </li>
+                    {% for page_link in interested_success_pagination.page_links %}
+                    <li class="page-item{% if page_link.is_current %} active{% endif %}">
+                        <a class="page-link" href="{{ page_link.url }}">{{ page_link.number }}</a>
+                    </li>
+                    {% endfor %}
+                    <li class="page-item{% if not interested_success_pagination.has_next %} disabled{% endif %}">
+                        <a class="page-link" href="{{ interested_success_pagination.next_url|default:'#' }}">Next</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="hc-surface-card border mb-4">
+        <div class="mf-db2-panel-head mb-3">
+            <div>
+                <span class="mf-db2-kicker">Unsuccessful</span>
+                <h6 class="mb-0">Rejected, no response, and expired items</h6>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table hc-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Customer</th>
+                        <th>Product</th>
+                        <th>Preferred Call Time</th>
+                        <th>Notes</th>
+                        <th>Staff</th>
+                        <th>Outcome</th>
+                        <th>Reward</th>
+                        <th>Updated</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in interested_unsuccessful_rows_page %}
+                    <tr>
+                        <td>
+                            <strong>{{ row.customer_name }}</strong>
+                            <div class="small text-muted">{{ row.customer_phone }}</div>
+                            <div class="small text-muted">Tracked from {{ row.created_at }}</div>
+                        </td>
+                        <td>{{ row.product_enquired }}</td>
+                        <td>{{ row.preferred_call_time|default:"Not set" }}</td>
+                        <td>{{ row.enquiry_notes|default:"No notes" }}</td>
+                        <td>
+                            <strong>{{ row.staff_name }}</strong>
+                            <div class="small text-muted">{{ row.staff_phone }}</div>
+                        </td>
+                        <td>
+                            <span class="hc-status hc-status-{{ row.lead_status_tone }}">{{ row.lead_status_label }}</span>
+                        </td>
+                        <td>
+                            {% if row.reward_amount_label %}
+                            <span class="hc-status hc-status-success">{{ row.reward_amount_label }}</span>
+                            {% else %}
+                            <span class="small text-muted">--</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div>{{ row.result_at }}</div>
+                            <div class="small text-muted">Lead {{ row.lead_id }}</div>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-2 flex-wrap align-items-center">
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-warning btn-sm js-interested-recover"
+                                    data-lead-id="{{ row.lead_id }}"
+                                    data-lead-name="{{ row.customer_name }}"
+                                >Recover to Interested</button>
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-dark btn-sm js-open-lead-route-map"
+                                    data-lead-route-map-id="{{ row.lead_id }}"
+                                    data-lead-route-map-name="{{ row.customer_name }}"
+                                >Lead Journey</button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="9" class="text-center py-4">No unsuccessful interested leads match the current filter.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if interested_unsuccessful_pagination.num_pages > 1 %}
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-3">
+            <div class="small text-muted">
+                Showing {{ interested_unsuccessful_pagination.start_index }}-{{ interested_unsuccessful_pagination.end_index }} of {{ interested_unsuccessful_pagination.total_count }}
+            </div>
+            <nav aria-label="Unsuccessful interested pagination">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item{% if not interested_unsuccessful_pagination.has_previous %} disabled{% endif %}">
+                        <a class="page-link" href="{{ interested_unsuccessful_pagination.previous_url|default:'#' }}">Previous</a>
+                    </li>
+                    {% for page_link in interested_unsuccessful_pagination.page_links %}
+                    <li class="page-item{% if page_link.is_current %} active{% endif %}">
+                        <a class="page-link" href="{{ page_link.url }}">{{ page_link.number }}</a>
+                    </li>
+                    {% endfor %}
+                    <li class="page-item{% if not interested_unsuccessful_pagination.has_next %} disabled{% endif %}">
+                        <a class="page-link" href="{{ interested_unsuccessful_pagination.next_url|default:'#' }}">Next</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
     </div>
 </section>
 

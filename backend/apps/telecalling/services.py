@@ -10191,11 +10191,91 @@ def save_interested_lead_detail(
     return detail
 
 
-def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_id="", outcome="all"):
+def _normalize_page_number(page_value, default=1):
+    try:
+        page_number = int(page_value or default)
+    except (TypeError, ValueError):
+        page_number = default
+    return max(1, page_number)
+
+
+def _build_interested_page_url(base_params, page_key, page_number):
+    query_params = dict(base_params)
+    query_params[page_key] = str(max(1, int(page_number or 1)))
+    return f"?{urlencode(query_params)}" if query_params else ""
+
+
+def _paginate_interested_rows(rows, *, page_value, page_size, base_params, page_key):
+    normalized_page_size = max(1, int(page_size or 25))
+    normalized_page = _normalize_page_number(page_value)
+    if not rows:
+        return [], {
+            "page_number": 1,
+            "page_size": normalized_page_size,
+            "num_pages": 0,
+            "total_count": 0,
+            "has_previous": False,
+            "has_next": False,
+            "previous_page_number": 1,
+            "next_page_number": 1,
+            "start_index": 0,
+            "end_index": 0,
+            "page_links": [],
+            "previous_url": "",
+            "next_url": "",
+        }
+
+    paginator = Paginator(rows, normalized_page_size)
+    try:
+        page_obj = paginator.page(normalized_page)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages or 1)
+
+    page_window = 2
+    start_page = max(1, page_obj.number - page_window)
+    end_page = min(paginator.num_pages or 1, page_obj.number + page_window)
+    page_links = [
+        {
+            "number": page_number,
+            "is_current": page_number == page_obj.number,
+            "url": _build_interested_page_url(base_params, page_key, page_number),
+        }
+        for page_number in range(start_page, end_page + 1)
+    ]
+    return list(page_obj.object_list), {
+        "page_number": page_obj.number,
+        "page_size": normalized_page_size,
+        "num_pages": paginator.num_pages,
+        "total_count": len(rows),
+        "has_previous": page_obj.has_previous(),
+        "has_next": page_obj.has_next(),
+        "previous_page_number": page_obj.previous_page_number() if page_obj.has_previous() else 1,
+        "next_page_number": page_obj.next_page_number() if page_obj.has_next() else (paginator.num_pages or 1),
+        "start_index": page_obj.start_index() if rows else 0,
+        "end_index": page_obj.end_index() if rows else 0,
+        "page_links": page_links,
+        "previous_url": _build_interested_page_url(base_params, page_key, page_obj.previous_page_number()) if page_obj.has_previous() else "",
+        "next_url": _build_interested_page_url(base_params, page_key, page_obj.next_page_number()) if page_obj.has_next() else "",
+    }
+
+
+def build_interested_lead_payload(
+    *,
+    query="",
+    date_from="",
+    date_to="",
+    staff_id="",
+    outcome="all",
+    page_size=25,
+    pending_page=1,
+    success_page=1,
+    unsuccessful_page=1,
+):
     queryset = InterestedLeadDetail.objects.select_related("lead", "staff", "call")
     trimmed_query = (query or "").strip()
     normalized_staff_id = (staff_id or "").strip()
     normalized_outcome = (outcome or "all").strip().lower() or "all"
+    normalized_page_size = max(10, min(_normalize_page_number(page_size, default=25), 100))
     if normalized_outcome in {"converted"}:
         normalized_outcome = "successful"
     elif normalized_outcome in {"rejected", "no_response", "expired_followup"}:
@@ -10342,6 +10422,39 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
     interested_success_rows = [row for row in rows if row["outcome_group"] == "successful"]
     interested_unsuccessful_rows = [row for row in rows if row["outcome_group"] == "unsuccessful"]
 
+    base_page_params = {
+        "q": trimmed_query,
+        "date_from": from_value,
+        "date_to": to_value,
+        "staff_id": normalized_staff_id,
+        "outcome": normalized_outcome,
+        "page_size": str(normalized_page_size),
+        "pending_page": str(_normalize_page_number(pending_page)),
+        "success_page": str(_normalize_page_number(success_page)),
+        "unsuccessful_page": str(_normalize_page_number(unsuccessful_page)),
+    }
+    pending_rows_page, pending_pagination = _paginate_interested_rows(
+        interested_open_rows,
+        page_value=pending_page,
+        page_size=normalized_page_size,
+        base_params=base_page_params,
+        page_key="pending_page",
+    )
+    success_rows_page, success_pagination = _paginate_interested_rows(
+        interested_success_rows,
+        page_value=success_page,
+        page_size=normalized_page_size,
+        base_params=base_page_params,
+        page_key="success_page",
+    )
+    unsuccessful_rows_page, unsuccessful_pagination = _paginate_interested_rows(
+        interested_unsuccessful_rows,
+        page_value=unsuccessful_page,
+        page_size=normalized_page_size,
+        base_params=base_page_params,
+        page_key="unsuccessful_page",
+    )
+
     staff_breakdown_rows = sorted(
         staff_breakdown.values(),
         key=lambda row: (
@@ -10361,6 +10474,13 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
         "interested_lead_rows": interested_open_rows,
         "interested_success_rows": interested_success_rows,
         "interested_unsuccessful_rows": interested_unsuccessful_rows,
+        "interested_pending_rows": pending_rows_page,
+        "interested_success_rows_page": success_rows_page,
+        "interested_unsuccessful_rows_page": unsuccessful_rows_page,
+        "interested_pending_pagination": pending_pagination,
+        "interested_success_pagination": success_pagination,
+        "interested_unsuccessful_pagination": unsuccessful_pagination,
+        "interested_page_size": normalized_page_size,
         "interested_lead_summary": {
             "total_count": len(rows),
             "today_count": sum(

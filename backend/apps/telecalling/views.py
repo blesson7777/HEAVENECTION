@@ -2118,6 +2118,10 @@ def interested_leads_page(request):
     date_to = request.GET.get("date_to", "").strip()
     staff_id = request.GET.get("staff_id", "").strip()
     outcome = request.GET.get("outcome", "all").strip()
+    page_size = request.GET.get("page_size", 25)
+    pending_page = request.GET.get("pending_page", 1)
+    success_page = request.GET.get("success_page", 1)
+    unsuccessful_page = request.GET.get("unsuccessful_page", 1)
     if request.GET.get("download") == "csv":
         csv_content = build_interested_lead_csv_response(
             query=search_query,
@@ -2149,13 +2153,17 @@ def interested_leads_page(request):
         active_page="interested-leads",
         page_title="Interested Leads",
         page_heading="Interested Leads",
-        page_subtitle="Track interested leads in one simple list.",
+        page_subtitle="Track pending, successful, and unsuccessful interested leads separately.",
         extra_context=build_interested_lead_payload(
             query=search_query,
             date_from=date_from,
             date_to=date_to,
             staff_id=staff_id,
             outcome=outcome,
+            page_size=page_size,
+            pending_page=pending_page,
+            success_page=success_page,
+            unsuccessful_page=unsuccessful_page,
         ),
     )
     return render(request, "admin_interested_leads.html", context)
