@@ -1644,10 +1644,10 @@
                 activeRecoverLeadId = button.dataset.leadId || "";
                 const leadName = button.dataset.leadName || "this lead";
                 if (recoverTitleNode) {
-                    recoverTitleNode.textContent = `Bring Back - ${leadName}`;
+                    recoverTitleNode.textContent = `Recover to Interested - ${leadName}`;
                 }
                 if (recoverMessageNode) {
-                    recoverMessageNode.textContent = `Recover ${leadName} back to Follow Up under the previous owner?`;
+                    recoverMessageNode.textContent = `Recover ${leadName} back to Interested under the previous owner?`;
                 }
                 recoverModal?.show();
             });
@@ -1664,7 +1664,7 @@
                     await requestJson(`${config.leadsUrl}${activeRecoverLeadId}/recover/`, {
                         method: "POST",
                     });
-                    showFeedback(recoverFeedback, "Lead recovered back to Follow Up.", false);
+                    showFeedback(recoverFeedback, "Lead recovered back to Interested.", false);
                     window.setTimeout(() => window.location.reload(), 500);
                 } catch (error) {
                     showFeedback(recoverFeedback, error.message, true);

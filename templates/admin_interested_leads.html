@@ -243,7 +243,7 @@
                                 class="btn btn-outline-warning btn-sm js-interested-recover"
                                 data-lead-id="{{ row.lead_id }}"
                                 data-lead-name="{{ row.customer_name }}"
-                            >Recover</button>
+                            >Recover to Interested</button>
                             {% else %}
                             <span class="small text-muted">Closed</span>
                             {% endif %}
@@ -324,14 +324,14 @@
             <div class="modal-header border-0 pb-0">
                 <div>
                     <span class="mf-db2-kicker">Recover Lead</span>
-                    <h5 class="modal-title mt-1" id="interestedRecoverTitle">Bring Back to Follow Up</h5>
+                    <h5 class="modal-title mt-1" id="interestedRecoverTitle">Recover to Interested</h5>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body pt-3">
-                <p class="text-muted mb-3" id="interestedRecoverMessage">Recover this closed lead back to Follow Up under the previous owner?</p>
+                <p class="text-muted mb-3" id="interestedRecoverMessage">Recover this closed lead back to Interested under the previous owner?</p>
                 <div class="alert alert-light border mb-0">
-                    The lead will return to the active lead flow and the previous owner will be restored when available.
+                    The lead will return to the active interested list and the previous owner will be restored when available.
                 </div>
                 <div id="interestedRecoverFeedback" class="hc-form-feedback d-none mt-3"></div>
                 <div class="d-flex justify-content-end gap-2 mt-4">
