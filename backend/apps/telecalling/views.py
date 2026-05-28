@@ -1852,7 +1852,20 @@ def leads_page(request):
             f"Automatic lead cleanup removed {cleanup_summary['deleted_count']} old lead(s) today.",
         )
 
-    payload = build_lead_management_payload()
+    payload = build_lead_management_payload(
+        query=request.GET.get("q", ""),
+        status=request.GET.get("status", "all"),
+        assignment=request.GET.get("assignment", "all"),
+        callback_window=request.GET.get("callback_window", "all"),
+        contact_state=request.GET.get("contact_state", "all"),
+        notes_state=request.GET.get("notes_state", "all"),
+        date_field=request.GET.get("date_field", "updated_at"),
+        date_from=request.GET.get("date_from", ""),
+        date_to=request.GET.get("date_to", ""),
+        sort_by=request.GET.get("sort_by", "updated_at"),
+        sort_dir=request.GET.get("sort_dir", "desc"),
+        readd_only=request.GET.get("readd_only") == "on",
+    )
     context = _admin_web_context(
         request,
         current_user,

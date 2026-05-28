@@ -32,3 +32,10 @@ staff_app/macos/Flutter/GeneratedPluginRegistrant.swift
 
 backend/**/__pycache__/
 media/
+
+# Local agent/session artifacts and ephemeral keys
+.codex_*.dart
+.codex_*.patch
+.railway_ed25519
+.railway_ed25519.pub
+.ssh/

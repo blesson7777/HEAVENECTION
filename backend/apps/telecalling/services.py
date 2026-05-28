@@ -7262,12 +7262,21 @@ def build_settings_payload(current_user):
     }
 
 
-def build_lead_management_payload():
-    leads = (
-        _lead_management_queryset()
-        .select_related("assigned_to")
-        .order_by("-updated_at")
-    )
+def build_lead_management_payload(
+    *,
+    query="",
+    status="all",
+    assignment="all",
+    callback_window="all",
+    contact_state="all",
+    notes_state="all",
+    date_field="updated_at",
+    date_from="",
+    date_to="",
+    sort_by="updated_at",
+    sort_dir="desc",
+    readd_only=False,
+):
     company_profile = get_company_profile()
     active_queue = _lead_queue_queryset()
     queue_limit = get_lead_queue_limit()
@@ -7276,11 +7285,145 @@ def build_lead_management_payload():
         for staff in _staff_queryset().filter(is_active=True)
     ]
 
+    valid_statuses = {choice for choice, _label in Lead.Status.choices}
+    valid_callback_windows = {choice for choice, _label in Lead.CallbackWindow.choices}
+    valid_date_fields = {"updated_at", "created_at", "last_contacted_at", "callback_date"}
+    valid_sort_fields = {
+        "updated_at",
+        "created_at",
+        "last_contacted_at",
+        "callback_date",
+        "name",
+        "phone",
+        "status",
+        "assigned_to",
+        "readd_count",
+    }
+
+    trimmed_query = (query or "").strip()
+    normalized_status = (status or "all").strip()
+    normalized_assignment = (assignment or "all").strip()
+    normalized_callback_window = (callback_window or "all").strip()
+    normalized_contact_state = (contact_state or "all").strip()
+    normalized_notes_state = (notes_state or "all").strip()
+    normalized_date_field = (date_field or "updated_at").strip()
+    normalized_sort_by = (sort_by or "updated_at").strip()
+    normalized_sort_dir = (sort_dir or "desc").strip().lower()
+    normalized_sort_dir = "asc" if normalized_sort_dir == "asc" else "desc"
+    normalized_readd_only = bool(readd_only)
+
+    lead_queryset = _lead_management_queryset().select_related("assigned_to")
+
+    if trimmed_query:
+        normalized_phone = re.sub(r"\D+", "", trimmed_query)
+        query_filters = (
+            Q(name__icontains=trimmed_query)
+            | Q(phone__icontains=trimmed_query)
+            | Q(notes__icontains=trimmed_query)
+            | Q(assigned_to__name__icontains=trimmed_query)
+        )
+        if normalized_phone and normalized_phone != trimmed_query:
+            query_filters |= Q(phone__icontains=normalized_phone)
+        lead_queryset = lead_queryset.filter(query_filters)
+
+    if normalized_status in valid_statuses:
+        lead_queryset = lead_queryset.filter(status=normalized_status)
+
+    if normalized_assignment == "assigned":
+        lead_queryset = lead_queryset.filter(assigned_to__isnull=False)
+    elif normalized_assignment == "unassigned":
+        lead_queryset = lead_queryset.filter(assigned_to__isnull=True)
+
+    if normalized_callback_window in valid_callback_windows:
+        lead_queryset = lead_queryset.filter(callback_window=normalized_callback_window)
+
+    if normalized_contact_state == "contacted":
+        lead_queryset = lead_queryset.filter(last_contacted_at__isnull=False)
+    elif normalized_contact_state == "not_contacted":
+        lead_queryset = lead_queryset.filter(last_contacted_at__isnull=True)
+
+    if normalized_notes_state == "with_notes":
+        lead_queryset = lead_queryset.exclude(notes__isnull=True).exclude(notes="")
+    elif normalized_notes_state == "without_notes":
+        lead_queryset = lead_queryset.filter(Q(notes__isnull=True) | Q(notes=""))
+
+    if normalized_readd_only:
+        lead_queryset = lead_queryset.filter(readd_count__gt=0)
+
+    from_date = _parse_date_value(date_from)
+    to_date = _parse_date_value(date_to)
+    if normalized_date_field in valid_date_fields and (from_date or to_date):
+        if normalized_date_field == "callback_date":
+            if from_date:
+                lead_queryset = lead_queryset.filter(callback_date__gte=from_date)
+            if to_date:
+                lead_queryset = lead_queryset.filter(callback_date__lte=to_date)
+        elif normalized_date_field == "last_contacted_at":
+            if from_date:
+                lead_queryset = lead_queryset.filter(last_contacted_at__date__gte=from_date)
+            if to_date:
+                lead_queryset = lead_queryset.filter(last_contacted_at__date__lte=to_date)
+        elif normalized_date_field == "created_at":
+            if from_date:
+                lead_queryset = lead_queryset.filter(created_at__date__gte=from_date)
+            if to_date:
+                lead_queryset = lead_queryset.filter(created_at__date__lte=to_date)
+        else:
+            if from_date:
+                lead_queryset = lead_queryset.filter(updated_at__date__gte=from_date)
+            if to_date:
+                lead_queryset = lead_queryset.filter(updated_at__date__lte=to_date)
+
+    if normalized_sort_by not in valid_sort_fields:
+        normalized_sort_by = "updated_at"
+
+    sort_prefix = "" if normalized_sort_dir == "asc" else "-"
+    if normalized_sort_by == "assigned_to":
+        lead_queryset = lead_queryset.order_by(
+            f"{sort_prefix}assigned_to__name",
+            f"{sort_prefix}updated_at",
+            f"{sort_prefix}created_at",
+            "id",
+        )
+    elif normalized_sort_by in {"name", "phone", "status", "readd_count"}:
+        lead_queryset = lead_queryset.order_by(
+            f"{sort_prefix}{normalized_sort_by}",
+            f"{sort_prefix}updated_at",
+            f"{sort_prefix}created_at",
+            "id",
+        )
+    elif normalized_sort_by == "last_contacted_at":
+        lead_queryset = lead_queryset.order_by(
+            f"{sort_prefix}last_contacted_at",
+            f"{sort_prefix}updated_at",
+            f"{sort_prefix}created_at",
+            "id",
+        )
+    elif normalized_sort_by == "callback_date":
+        lead_queryset = lead_queryset.order_by(
+            f"{sort_prefix}callback_date",
+            f"{sort_prefix}updated_at",
+            f"{sort_prefix}created_at",
+            "id",
+        )
+    elif normalized_sort_by == "created_at":
+        lead_queryset = lead_queryset.order_by(
+            f"{sort_prefix}created_at",
+            f"{sort_prefix}updated_at",
+            "id",
+        )
+    else:
+        lead_queryset = lead_queryset.order_by(
+            f"{sort_prefix}updated_at",
+            f"{sort_prefix}created_at",
+            "id",
+        )
+
+    total_lead_count = _lead_management_queryset().count()
+    filtered_lead_count = lead_queryset.count()
+
     lead_rows = []
-    readded_lead_count = 0
-    for lead in leads:
-        if lead.readd_count:
-            readded_lead_count += 1
+    for lead in lead_queryset:
         lead_rows.append(
             {
                 "id": str(lead.id),
@@ -7301,13 +7444,102 @@ def build_lead_management_payload():
                 "notes": lead.notes,
                 "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
                 "updated_at": _format_datetime(lead.updated_at),
+                "created_at": _format_datetime(lead.created_at),
                 "readd_count": lead.readd_count,
+                "has_notes": bool(lead.notes.strip()),
+                "is_unassigned": lead.assigned_to_id is None,
+                "is_contacted": lead.last_contacted_at is not None,
             }
         )
+
+    status_counts = Counter(row["status"] for row in lead_rows)
+    assignment_counts = Counter("unassigned" if row["is_unassigned"] else "assigned" for row in lead_rows)
+    contact_counts = Counter("contacted" if row["is_contacted"] else "not_contacted" for row in lead_rows)
+    callback_counts = Counter(row["callback_window"] for row in lead_rows if row["callback_window"])
+    notes_count = sum(1 for row in lead_rows if row["has_notes"])
+    readded_lead_count = sum(1 for row in lead_rows if row["readd_count"])
 
     return {
         "lead_rows": lead_rows,
         "staff_options": staff_options,
+        "lead_filters": {
+            "query": trimmed_query,
+            "status": normalized_status if normalized_status in valid_statuses else "all",
+            "assignment": normalized_assignment,
+            "callback_window": normalized_callback_window if normalized_callback_window in valid_callback_windows else "all",
+            "contact_state": normalized_contact_state,
+            "notes_state": normalized_notes_state,
+            "date_field": normalized_date_field if normalized_date_field in valid_date_fields else "updated_at",
+            "date_from": from_date.isoformat() if from_date else "",
+            "date_to": to_date.isoformat() if to_date else "",
+            "sort_by": normalized_sort_by,
+            "sort_dir": normalized_sort_dir,
+            "readd_only": normalized_readd_only,
+        },
+        "lead_filter_options": {
+            "statuses": [{"value": "all", "label": "All statuses"}]
+            + [{"value": value, "label": label} for value, label in Lead.Status.choices],
+            "assignments": [
+                {"value": "all", "label": "All assignments"},
+                {"value": "assigned", "label": "Only assigned"},
+                {"value": "unassigned", "label": "Only unassigned"},
+            ],
+            "contact_states": [
+                {"value": "all", "label": "All contacts"},
+                {"value": "contacted", "label": "Called at least once"},
+                {"value": "not_contacted", "label": "Not called yet"},
+            ],
+            "notes_states": [
+                {"value": "all", "label": "Any notes"},
+                {"value": "with_notes", "label": "Has notes"},
+                {"value": "without_notes", "label": "No notes"},
+            ],
+            "callback_windows": [{"value": "all", "label": "All callback slots"}]
+            + [{"value": value, "label": label} for value, label in Lead.CallbackWindow.choices],
+            "date_fields": [
+                {"value": "updated_at", "label": "Updated date"},
+                {"value": "created_at", "label": "Created date"},
+                {"value": "last_contacted_at", "label": "Last contacted date"},
+                {"value": "callback_date", "label": "Callback date"},
+            ],
+            "sort_fields": [
+                {"value": "updated_at", "label": "Updated time"},
+                {"value": "created_at", "label": "Created time"},
+                {"value": "last_contacted_at", "label": "Last contacted time"},
+                {"value": "callback_date", "label": "Callback date"},
+                {"value": "name", "label": "Lead name"},
+                {"value": "phone", "label": "Phone number"},
+                {"value": "status", "label": "Status"},
+                {"value": "assigned_to", "label": "Assigned staff"},
+                {"value": "readd_count", "label": "Re-add count"},
+            ],
+            "sort_directions": [
+                {"value": "desc", "label": "Newest / highest first"},
+                {"value": "asc", "label": "Oldest / lowest first"},
+            ],
+        },
+        "lead_summary": {
+            "total_count": total_lead_count,
+            "filtered_count": filtered_lead_count,
+            "new_count": int(status_counts.get(Lead.Status.NEW, 0)),
+            "follow_up_count": int(status_counts.get(Lead.Status.INTERESTED, 0)),
+            "expired_follow_up_count": int(status_counts.get(Lead.Status.EXPIRED_FOLLOWUP, 0)),
+            "callback_count": int(status_counts.get(Lead.Status.CALL_BACK, 0)),
+            "converted_count": int(status_counts.get(Lead.Status.CONVERTED, 0)),
+            "rejected_count": int(status_counts.get(Lead.Status.NOT_INTERESTED, 0)),
+            "no_response_count": int(status_counts.get(Lead.Status.NO_ANSWER, 0)),
+            "assigned_count": int(assignment_counts.get("assigned", 0)),
+            "unassigned_count": int(assignment_counts.get("unassigned", 0)),
+            "contacted_count": int(contact_counts.get("contacted", 0)),
+            "not_contacted_count": int(contact_counts.get("not_contacted", 0)),
+            "notes_count": int(notes_count),
+            "readded_count": int(readded_lead_count),
+            "callback_window_breakdown": {
+                "noon": int(callback_counts.get(Lead.CallbackWindow.NOON, 0)),
+                "evening": int(callback_counts.get(Lead.CallbackWindow.EVENING, 0)),
+                "night": int(callback_counts.get(Lead.CallbackWindow.NIGHT, 0)),
+            },
+        },
         "queue_summary": {
             "active_queue_total": active_queue.count(),
             "unassigned_total": _staff_call_queue_queryset(

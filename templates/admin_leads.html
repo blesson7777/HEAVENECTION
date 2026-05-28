@@ -61,17 +61,6 @@
     </div>
     {% endif %}
 
-    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
-        <button type="button" class="btn btn-outline-success js-open-lead-allocation-mode">Allocate Leads</button>
-        <button type="button" class="btn btn-success d-none js-allocate-selected-leads-button" disabled>Allocate Marked</button>
-        <button type="button" class="btn btn-outline-warning js-open-lead-unassign-mode">Unassign Leads</button>
-        <button type="button" class="btn btn-warning d-none js-unassign-selected-leads-button" disabled>Unassign Marked</button>
-        <button type="button" class="btn btn-outline-danger js-open-lead-selection-mode">Delete Leads</button>
-        <button type="button" class="btn btn-danger d-none js-delete-selected-leads-button" disabled>Delete Marked</button>
-        <button type="button" class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#leadCleanupModal">Auto Delete</button>
-        <span class="text-muted small">Choose allocation mode to move selected leads into one staff queue, unassign mode to return marked assigned leads to the waiting queue, or delete mode to remove marked leads.</span>
-    </div>
-
     <form method="post" action="{% url 'leads-page' %}" class="row g-3 align-items-end mb-4">
         {% csrf_token %}
         <input type="hidden" name="lead_action" value="queue_settings">
@@ -98,17 +87,149 @@
         </div>
     </form>
 
+    <div class="border rounded-4 p-3 p-lg-4 mb-4 bg-white">
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+            <div>
+                <span class="mf-db2-kicker">Filter Desk</span>
+                <h6 class="mt-1 mb-0">Sort and narrow the lead list</h6>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-success js-open-lead-allocation-mode">Allocate Leads</button>
+                <button type="button" class="btn btn-outline-warning js-open-lead-unassign-mode">Unassign Leads</button>
+                <button type="button" class="btn btn-outline-danger js-open-lead-selection-mode">Delete Leads</button>
+                <button type="button" class="btn btn-outline-dark" data-bs-toggle="modal" data-bs-target="#leadCleanupModal">Auto Delete</button>
+            </div>
+        </div>
+
+        <form method="get" action="{% url 'leads-page' %}" class="row g-3">
+            <div class="col-xl-4 col-md-6">
+                <label class="form-label fw-semibold" for="leadSearchInput">Search</label>
+                <div class="hc-search-box mb-0">
+                    <i class="bi bi-search"></i>
+                    <input
+                        type="search"
+                        id="leadSearchInput"
+                        name="q"
+                        value="{{ lead_filters.query }}"
+                        placeholder="Lead name, phone, notes, staff"
+                    >
+                </div>
+            </div>
+            <div class="col-xl-2 col-md-6">
+                <label class="form-label fw-semibold" for="leadStatusFilter">Status</label>
+                <select class="form-select" id="leadStatusFilter" name="status">
+                    {% for option in lead_filter_options.statuses %}
+                    <option value="{{ option.value }}"{% if lead_filters.status == option.value %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-xl-2 col-md-6">
+                <label class="form-label fw-semibold" for="leadAssignmentFilter">Assignment</label>
+                <select class="form-select" id="leadAssignmentFilter" name="assignment">
+                    {% for option in lead_filter_options.assignments %}
+                    <option value="{{ option.value }}"{% if lead_filters.assignment == option.value %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-xl-2 col-md-6">
+                <label class="form-label fw-semibold" for="leadCallbackWindowFilter">Callback slot</label>
+                <select class="form-select" id="leadCallbackWindowFilter" name="callback_window">
+                    {% for option in lead_filter_options.callback_windows %}
+                    <option value="{{ option.value }}"{% if lead_filters.callback_window == option.value %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-xl-2 col-md-6">
+                <label class="form-label fw-semibold" for="leadContactStateFilter">Contact</label>
+                <select class="form-select" id="leadContactStateFilter" name="contact_state">
+                    {% for option in lead_filter_options.contact_states %}
+                    <option value="{{ option.value }}"{% if lead_filters.contact_state == option.value %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-xl-2 col-md-6">
+                <label class="form-label fw-semibold" for="leadNotesStateFilter">Notes</label>
+                <select class="form-select" id="leadNotesStateFilter" name="notes_state">
+                    {% for option in lead_filter_options.notes_states %}
+                    <option value="{{ option.value }}"{% if lead_filters.notes_state == option.value %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-xl-2 col-md-6">
+                <label class="form-label fw-semibold" for="leadDateFieldFilter">Date field</label>
+                <select class="form-select" id="leadDateFieldFilter" name="date_field">
+                    {% for option in lead_filter_options.date_fields %}
+                    <option value="{{ option.value }}"{% if lead_filters.date_field == option.value %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-xl-2 col-md-6">
+                <label class="form-label fw-semibold" for="leadDateFromFilter">From</label>
+                <input type="date" class="form-control" id="leadDateFromFilter" name="date_from" value="{{ lead_filters.date_from }}">
+            </div>
+            <div class="col-xl-2 col-md-6">
+                <label class="form-label fw-semibold" for="leadDateToFilter">To</label>
+                <input type="date" class="form-control" id="leadDateToFilter" name="date_to" value="{{ lead_filters.date_to }}">
+            </div>
+            <div class="col-xl-2 col-md-6">
+                <label class="form-label fw-semibold" for="leadSortByFilter">Sort by</label>
+                <select class="form-select" id="leadSortByFilter" name="sort_by">
+                    {% for option in lead_filter_options.sort_fields %}
+                    <option value="{{ option.value }}"{% if lead_filters.sort_by == option.value %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-xl-2 col-md-6">
+                <label class="form-label fw-semibold" for="leadSortDirFilter">Order</label>
+                <select class="form-select" id="leadSortDirFilter" name="sort_dir">
+                    {% for option in lead_filter_options.sort_directions %}
+                    <option value="{{ option.value }}"{% if lead_filters.sort_dir == option.value %} selected{% endif %}>{{ option.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-xl-2 col-md-6 d-flex align-items-end">
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" id="leadReaddOnlyFilter" name="readd_only"{% if lead_filters.readd_only %} checked{% endif %}>
+                    <label class="form-check-label fw-semibold" for="leadReaddOnlyFilter">Re-added only</label>
+                </div>
+            </div>
+            <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="d-flex flex-wrap gap-2">
+                    <button type="submit" class="btn btn-primary">Apply Filters</button>
+                    <a href="{% url 'leads-page' %}" class="btn btn-outline-secondary">Reset</a>
+                </div>
+                <div class="text-muted small">
+                    Showing {{ lead_summary.filtered_count }} of {{ lead_summary.total_count }} lead(s).
+                </div>
+            </div>
+        </form>
+
+        <div class="d-flex flex-wrap gap-2 mt-3">
+            <span class="hc-status hc-status-muted">Assigned {{ lead_summary.assigned_count }}</span>
+            <span class="hc-status hc-status-muted">Unassigned {{ lead_summary.unassigned_count }}</span>
+            <span class="hc-status hc-status-muted">Contacted {{ lead_summary.contacted_count }}</span>
+            <span class="hc-status hc-status-muted">Not called {{ lead_summary.not_contacted_count }}</span>
+            <span class="hc-status hc-status-warning">Follow Up {{ lead_summary.follow_up_count }}</span>
+            <span class="hc-status hc-status-warning">Call Back {{ lead_summary.callback_count }}</span>
+            <span class="hc-status hc-status-success">Converted {{ lead_summary.converted_count }}</span>
+            <span class="hc-status hc-status-danger">Rejected {{ lead_summary.rejected_count }}</span>
+            <span class="hc-status hc-status-primary">No Response {{ lead_summary.no_response_count }}</span>
+            <span class="hc-status hc-status-muted">Re-added {{ lead_summary.readded_count }}</span>
+        </div>
+    </div>
+
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <span class="text-muted small">Quick status chips can still refine the rows on the page after the server filters are applied.</span>
+    </div>
+
     <div class="hc-filter-row">
         <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
         <button type="button" class="hc-filter-chip" data-filter-status="new">New</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="interested">Follow Up</button>
         <button type="button" class="hc-filter-chip" data-filter-status="call_back">Call Back</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="expired_followup">Expired</button>
         <button type="button" class="hc-filter-chip" data-filter-status="no_answer">No Response</button>
         <button type="button" class="hc-filter-chip" data-filter-status="converted">Converted</button>
-    </div>
-
-    <div class="hc-search-box">
-        <i class="bi bi-search"></i>
-        <input type="search" id="leadSearchInput" placeholder="Search lead, phone, or staff">
     </div>
 
     <div class="table-responsive">
@@ -122,6 +243,7 @@
                     <th>Phone</th>
                     <th>Status</th>
                     <th>Assigned To</th>
+                    <th>Created</th>
                     <th>Last Contact</th>
                     <th>Updated</th>
                     <th>Actions</th>
@@ -139,7 +261,7 @@
                     </td>
                     <td>{{ lead.phone }}</td>
                     <td>
-                        <span class="hc-status hc-status-{% if lead.status == 'new' %}new{% elif lead.status == 'call_back' %}warning{% elif lead.status == 'interested' %}success{% elif lead.status == 'converted' %}primary{% else %}muted{% endif %}">{{ lead.status_label }}</span>
+                        <span class="hc-status hc-status-{% if lead.status == 'new' %}new{% elif lead.status == 'call_back' or lead.status == 'interested' %}warning{% elif lead.status == 'expired_followup' %}danger{% elif lead.status == 'converted' %}primary{% else %}muted{% endif %}">{{ lead.status_label }}</span>
                         {% if lead.callback_schedule_label %}
                         <div class="small text-muted mt-1">{{ lead.callback_schedule_label }}</div>
                         {% endif %}
@@ -148,6 +270,7 @@
                         {% endif %}
                     </td>
                     <td>{{ lead.assigned_to }}</td>
+                    <td>{{ lead.created_at }}</td>
                     <td>{{ lead.last_contacted }}</td>
                     <td>{{ lead.updated_at }}</td>
                     <td>
@@ -169,7 +292,7 @@
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8" class="text-center py-4">No leads available.</td></tr>
+                <tr><td colspan="9" class="text-center py-4">No leads available.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
