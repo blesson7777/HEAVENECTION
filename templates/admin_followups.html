@@ -2,7 +2,6 @@
 
 {% block page_actions %}
 <a href="{% url 'leads-page' %}" class="btn btn-outline-primary btn-sm">Lead Desk</a>
-<a href="{% url 'callbacks-page' %}" class="btn btn-outline-primary btn-sm">Call Back Desk</a>
 <a href="{% url 'recovery-leads-page' %}" class="btn btn-outline-primary btn-sm">Rejected / No Response</a>
 <a href="{% url 'expired-followups-page' %}" class="btn btn-outline-primary btn-sm">Expired Follow-Ups</a>
 <a href="{% url 'followups-page' %}?download=csv" class="btn btn-outline-primary btn-sm">Download CSV</a>
@@ -96,7 +95,7 @@
     </div>
 
     <div class="alert alert-primary border-0 mb-4" role="alert">
-        This queue shows every lead marked as <strong>Follow Up</strong> by staff. Scheduled leads stay highlighted here until the staff makes the next follow-up call. Use the separate <strong>Call Back Desk</strong>, <strong>Rejected / No Response</strong>, and <strong>Expired Follow-Ups</strong> pages for the other queues.
+        This queue shows every lead marked as <strong>Follow Up</strong> by staff. Scheduled leads stay highlighted here until the staff makes the next follow-up call. Use the separate <strong>Rejected / No Response</strong> and <strong>Expired Follow-Ups</strong> pages for the other queues.
         {% if followup_expiry_settings.enabled %}
         Any follow-up with no staff update for <strong>{{ followup_expiry_settings.expiry_days }} day{% if followup_expiry_settings.expiry_days != 1 %}s{% endif %}</strong> is moved to <strong>Expired Follow Up</strong>.
         {% else %}

@@ -2156,34 +2156,7 @@ def interested_leads_page(request):
 
 @require_GET
 def callbacks_page(request):
-    current_user = _get_admin_user_or_redirect(request)
-    if not current_user:
-        return redirect("web-login")
-
-    if request.GET.get("download") == "csv":
-        csv_content = build_callback_csv_response()
-        response = HttpResponse(csv_content, content_type="text/csv")
-        response["Content-Disposition"] = 'attachment; filename="heavenection-callbacks.csv"'
-        return response
-    if request.GET.get("download") == "xlsx":
-        excel_content = build_callback_excel_response()
-        response = HttpResponse(
-            excel_content,
-            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        response["Content-Disposition"] = 'attachment; filename="heavenection-callbacks.xlsx"'
-        return response
-
-    context = _admin_web_context(
-        request,
-        current_user,
-        active_page="callbacks",
-        page_title="Call Back Desk",
-        page_heading="Call Back Desk",
-        page_subtitle="Use this page for leads that need a scheduled call back slot and a clear next contact window.",
-        extra_context=build_callback_payload(),
-    )
-    return render(request, "admin_callbacks.html", context)
+    return redirect("followups-page")
 
 
 @require_GET
