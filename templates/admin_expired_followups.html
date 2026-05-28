@@ -123,6 +123,14 @@
                     </td>
                     <td>{{ row.updated_at }}</td>
                     <td>
+                        <div class="d-flex flex-wrap gap-2 mb-2">
+                            <button
+                                type="button"
+                                class="btn btn-outline-dark btn-sm js-open-lead-route-map"
+                                data-lead-route-map-id="{{ row.id }}"
+                                data-lead-route-map-name="{{ row.name }}"
+                            >Route Map</button>
+                        </div>
                         {% if row.assigned_to_id %}
                         <form
                             method="post"

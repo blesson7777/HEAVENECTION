@@ -1359,6 +1359,175 @@
         });
     }
 
+    function bindLeadRouteMap() {
+        const config = window.heavenectionAdmin;
+        const modalNode = document.getElementById("leadRouteMapModal");
+        if (!config?.leadsUrl || !modalNode) {
+            return;
+        }
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalNode);
+        const titleNode = document.getElementById("leadRouteMapTitle");
+        const subtitleNode = document.getElementById("leadRouteMapSubtitle");
+        const feedback = document.getElementById("leadRouteMapFeedback");
+        const bodyNode = document.getElementById("leadRouteMapBody");
+        let activeLeadName = "Lead";
+
+        function showFeedback(message, isError) {
+            if (!feedback) {
+                return;
+            }
+            feedback.textContent = message;
+            feedback.classList.remove("d-none", "is-success", "is-error");
+            feedback.classList.add(isError ? "is-error" : "is-success");
+        }
+
+        function clearFeedback() {
+            if (!feedback) {
+                return;
+            }
+            feedback.textContent = "";
+            feedback.classList.add("d-none");
+            feedback.classList.remove("is-success", "is-error");
+        }
+
+        function renderMetaLines(lines) {
+            if (!Array.isArray(lines) || !lines.length) {
+                return "";
+            }
+            return lines
+                .map(
+                    (line) => `<span class="hc-route-map-pill">${escapeHtml(line)}</span>`,
+                )
+                .join("");
+        }
+
+        function renderTimeline(rows) {
+            if (!Array.isArray(rows) || !rows.length) {
+                return '<div class="hc-route-map-empty">No route activity was captured yet.</div>';
+            }
+            return `
+                <div class="hc-route-map-timeline">
+                    ${rows
+                        .map(
+                            (row) => `
+                            <article class="hc-route-map-step">
+                                    <div class="hc-route-map-step-marker is-${escapeHtml(row.tone || "muted")}">
+                                        <i class="bi bi-${escapeHtml(row.icon || "circle")}"></i>
+                                    </div>
+                                    <div class="hc-route-map-step-body">
+                                        <strong>${escapeHtml(row.title || "Activity")}</strong>
+                                        <div class="small text-muted mt-1">${escapeHtml(row.time_label || "--")}</div>
+                                        <p>${escapeHtml(row.description || "")}</p>
+                                        <div class="hc-route-map-step-meta">${renderMetaLines(row.meta_lines)}</div>
+                                    </div>
+                                </article>
+                            `,
+                        )
+                        .join("")}
+                </div>
+            `;
+        }
+
+        function renderSummaryCard(label, value, helper) {
+            return `
+                <div class="hc-route-map-summary-card">
+                    <span>${escapeHtml(label)}</span>
+                    <strong>${escapeHtml(value || "--")}</strong>
+                    ${helper ? `<small>${escapeHtml(helper)}</small>` : ""}
+                </div>
+            `;
+        }
+
+        function renderPayload(payload) {
+            const lead = payload?.lead || {};
+            const summary = payload?.summary || {};
+            const timelineRows = payload?.timeline_rows || [];
+            activeLeadName = lead.name || activeLeadName || "Lead";
+            if (titleNode) {
+                titleNode.textContent = `${activeLeadName} Route Map`;
+            }
+            if (subtitleNode) {
+                subtitleNode.textContent = `${lead.phone || "No phone"} • ${summary.route_state_label || "Open trail"}`;
+            }
+            if (!bodyNode) {
+                return;
+            }
+            const statusTone = summary.current_status_tone || lead.status_tone || "muted";
+            const ownerLine = lead.owner_phone ? `${lead.owner_name || "Unassigned"} • ${lead.owner_phone}` : (lead.owner_name || "Unassigned");
+            bodyNode.innerHTML = `
+                <div class="hc-route-map-shell">
+                    <div class="hc-route-map-summary">
+                        ${renderSummaryCard("Current status", summary.current_status_label || lead.status_label, summary.route_state_label || "Current outcome")}
+                        ${renderSummaryCard("Current owner", lead.owner_name || summary.current_owner_name, ownerLine)}
+                        ${renderSummaryCard("Last touch", summary.last_touch_at, `Calls: ${summary.call_count || 0}`)}
+                        ${renderSummaryCard("Journey span", lead.created_at, `Events: ${summary.event_count || 0}`)}
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="hc-status hc-status-${escapeHtml(statusTone)}">Status: ${escapeHtml(summary.current_status_label || lead.status_label || "--")}</span>
+                        <span class="hc-status hc-status-primary">Owner: ${escapeHtml(lead.owner_name || summary.current_owner_name || "Unassigned")}</span>
+                        <span class="hc-status hc-status-muted">First call: ${escapeHtml(summary.first_call_at || "No call yet")}</span>
+                        <span class="hc-status hc-status-muted">Last call: ${escapeHtml(summary.last_call_at || "No call yet")}</span>
+                    </div>
+                    ${renderTimeline(timelineRows)}
+                </div>
+            `;
+        }
+
+        async function openRouteMap(leadId, leadName) {
+            if (!leadId) {
+                return;
+            }
+            activeLeadName = leadName || "Lead";
+            clearFeedback();
+            if (titleNode) {
+                titleNode.textContent = `${activeLeadName} Route Map`;
+            }
+            if (subtitleNode) {
+                subtitleNode.textContent = "Loading lead trail...";
+            }
+            if (bodyNode) {
+                bodyNode.innerHTML = '<div class="hc-route-map-empty">Loading the route map...</div>';
+            }
+            modal.show();
+
+            try {
+                const payload = await requestJson(`${config.leadsUrl}${leadId}/route-map/`, {
+                    method: "GET",
+                });
+                renderPayload(payload);
+            } catch (error) {
+                showFeedback(error.message, true);
+                if (bodyNode) {
+                    bodyNode.innerHTML = '<div class="hc-route-map-empty">Unable to load the route map right now. Please try again.</div>';
+                }
+                if (subtitleNode) {
+                    subtitleNode.textContent = "The trail could not be loaded.";
+                }
+            }
+        }
+
+        document.querySelectorAll(".js-open-lead-route-map").forEach((button) => {
+            button.addEventListener("click", () => {
+                openRouteMap(button.dataset.leadRouteMapId || "", button.dataset.leadRouteMapName || "Lead");
+            });
+        });
+
+        modalNode.addEventListener("hidden.bs.modal", () => {
+            clearFeedback();
+            if (bodyNode) {
+                bodyNode.innerHTML = '<div class="text-muted small">Open a lead route map to see the trail.</div>';
+            }
+            if (titleNode) {
+                titleNode.textContent = "Lead Route Map";
+            }
+            if (subtitleNode) {
+                subtitleNode.textContent = "Track the lead journey across the admin workspace.";
+            }
+            activeLeadName = "Lead";
+        });
+    }
+
     function bindInterestedLeadDecisions() {
         const config = window.heavenectionAdmin;
         if (!config?.leadsUrl) {
@@ -4709,6 +4878,7 @@
     bindLeadCrud();
     bindHandoverUpdates();
     bindFollowupConversion();
+    bindLeadRouteMap();
     bindInterestedLeadDecisions();
     bindLeadImport();
     bindTrainingCrud();

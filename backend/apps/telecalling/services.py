@@ -3323,13 +3323,15 @@ def expire_stale_followups(*, now=None, expiry_days=None, enabled=None, company_
 
     cutoff = now - timedelta(days=resolved_expiry_days)
     stale_followups = list(
-        Lead.objects.filter(status__in=FOLLOW_UP_STATUSES).filter(
+        Lead.objects.select_related("assigned_to", "interested_detail__staff").filter(status__in=FOLLOW_UP_STATUSES).filter(
             Q(last_contacted_at__lt=cutoff)
             | Q(last_contacted_at__isnull=True, updated_at__lt=cutoff)
         )
     )
     expired_count = 0
     for lead in stale_followups:
+        actor_staff = lead.assigned_to or (getattr(getattr(lead, "interested_detail", None), "staff", None))
+        stale_anchor = lead.last_contacted_at or lead.updated_at or now
         lead.status = Lead.Status.EXPIRED_FOLLOWUP
         lead.callback_window = ""
         lead.callback_date = None
@@ -3341,6 +3343,18 @@ def expire_stale_followups(*, now=None, expiry_days=None, enabled=None, company_
                 "updated_at",
             ]
         )
+        if actor_staff:
+            _log_staff_action(
+                actor_staff,
+                StaffAction.ActionType.CALL_STATUS_UPDATED,
+                lead=lead,
+                metadata={
+                    "source": "followup_expiry",
+                    "status": Lead.Status.EXPIRED_FOLLOWUP,
+                    "expiry_days": resolved_expiry_days,
+                    "idle_days": max(0, (now - stale_anchor).days),
+                },
+            )
         expired_count += 1
 
     return {
@@ -3641,6 +3655,89 @@ def _call_activity_stamp(call_row):
     if not call_row:
         return None
     return call_row.get("end_time") or call_row.get("start_time") or call_row.get("created_at")
+
+
+def _lead_route_status_meta(status):
+    normalized = str(status or "").strip()
+    if normalized == Lead.Status.CONVERTED:
+        return {
+            "label": "Converted",
+            "tone": "success",
+            "icon": "check2-circle-fill",
+        }
+    if normalized in {Lead.Status.NOT_INTERESTED}:
+        return {
+            "label": "Rejected",
+            "tone": "danger",
+            "icon": "x-circle-fill",
+        }
+    if normalized in {Lead.Status.NO_ANSWER}:
+        return {
+            "label": "No Response",
+            "tone": "primary",
+            "icon": "skip-forward-circle-fill",
+        }
+    if normalized in {Lead.Status.EXPIRED_FOLLOWUP}:
+        return {
+            "label": "Expired Follow Up",
+            "tone": "warning",
+            "icon": "hourglass-split",
+        }
+    if normalized in {Lead.Status.INTERESTED, Lead.Status.CALL_BACK}:
+        return {
+            "label": "Follow Up",
+            "tone": "warning",
+            "icon": "arrow-repeat",
+        }
+    if normalized == Lead.Status.NEW:
+        return {
+            "label": "New",
+            "tone": "muted",
+            "icon": "plus-circle-fill",
+        }
+    return {
+        "label": str(status or "Lead"),
+        "tone": "muted",
+        "icon": "circle",
+    }
+
+
+def _lead_route_change_labels(metadata):
+    metadata = metadata or {}
+    changes = metadata.get("changes") or {}
+    if not isinstance(changes, dict):
+        changes = {}
+
+    labels = []
+    for key, field_label in (
+        ("name", "Name"),
+        ("phone", "Phone"),
+        ("status", "Status"),
+        ("assigned_to", "Owner"),
+        ("callback_date", "Callback date"),
+        ("callback_window", "Callback slot"),
+        ("notes", "Notes"),
+        ("handover_status", "Handover"),
+    ):
+        change_value = changes.get(key)
+        if not isinstance(change_value, dict):
+            continue
+        before = change_value.get("from", "")
+        after = change_value.get("to", "")
+        if before == after:
+            continue
+        before_label = str(before or "—")
+        after_label = str(after or "—")
+        labels.append(f"{field_label}: {before_label} -> {after_label}")
+    return labels
+
+
+def _lead_route_event_tone_from_status(status):
+    return _lead_route_status_meta(status)["tone"]
+
+
+def _lead_route_event_icon_from_status(status):
+    return _lead_route_status_meta(status)["icon"]
 
 
 def _followup_no_answer_attempt_count(lead, *, staff=None, exclude_call_id=None):
@@ -8850,6 +8947,7 @@ def recover_recovery_lead_to_owner(lead_id, *, target_status=Lead.Status.NEW):
     if owner is None:
         raise ValueError("No active previous staff owner found for this customer.")
 
+    previous_status = lead.status
     update_fields = ["assigned_to", "status", "callback_window", "callback_date", "updated_at"]
     lead.assigned_to = owner
     lead.status = normalized_status
@@ -8862,6 +8960,18 @@ def recover_recovery_lead_to_owner(lead_id, *, target_status=Lead.Status.NEW):
 
     if normalized_status == Lead.Status.NEW:
         auto_allocate_leads(target_staff=owner, prioritized_lead_ids=[lead.id])
+
+    _log_staff_action(
+        owner,
+        StaffAction.ActionType.CALL_STATUS_UPDATED,
+        lead=lead,
+        metadata={
+            "source": "recovery_restore",
+            "target_status": normalized_status,
+            "owner_name": owner.name,
+            "previous_status": previous_status,
+        },
+    )
 
     return {
         "lead_id": str(lead.id),
@@ -8912,6 +9022,18 @@ def reallocate_expired_followup_to_owner(lead_id):
     else:
         lead.assigned_to = None
     lead.save(update_fields=update_fields)
+    actor_staff = owner or (getattr(getattr(lead, "interested_detail", None), "staff", None))
+    if actor_staff:
+        _log_staff_action(
+            actor_staff,
+            StaffAction.ActionType.CALL_STATUS_UPDATED,
+            lead=lead,
+            metadata={
+                "source": "followup_move_back",
+                "owner_name": owner.name if owner else "Auto allocated",
+                "moved_back_at": moved_back_at.isoformat(),
+            },
+        )
     if owner is not None:
         auto_allocate_leads(target_staff=owner, prioritized_lead_ids=[lead.id])
     else:
@@ -9051,6 +9173,286 @@ def build_call_detail_payload(*, limit=200, date_value=""):
     return {
         "call_rows": call_rows,
         "selected_date": selected_date.isoformat() if selected_date else "",
+    }
+
+
+def build_lead_route_map_payload(lead):
+    lead = (
+        Lead.objects.select_related("assigned_to", "interested_detail__staff")
+        .filter(id=getattr(lead, "id", lead))
+        .first()
+    )
+    if lead is None:
+        raise ValueError("Lead not found.")
+
+    calls = list(
+        Call.objects.filter(lead=lead).select_related("staff").order_by("start_time", "created_at", "id")
+    )
+    lead_actions = list(
+        StaffAction.objects.filter(lead=lead).select_related("staff", "call").order_by("created_at", "id")
+    )
+    events = []
+    seen_event_ids = set()
+
+    def add_event(event_id, *, stamp, title, description="", tone="muted", icon="circle", meta_lines=None):
+        if not stamp or event_id in seen_event_ids:
+            return
+        seen_event_ids.add(event_id)
+        local_stamp = timezone.localtime(stamp)
+        events.append(
+            {
+                "id": event_id,
+                "title": title,
+                "description": description,
+                "tone": tone,
+                "icon": icon,
+                "time_label": _format_datetime(local_stamp),
+                "time_sort": local_stamp.isoformat(),
+                "meta_lines": [line for line in (meta_lines or []) if line],
+            }
+        )
+
+    current_owner = lead.assigned_to
+    current_owner_name = current_owner.name if current_owner else "Unassigned"
+    current_owner_phone = current_owner.phone if current_owner else ""
+    status_meta = _lead_route_status_meta(lead.status)
+    lead_created_stamp = lead.created_at or lead.updated_at or timezone.now()
+    add_event(
+        f"lead-created-{lead.id}",
+        stamp=lead_created_stamp,
+        title="Lead created",
+        description="The lead entered the admin system.",
+        tone="primary",
+        icon="plus-circle-fill",
+        meta_lines=[
+            f"Current owner: {current_owner_name}",
+            f"Current status: {lead.get_status_display()}",
+        ],
+    )
+
+    for call in calls:
+        call_stamp = call.end_time or call.start_time or call.created_at
+        if not call_stamp:
+            continue
+        call_tone = "muted"
+        call_icon = "telephone"
+        call_title = "Call logged"
+        if call.status == Call.Status.STARTED:
+            call_title = "Call started"
+            call_tone = "primary"
+            call_icon = "telephone-forward-fill"
+        elif call.status == Call.Status.INTERESTED:
+            call_title = "Marked Follow Up"
+            call_tone = "warning"
+            call_icon = "arrow-repeat"
+        elif call.status == Call.Status.CALL_BACK:
+            call_title = "Marked Call Back"
+            call_tone = "warning"
+            call_icon = "calendar2-check"
+        elif call.status == Call.Status.NO_ANSWER:
+            call_title = "Marked No Response"
+            call_tone = "primary"
+            call_icon = "skip-forward-circle-fill"
+        elif call.status == Call.Status.NOT_INTERESTED:
+            call_title = "Marked Rejected"
+            call_tone = "danger"
+            call_icon = "x-circle-fill"
+        elif call.status == Call.Status.CONVERTED:
+            call_title = "Marked Successful"
+            call_tone = "success"
+            call_icon = "check2-circle-fill"
+        elif call.status == Call.Status.INVALID_SHORT:
+            call_title = "Invalid short call"
+            call_tone = "muted"
+            call_icon = "slash-circle"
+
+        callback_parts = []
+        callback_schedule_label = _format_callback_schedule_label(call.callback_date, call.callback_window)
+        if callback_schedule_label:
+            callback_parts.append(f"Callback: {callback_schedule_label}")
+        elif call.callback_window:
+            callback_parts.append(f"Callback slot: {call.get_callback_window_display()}")
+        if call.is_verified:
+            callback_parts.append("Verified call")
+        add_event(
+            f"call-{call.id}",
+            stamp=call_stamp,
+            title=call_title,
+            description=f"{call.staff.name} recorded the call outcome.",
+            tone=call_tone,
+            icon=call_icon,
+            meta_lines=[
+                f"Staff: {call.staff.name}",
+                f"Duration: {_format_duration(call.duration_seconds)}",
+                *callback_parts,
+            ],
+        )
+
+    for action in lead_actions:
+        metadata = action.metadata or {}
+        source = str(metadata.get("source") or "").strip()
+        if source not in {"admin_lead_edit", "followup_expiry", "followup_move_back", "recovery_restore", "customer_recovery"}:
+            continue
+        stamp = action.created_at
+        if not stamp:
+            continue
+        if source == "admin_lead_edit":
+            change_labels = _lead_route_change_labels(metadata)
+            if not change_labels:
+                continue
+            add_event(
+                f"action-{action.id}",
+                stamp=stamp,
+                title="Lead details updated",
+                description="Admin changed the lead details.",
+                tone="info",
+                icon="pencil-square",
+                meta_lines=change_labels,
+            )
+            continue
+
+        if source == "followup_expiry":
+            expiry_days = metadata.get("expiry_days")
+            idle_days = metadata.get("idle_days")
+            meta_lines = []
+            if expiry_days:
+                meta_lines.append(f"Expiry rule: {expiry_days} day(s)")
+            if idle_days:
+                meta_lines.append(f"Idle for: {idle_days} day(s)")
+            add_event(
+                f"action-{action.id}",
+                stamp=stamp,
+                title="Auto-expired from follow-up",
+                description="The lead crossed the follow-up inactivity rule.",
+                tone="danger",
+                icon="hourglass-split",
+                meta_lines=meta_lines,
+            )
+            continue
+
+        if source == "followup_move_back":
+            owner_name = metadata.get("owner_name") or current_owner_name
+            add_event(
+                f"action-{action.id}",
+                stamp=stamp,
+                title="Moved back to active follow-up",
+                description="The lead returned to the live follow-up queue.",
+                tone="warning",
+                icon="arrow-counterclockwise",
+                meta_lines=[f"Owner: {owner_name}" if owner_name else "Owner: Unassigned"],
+            )
+            continue
+
+        if source == "recovery_restore":
+            target_status = metadata.get("target_status") or Lead.Status.NEW
+            target_label = "New lead" if target_status == Lead.Status.NEW else "Follow Up"
+            add_event(
+                f"action-{action.id}",
+                stamp=stamp,
+                title=f"Recovered to {target_label}",
+                description="The lead returned from the recovery list.",
+                tone="primary",
+                icon="arrow-repeat",
+                meta_lines=[f"Owner: {metadata.get('owner_name') or current_owner_name}"],
+            )
+            continue
+
+        if source == "customer_recovery":
+            recovery_status = metadata.get("status") or Lead.Status.INTERESTED
+            recovery_status_label = dict(Lead.Status.choices).get(recovery_status, recovery_status)
+            recovery_callback_window = metadata.get("callback_window") or ""
+            recovery_callback_window_label = dict(Lead.CallbackWindow.choices).get(
+                recovery_callback_window,
+                recovery_callback_window or "Not set",
+            )
+            add_event(
+                f"action-{action.id}",
+                stamp=stamp,
+                title="Lead recovered by staff",
+                description="The lead was restored from staff history.",
+                tone="primary",
+                icon="arrow-repeat",
+                meta_lines=[
+                    f"Status: {recovery_status_label}",
+                    f"Callback: {recovery_callback_window_label}",
+                ],
+            )
+
+    interested_detail = getattr(lead, "interested_detail", None)
+    if interested_detail and interested_detail.created_at:
+        add_event(
+            f"detail-{interested_detail.id}",
+            stamp=interested_detail.created_at,
+            title="Interested details captured",
+            description="The lead was opened up with follow-up notes and preferred timing.",
+            tone="warning",
+            icon="clipboard2-check",
+            meta_lines=[
+                f"Product: {interested_detail.product_enquired}",
+                f"Preferred time: {interested_detail.preferred_call_time or 'Not set'}",
+            ],
+        )
+
+    if lead.handover_updated_at:
+        add_event(
+            f"handover-{lead.id}",
+            stamp=lead.handover_updated_at,
+            title=f"Handover {lead.get_handover_status_display()}",
+            description="The handover state changed for this lead.",
+            tone="info",
+            icon="box-seam",
+            meta_lines=[f"Current handover: {lead.get_handover_status_display()}"],
+        )
+
+    events.sort(key=lambda row: row["time_sort"])
+    last_touch_stamp = lead.last_contacted_at or (calls[-1].end_time if calls else None) or lead.updated_at or lead.created_at
+    first_call_stamp = calls[0].start_time if calls else None
+    last_call_stamp = None
+    for call in reversed(calls):
+        last_call_stamp = call.end_time or call.start_time or call.created_at
+        if last_call_stamp:
+            break
+
+    return {
+        "lead": {
+            "id": str(lead.id),
+            "name": lead.name,
+            "phone": lead.phone,
+            "status": lead.status,
+            "status_label": lead.get_status_display(),
+            "status_tone": status_meta["tone"],
+            "owner_name": current_owner_name,
+            "owner_phone": current_owner_phone,
+            "created_at": _format_datetime(lead.created_at),
+            "updated_at": _format_datetime(lead.updated_at),
+            "last_contacted_at": _format_datetime(lead.last_contacted_at, fallback="Not contacted yet"),
+            "followup_moved_back_at": _format_datetime(lead.followup_moved_back_at, fallback="Not moved back yet"),
+            "callback_schedule_label": _format_callback_schedule_label(
+                lead.callback_date,
+                lead.callback_window,
+            ),
+            "handover_status_label": lead.get_handover_status_display(),
+            "notes": lead.notes or "",
+        },
+        "summary": {
+            "event_count": len(events),
+            "call_count": len(calls),
+            "qualifying_call_count": sum(1 for call in calls if call.is_qualifying),
+            "first_call_at": _format_datetime(first_call_stamp, fallback="No call yet"),
+            "last_call_at": _format_datetime(last_call_stamp, fallback="No call yet"),
+            "last_touch_at": _format_datetime(last_touch_stamp),
+            "current_status_label": lead.get_status_display(),
+            "current_status_tone": status_meta["tone"],
+            "current_status_icon": status_meta["icon"],
+            "current_owner_name": current_owner_name,
+            "current_owner_phone": current_owner_phone,
+            "route_state_label": "Success" if lead.status == Lead.Status.CONVERTED else (
+                "Closed" if lead.status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER} else (
+                    "Expired" if lead.status == Lead.Status.EXPIRED_FOLLOWUP else "Open"
+                )
+            ),
+        },
+        "timeline_rows": events,
     }
 
 

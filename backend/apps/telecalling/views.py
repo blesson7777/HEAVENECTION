@@ -98,6 +98,7 @@ from backend.apps.telecalling.services import (
     build_interested_lead_payload,
     build_learning_management_payload,
     build_lead_management_payload,
+    build_lead_route_map_payload,
     build_live_monitoring_payload,
     build_recovery_lead_payload,
     build_salary_control_payload,
@@ -132,6 +133,7 @@ from backend.apps.telecalling.services import (
     get_pending_status_call,
     get_recoverable_open_call,
     get_company_profile,
+    _log_staff_action,
     publish_app_release,
     queue_salary_payment_acknowledgement,
     reassign_unassigned_followup_owners,
@@ -3396,6 +3398,13 @@ def lead_detail_api(request, lead_id):
             auto_allocate_leads()
         return Response(status=204)
 
+    previous_name = lead.name
+    previous_phone = lead.phone
+    previous_notes = lead.notes
+    previous_callback_window = lead.callback_window
+    previous_callback_date = lead.callback_date
+    previous_handover_status = lead.handover_status
+    previous_assigned_to = lead.assigned_to
     previous_assigned_to_id = lead.assigned_to_id
     previous_status = lead.status
     serializer = UpdateLeadSerializer(lead, data=request.data, partial=True)
@@ -3409,7 +3418,71 @@ def lead_detail_api(request, lead_id):
         previous_assigned_to_id=previous_assigned_to_id,
         explicit_assignment=explicit_assignment,
     )
+    change_map = {}
+    if previous_name != lead.name:
+        change_map["name"] = {"from": previous_name, "to": lead.name}
+    if previous_phone != lead.phone:
+        change_map["phone"] = {"from": previous_phone, "to": lead.phone}
+    if previous_status != lead.status:
+        change_map["status"] = {
+            "from": dict(Lead.Status.choices).get(previous_status, previous_status or ""),
+            "to": lead.get_status_display(),
+        }
+    if previous_assigned_to_id != lead.assigned_to_id:
+        change_map["assigned_to"] = {
+            "from": previous_assigned_to.name if previous_assigned_to else "Unassigned",
+            "to": lead.assigned_to.name if lead.assigned_to else "Unassigned",
+        }
+    if previous_callback_window != lead.callback_window:
+        change_map["callback_window"] = {
+            "from": dict(Lead.CallbackWindow.choices).get(previous_callback_window, previous_callback_window or ""),
+            "to": dict(Lead.CallbackWindow.choices).get(lead.callback_window, lead.callback_window or ""),
+        }
+    if previous_callback_date != lead.callback_date:
+        change_map["callback_date"] = {
+            "from": previous_callback_date.isoformat() if previous_callback_date else "",
+            "to": lead.callback_date.isoformat() if lead.callback_date else "",
+        }
+    if previous_handover_status != lead.handover_status:
+        change_map["handover_status"] = {
+            "from": dict(Lead.HandoverStatus.choices).get(previous_handover_status, previous_handover_status or ""),
+            "to": lead.get_handover_status_display(),
+        }
+    if previous_notes != lead.notes:
+        change_map["notes"] = {
+            "from": previous_notes or "",
+            "to": lead.notes or "",
+        }
+    if change_map and request.user and hasattr(request.user, "role"):
+        _log_staff_action(
+            request.user,
+            StaffAction.ActionType.CALL_STATUS_UPDATED,
+            lead=lead,
+            metadata={
+                "source": "admin_lead_edit",
+                "changes": change_map,
+                "previous_status": previous_status,
+                "current_status": lead.status,
+                "previous_owner": previous_assigned_to.name if previous_assigned_to else "Unassigned",
+                "current_owner": lead.assigned_to.name if lead.assigned_to else "Unassigned",
+            },
+        )
     return Response(LeadSerializer(lead).data)
+
+
+@api_view(["GET"])
+@permission_classes([IsAdminStaff])
+def lead_route_map_api(request, lead_id):
+    try:
+        lead = Lead.objects.get(id=lead_id)
+    except Lead.DoesNotExist:
+        return Response({"detail": "Lead not found."}, status=404)
+
+    try:
+        payload = build_lead_route_map_payload(lead)
+    except ValueError as error:
+        return Response({"detail": str(error)}, status=404)
+    return Response(payload)
 
 
 @api_view(["GET", "POST"])

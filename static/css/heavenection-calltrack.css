@@ -1313,6 +1313,193 @@
     min-height: 120px;
 }
 
+.hc-route-map-shell {
+    display: grid;
+    gap: 1rem;
+}
+
+.hc-route-map-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.hc-route-map-summary-card {
+    padding: 0.95rem 1rem;
+    border-radius: 18px;
+    border: 1px solid #dce3f4;
+    background: linear-gradient(150deg, #ffffff 0%, #eef3ff 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.hc-route-map-summary-card span {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-size: 0.74rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #7383a2;
+}
+
+.hc-route-map-summary-card strong {
+    color: #22315a;
+    font-size: 1rem;
+    font-weight: 800;
+}
+
+.hc-route-map-summary-card small {
+    display: block;
+    margin-top: 0.25rem;
+    color: #637694;
+}
+
+.hc-route-map-timeline {
+    display: grid;
+    gap: 0.8rem;
+}
+
+.hc-route-map-step {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.9rem;
+    padding: 0.95rem 1rem;
+    border-radius: 18px;
+    border: 1px solid #dce3f4;
+    background: linear-gradient(150deg, #ffffff 0%, #f7f9ff 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.hc-route-map-step-marker {
+    width: 42px;
+    height: 42px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    font-size: 1.05rem;
+    background: rgba(77, 92, 144, 0.1);
+    color: #4d5c90;
+}
+
+.hc-route-map-step-marker.is-primary {
+    background: rgba(77, 92, 144, 0.14);
+    color: #4d5c90;
+}
+
+.hc-route-map-step-marker.is-success {
+    background: rgba(16, 158, 101, 0.16);
+    color: #109e65;
+}
+
+.hc-route-map-step-marker.is-warning {
+    background: rgba(255, 170, 0, 0.18);
+    color: #b16d00;
+}
+
+.hc-route-map-step-marker.is-danger {
+    background: rgba(226, 88, 94, 0.16);
+    color: #e2585e;
+}
+
+.hc-route-map-step-marker.is-info {
+    background: rgba(49, 126, 255, 0.14);
+    color: #317eff;
+}
+
+.hc-route-map-step-marker.is-muted {
+    background: rgba(117, 132, 160, 0.14);
+    color: #7584a0;
+}
+
+.hc-route-map-step-body strong {
+    display: block;
+    color: #22315a;
+    font-size: 0.98rem;
+    font-weight: 800;
+}
+
+.hc-route-map-step-body p {
+    margin: 0.35rem 0 0;
+    color: #53627f;
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+.hc-route-map-step-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.55rem;
+}
+
+.hc-route-map-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.26rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(77, 92, 144, 0.08);
+    color: #4d5c90;
+    font-size: 0.74rem;
+    font-weight: 700;
+}
+
+.hc-route-map-empty {
+    padding: 1rem 1.1rem;
+    border-radius: 18px;
+    border: 1px dashed #cfd8eb;
+    background: rgba(77, 92, 144, 0.05);
+    color: #5f6f8c;
+}
+
+body.mf-dark .hc-route-map-summary-card,
+body.mf-dark .hc-route-map-step,
+body.mf-dark .hc-route-map-empty {
+    border-color: rgba(255, 255, 255, 0.08);
+    background: linear-gradient(150deg, rgba(25, 30, 52, 0.9) 0%, rgba(34, 41, 68, 0.95) 100%);
+}
+
+body.mf-dark .hc-route-map-summary-card span,
+body.mf-dark .hc-route-map-summary-card small,
+body.mf-dark .hc-route-map-step-body p,
+body.mf-dark .hc-route-map-empty {
+    color: #b9c4df;
+}
+
+body.mf-dark .hc-route-map-summary-card strong,
+body.mf-dark .hc-route-map-step-body strong {
+    color: #f2f5ff;
+}
+
+body.mf-dark .hc-route-map-step-marker,
+body.mf-dark .hc-route-map-pill {
+    background: rgba(141, 157, 207, 0.16);
+    color: #dbe3ff;
+}
+
+@media (max-width: 991.98px) {
+    .hc-route-map-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 575.98px) {
+    .hc-route-map-summary {
+        grid-template-columns: 1fr;
+    }
+
+    .hc-route-map-step {
+        gap: 0.75rem;
+        padding: 0.85rem 0.9rem;
+    }
+
+    .hc-route-map-step-marker {
+        width: 36px;
+        height: 36px;
+        font-size: 0.95rem;
+    }
+}
+
 .hc-emi-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
