@@ -1415,8 +1415,8 @@
             return `
                 <div class="hc-route-map-hero">
                     <div class="hc-route-map-hero-graphic" aria-hidden="true">
-                        <span class="hc-route-map-hero-sign"><i class="bi bi-signpost-split-fill"></i></span>
-                        <span class="hc-route-map-hero-car"><i class="bi bi-car-front-fill"></i></span>
+                        <span class="hc-route-map-hero-sign"><i class="bi bi-geo-alt-fill"></i></span>
+                        <span class="hc-route-map-hero-car"><i class="bi bi-telephone-forward-fill"></i></span>
                         <span class="hc-route-map-hero-spark"><i class="bi bi-stars"></i></span>
                     </div>
                     <div class="hc-route-map-hero-copy">
@@ -1433,67 +1433,93 @@
             const tone = row?.tone || "muted";
             const side = index % 2 === 0 ? "left" : "right";
             let icon = row?.icon || "circle";
+            let badgeIcon = "geo-alt-fill";
+            let badgeLabel = "START";
             let sticker = "Cruise";
             let caption = "A tiny marker on the lane.";
             let accentTone = tone;
 
             if (title.includes("lead created")) {
-                icon = "signpost-split-fill";
+                icon = "person-plus-fill";
+                badgeIcon = "geo-alt-fill";
+                badgeLabel = "START";
                 sticker = "START";
                 caption = "The road begins here.";
                 accentTone = "primary";
             } else if (title.includes("call started")) {
                 icon = "telephone-forward-fill";
+                badgeIcon = "telephone-forward-fill";
+                badgeLabel = "CALL";
                 sticker = "DIAL";
                 caption = "The phone is rolling.";
                 accentTone = "primary";
             } else if (title.includes("marked rejected") || title.includes("rejected")) {
-                icon = "hand-index-thumb-fill";
+                icon = "hand-thumbs-down-fill";
+                badgeIcon = "slash-circle-fill";
+                badgeLabel = "NOPE!";
                 sticker = "NOPE!";
                 caption = "Not interested. Friendly wave out.";
                 accentTone = "danger";
             } else if (title.includes("marked no response") || title.includes("no response")) {
                 icon = "telephone-x-fill";
+                badgeIcon = "telephone-x-fill";
+                badgeLabel = "QUIET";
                 sticker = "RING...";
                 caption = "The call went into the quiet zone.";
                 accentTone = "primary";
             } else if (title.includes("marked successful") || title.includes("successful")) {
                 icon = "check2-circle-fill";
+                badgeIcon = "check2-circle-fill";
+                badgeLabel = "DONE";
                 sticker = "YES!";
                 caption = "Green light and celebration.";
                 accentTone = "success";
             } else if (title.includes("interested details")) {
-                icon = "chat-heart-fill";
+                icon = "chat-dots-fill";
+                badgeIcon = "chat-dots-fill";
+                badgeLabel = "INTEREST";
                 sticker = "COOL!";
                 caption = "The lead showed a spark.";
                 accentTone = "warning";
             } else if (title.includes("moved back")) {
                 icon = "arrow-counterclockwise";
+                badgeIcon = "arrow-counterclockwise";
+                badgeLabel = "BACK";
                 sticker = "BACK!";
                 caption = "Recovered to the live lane.";
                 accentTone = "warning";
             } else if (title.includes("expired")) {
                 icon = "hourglass-split";
+                badgeIcon = "hourglass-split";
+                badgeLabel = "EXPIRED";
                 sticker = "TICK TOCK";
                 caption = "The lane waited too long.";
                 accentTone = "danger";
             } else if (title.includes("updated")) {
                 icon = "pencil-square";
+                badgeIcon = "pencil-square";
+                badgeLabel = "EDIT";
                 sticker = "PATCH";
                 caption = "The route got a fresh edit.";
                 accentTone = "info";
             } else if (title.includes("handover")) {
                 icon = "box-seam";
+                badgeIcon = "box-seam";
+                badgeLabel = "OFFICE";
                 sticker = "OFFICE";
                 caption = "Office side took over.";
                 accentTone = "info";
             } else if (description.includes("recovered")) {
                 icon = "arrow-repeat";
+                badgeIcon = "arrow-repeat";
+                badgeLabel = "RECOVER";
                 sticker = "BACK";
                 caption = "Pulled back into action.";
                 accentTone = "warning";
             } else if (title.includes("marked follow up") || title.includes("marked call back") || title.includes("call back")) {
                 icon = "arrow-repeat";
+                badgeIcon = "arrow-repeat";
+                badgeLabel = "CALL BACK";
                 sticker = "AGAIN";
                 caption = "The lead wants one more round.";
                 accentTone = "warning";
@@ -1502,6 +1528,8 @@
             return {
                 side,
                 icon,
+                badgeIcon,
+                badgeLabel,
                 sticker,
                 caption,
                 tone: accentTone,
@@ -1561,12 +1589,15 @@
                     <div class="hc-route-road-card-head">
                         <div class="hc-route-road-avatar is-${escapeHtml(visual.tone)}">
                             <i class="bi bi-${escapeHtml(visual.icon)}"></i>
-                            <span class="hc-route-road-avatar-sticker">${escapeHtml(visual.sticker)}</span>
                         </div>
                         <div class="hc-route-road-card-copy">
                             <strong>${escapeHtml(row.title || "Activity")}</strong>
                             <span>${escapeHtml(row.time_label || "--")}</span>
                         </div>
+                    </div>
+                    <div class="hc-route-road-badge is-${escapeHtml(visual.tone)}">
+                        <i class="bi bi-${escapeHtml(visual.badgeIcon)}"></i>
+                        <strong>${escapeHtml(visual.badgeLabel)}</strong>
                     </div>
                     <p>${escapeHtml(row.description || "")}</p>
                     <div class="hc-route-road-caption">${escapeHtml(visual.caption)}</div>
