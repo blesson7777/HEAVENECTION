@@ -10,7 +10,7 @@
     <div class="mf-db2-panel-head mb-3">
         <div>
             <span class="mf-db2-kicker">Interested Leads</span>
-            <h5>One list with open leads and result history together</h5>
+            <h5>One simple list with success and unsuccess actions</h5>
         </div>
     </div>
 
@@ -47,14 +47,14 @@
             <div class="hc-summary-card h-100">
                 <span class="mf-db2-kicker">Converted</span>
                 <h3 class="mb-1">{{ interested_lead_summary.converted_count }}</h3>
-                <p class="mb-0 text-muted">Interested leads that became successful and earned reward.</p>
+                <p class="mb-0 text-muted">Interested leads that became successful.</p>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
             <div class="hc-summary-card h-100">
                 <span class="mf-db2-kicker">Unsuccessful</span>
                 <h3 class="mb-1">{{ interested_lead_summary.unsuccessful_count }}</h3>
-                <p class="mb-0 text-muted">Interested leads that closed without success and stay in history.</p>
+                <p class="mb-0 text-muted">Interested leads that closed without success.</p>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
@@ -168,7 +168,7 @@
         <div class="mf-db2-panel-head mb-3">
             <div>
                 <span class="mf-db2-kicker">Interested List</span>
-                <h6 class="mb-0">Open leads and result history in one place</h6>
+                <h6 class="mb-0">Open leads and closed leads in one place</h6>
             </div>
         </div>
         <div class="table-responsive">
@@ -238,7 +238,7 @@
                                 data-current-status="{{ row.lead_status }}"
                             >Set Unsuccessful</button>
                             {% else %}
-                            <span class="small text-muted">History only</span>
+                            <span class="small text-muted">Closed</span>
                             {% endif %}
                         </div>
                     </td>
