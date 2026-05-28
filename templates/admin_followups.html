@@ -95,14 +95,14 @@
     </div>
 
     <div class="alert alert-primary border-0 mb-4" role="alert">
-        This queue shows live <strong>Call Back</strong> work assigned by staff. Scheduled leads stay highlighted here until the staff makes the next follow-up call. Use the separate <strong>Rejected / No Response</strong> and <strong>Closed Follow-Ups</strong> pages for the other queues.
+        This queue shows live <strong>Follow Up</strong> work assigned by staff. Scheduled leads stay highlighted here until the staff makes the next follow-up call. Use the separate <strong>Rejected / No Response</strong> and <strong>Closed Follow-Ups</strong> pages for the other queues.
         {% if followup_expiry_settings.enabled %}
         Any follow-up with no staff update for <strong>{{ followup_expiry_settings.expiry_days }} day{% if followup_expiry_settings.expiry_days != 1 %}s{% endif %}</strong> is moved to <strong>Closed Follow-Up</strong>.
         {% else %}
         Auto-expiry is currently <strong>disabled</strong>.
         {% endif %}
         {% if followup_expiry_settings.uncalled_alert_enabled %}
-        A follow-up should get the first call within <strong>{{ followup_expiry_settings.uncalled_alert_hours }} hour{% if followup_expiry_settings.uncalled_alert_hours != 1 %}s{% endif %}</strong> after being marked Call Back.
+        A follow-up should get the first call within <strong>{{ followup_expiry_settings.uncalled_alert_hours }} hour{% if followup_expiry_settings.uncalled_alert_hours != 1 %}s{% endif %}</strong> after being marked Follow Up.
         {% endif %}
         Staff warning starts when a lead has no follow-up activity for <strong>{{ followup_expiry_settings.warning_days }} day{% if followup_expiry_settings.warning_days != 1 %}s{% endif %}</strong>.
         {% if followup_expiry_settings.sla_gate_enabled %}
@@ -426,7 +426,7 @@
                     <hr class="my-3">
                     <div class="mb-3">
                         <h6 class="mb-2">No-Call SLA Rule</h6>
-                        <p class="text-muted small mb-0">Track leads that were marked Call Back but did not get a next follow-up call in time.</p>
+                        <p class="text-muted small mb-0">Track leads that were marked Follow Up but did not get a next follow-up call in time.</p>
                     </div>
                     <div class="form-check form-switch mb-3">
                         <input

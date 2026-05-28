@@ -10142,7 +10142,7 @@ def build_staff_followups_payload(staff):
                 "name": lead.name,
                 "phone": lead.phone,
                 "status": queue_status,
-                "status_label": dict(Lead.Status.choices).get(queue_status, lead.get_status_display()),
+                "status_label": "Follow Up",
                 "status_tone": "warning" if queue_status == Lead.Status.CALL_BACK else "muted",
                 "callback_window": lead.callback_window,
                 "callback_window_label": lead.get_callback_window_display() if lead.callback_window else "",
