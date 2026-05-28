@@ -2553,7 +2553,7 @@ def performance_monitoring_page(request):
         active_page="performance-monitoring",
         page_title="Performance Monitoring",
         page_heading="Performance Monitoring",
-        page_subtitle="Advanced performance watch with live motion, queue pressure, risk scoring, and staff comparison on one rich monitoring page.",
+        page_subtitle="Spreadsheet-style staff performance sheets with separate follow-up, quality, and attention views.",
         extra_context={
             **payload,
             "performance_monitoring_payload": payload,

@@ -16,11 +16,11 @@
 
 <div
     id="heavenectionPerformanceMonitoringPage"
-    class="hc-performance-shell animate-on-scroll"
+    class="hc-performance-shell hc-performance-sheet-shell animate-on-scroll"
     data-api-url="{% url 'api-live-monitoring' %}"
     data-profile-url-template="{% url 'staff-profile-page' '00000000-0000-0000-0000-000000000000' %}"
 >
-    <section class="hc-performance-hero">
+    <section class="hc-performance-hero hc-performance-sheet-hero">
         <div class="hc-performance-hero-backdrop" aria-hidden="true">
             <span class="hc-performance-orb hc-performance-orb-a"></span>
             <span class="hc-performance-orb hc-performance-orb-b"></span>
@@ -29,9 +29,9 @@
         </div>
 
         <div class="hc-performance-hero-copy">
-            <span class="hc-performance-kicker">Advanced Performance Monitoring</span>
-            <h2>Read the team rhythm, risk, queue pressure, and top performance from one animated monitoring wall.</h2>
-            <p>Built as a separate performance page so you can study output, compare staff, and catch pressure signals without losing the faster command center workflow.</p>
+            <span class="hc-performance-kicker">Performance Sheets</span>
+            <h2>Spreadsheet-style staff performance with separate follow-up and quality sheets.</h2>
+            <p>See calls, work time, follow-up discipline, penalties, and review pressure in a table layout that is easier to scan and compare staff by staff.</p>
             <div class="hc-performance-hero-pills">
                 <span><i class="bi bi-broadcast-pin"></i> Updated <strong id="performanceMonitoringGeneratedAt">{{ generated_at_label }}</strong></span>
                 <span><i class="bi bi-arrow-repeat"></i> Next refresh <strong id="performanceMonitoringNextRefresh">8s</strong></span>
@@ -47,13 +47,13 @@
                 <span class="hc-live-sync-dot"></span>
                 <div class="hc-live-sync-copy">
                     <strong id="performanceMonitoringSyncState">Live Sync Active</strong>
-                    <small id="performanceMonitoringSyncDetail">Performance board is refreshing automatically.</small>
+                    <small id="performanceMonitoringSyncDetail">Performance sheets are refreshing automatically.</small>
                 </div>
             </div>
         </div>
     </section>
 
-    <section class="hc-performance-topbar">
+    <section class="hc-performance-topbar hc-performance-sheet-topbar">
         <article class="hc-performance-topcard">
             <span>Live Staff</span>
             <strong id="performanceMonitoringLiveStaff">{{ summary.online_now }}</strong>
@@ -65,109 +65,143 @@
             <small>Tracked effective work time today</small>
         </article>
         <article class="hc-performance-topcard">
+            <span>Follow-Up Rate</span>
+            <strong id="performanceMonitoringFollowupRate">--</strong>
+            <small id="performanceMonitoringFollowupMeta">Follow-up completion across the team</small>
+        </article>
+        <article class="hc-performance-topcard">
             <span>Review Pressure</span>
             <strong id="performanceMonitoringReviewPressure">{{ summary.review_needed_now }}</strong>
             <small>{{ summary.alert_now }} nearby alerts also need attention</small>
         </article>
         <article class="hc-performance-topcard">
-            <span>Queue Load</span>
-            <strong id="performanceMonitoringQueueLoad">{{ summary.total_assigned }}</strong>
-            <small>{{ summary.total_calls_today }} calls already tracked today</small>
-        </article>
-        <article class="hc-performance-topcard">
             <span>Successful Leads</span>
             <strong id="performanceMonitoringConverted">{{ summary.total_converted_today }}</strong>
-            <small>Conversions captured so far today</small>
+            <small>{{ summary.total_assigned }} assigned leads in the queue</small>
         </article>
     </section>
 
-    <section class="hc-performance-grid hc-performance-grid-main">
-        <article class="hc-performance-panel hc-performance-panel-graph">
-            <div class="hc-performance-panel-head">
-                <div>
-                    <span class="mf-db2-kicker">Graph Wall</span>
-                    <h5>Live performance graph wall</h5>
-                </div>
-                <small>Top active staff are ranked by current performance weight.</small>
-            </div>
-            <div id="performanceMonitoringGraphWall" class="hc-performance-graph-wall">
-                <div class="hc-work-review-empty-note">Performance graph wall is loading.</div>
-            </div>
-        </article>
+    <div class="hc-performance-sheet-switcher" role="tablist" aria-label="Performance sheets">
+        <button type="button" class="btn btn-sm btn-outline-light is-active js-performance-sheet" data-sheet="overview">Overview Sheet</button>
+        <button type="button" class="btn btn-sm btn-outline-light js-performance-sheet" data-sheet="followup">Follow-Up Sheet</button>
+        <button type="button" class="btn btn-sm btn-outline-light js-performance-sheet" data-sheet="quality">Quality Sheet</button>
+        <button type="button" class="btn btn-sm btn-outline-light js-performance-sheet" data-sheet="attention">Attention Sheet</button>
+    </div>
 
-        <article class="hc-performance-panel hc-performance-panel-alerts">
-            <div class="hc-performance-panel-head">
-                <div>
-                    <span class="mf-db2-kicker">Alert Engine</span>
-                    <h5>Supervisor alert ranking</h5>
-                </div>
-                <small>Signals combine review pressure, zero-talk blocks, and missed outcomes.</small>
+    <section class="hc-performance-sheet-panel is-active" data-sheet-panel="overview">
+        <div class="hc-performance-panel-head">
+            <div>
+                <span class="mf-db2-kicker">Overview Sheet</span>
+                <h5>Staff sheet with calls, work time, queue, conversions, and quality</h5>
             </div>
-            <div id="performanceMonitoringAlertEngine" class="hc-performance-alert-engine">
-                <div class="hc-work-review-empty-note">Alert engine is loading.</div>
-            </div>
-        </article>
+            <small>Rows are sorted by live performance weight and can be compared like a worksheet.</small>
+        </div>
+        <div class="table-responsive hc-performance-sheet-table-wrap">
+            <table class="table hc-performance-sheet-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Staff</th>
+                        <th>Status</th>
+                        <th>Calls</th>
+                        <th>Work</th>
+                        <th>Queue</th>
+                        <th>Converted</th>
+                        <th>Quality</th>
+                        <th>Graph</th>
+                    </tr>
+                </thead>
+                <tbody id="performanceMonitoringOverviewBody">
+                    <tr><td colspan="8" class="text-center py-4">Overview sheet is loading.</td></tr>
+                </tbody>
+            </table>
+        </div>
     </section>
 
-    <section class="hc-performance-grid hc-performance-grid-split">
-        <article class="hc-performance-panel">
-            <div class="hc-performance-panel-head">
-                <div>
-                    <span class="mf-db2-kicker">Momentum Lanes</span>
-                    <h5>Today performance rhythm</h5>
-                </div>
-                <small>Relative performance lanes for calls, quality, and effective work today.</small>
+    <section class="hc-performance-sheet-panel" data-sheet-panel="followup" hidden>
+        <div class="hc-performance-panel-head">
+            <div>
+                <span class="mf-db2-kicker">Follow-Up Sheet</span>
+                <h5>Separate view for follow-up calling performance</h5>
             </div>
-            <div id="performanceMonitoringTimeline" class="hc-performance-timeline">
-                <div class="hc-work-review-empty-note">Momentum lanes are loading.</div>
-            </div>
-        </article>
-
-        <article class="hc-performance-panel">
-            <div class="hc-performance-panel-head">
-                <div>
-                    <span class="mf-db2-kicker">Queue Heatmap</span>
-                    <h5>Queue pressure and workload balance</h5>
-                </div>
-                <small>Use this to find overload and redistribution opportunities quickly.</small>
-            </div>
-            <div id="performanceMonitoringQueueHeatmap" class="hc-performance-heatmap">
-                <div class="hc-work-review-empty-note">Queue heatmap is loading.</div>
-            </div>
-        </article>
+            <small>Track follow-up calls, rate, missed calls, and expired follow-ups on a clean sheet.</small>
+        </div>
+        <div class="table-responsive hc-performance-sheet-table-wrap">
+            <table class="table hc-performance-sheet-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Staff</th>
+                        <th>Follow-Up Calls</th>
+                        <th>Rate</th>
+                        <th>Missed</th>
+                        <th>Expired</th>
+                        <th>Started</th>
+                        <th>Closed</th>
+                        <th>Graph</th>
+                    </tr>
+                </thead>
+                <tbody id="performanceMonitoringFollowupBody">
+                    <tr><td colspan="8" class="text-center py-4">Follow-up sheet is loading.</td></tr>
+                </tbody>
+            </table>
+        </div>
     </section>
 
-    <section class="hc-performance-grid hc-performance-grid-split">
-        <article class="hc-performance-panel">
-            <div class="hc-performance-panel-head">
-                <div>
-                    <span class="mf-db2-kicker">Team Funnel</span>
-                    <h5>Daily movement and output funnel</h5>
-                </div>
-                <small>Compact outcome view from active staff through calls, queue pressure, and successful leads.</small>
+    <section class="hc-performance-sheet-panel" data-sheet-panel="quality" hidden>
+        <div class="hc-performance-panel-head">
+            <div>
+                <span class="mf-db2-kicker">Quality Sheet</span>
+                <h5>Excel-style call quality and penalty matrix</h5>
             </div>
-            <div id="performanceMonitoringOutcomeFunnel" class="hc-performance-funnel">
-                <div class="hc-work-review-empty-note">Daily movement funnel is loading.</div>
-            </div>
-        </article>
+            <small>Use this sheet to compare outcome consistency, blocks, and penalty points.</small>
+        </div>
+        <div class="table-responsive hc-performance-sheet-table-wrap">
+            <table class="table hc-performance-sheet-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Staff</th>
+                        <th>Score</th>
+                        <th>Outcome</th>
+                        <th>Invalid Short</th>
+                        <th>Zero Blocks</th>
+                        <th>Suspicious</th>
+                        <th>Penalty</th>
+                        <th>Graph</th>
+                    </tr>
+                </thead>
+                <tbody id="performanceMonitoringQualityBody">
+                    <tr><td colspan="8" class="text-center py-4">Quality sheet is loading.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
 
-        <article class="hc-performance-panel">
-            <div class="hc-performance-panel-head">
-                <div>
-                    <span class="mf-db2-kicker">Compare Lab</span>
-                    <h5>Staff comparison mode</h5>
-                </div>
-                <small>Select staff from the roster to compare calls, hours, quality, and queue side by side.</small>
+    <section class="hc-performance-sheet-panel" data-sheet-panel="attention" hidden>
+        <div class="hc-performance-panel-head">
+            <div>
+                <span class="mf-db2-kicker">Attention Sheet</span>
+                <h5>Review pressure and follow-up risk rows</h5>
             </div>
-            <div class="hc-performance-compare-shell">
-                <div id="performanceMonitoringCompareRoster" class="hc-performance-compare-roster">
-                    <div class="hc-work-review-empty-note">Comparison roster is loading.</div>
-                </div>
-                <div id="performanceMonitoringCompareDetail" class="hc-performance-compare-detail">
-                    <div class="hc-work-review-empty-note">Select staff to open the comparison lab.</div>
-                </div>
-            </div>
-        </article>
+            <small>Rows here need the quickest look from the office side.</small>
+        </div>
+        <div class="table-responsive hc-performance-sheet-table-wrap">
+            <table class="table hc-performance-sheet-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Staff</th>
+                        <th>State</th>
+                        <th>Risk</th>
+                        <th>Notes</th>
+                        <th>Missed</th>
+                        <th>Expired</th>
+                        <th>Queue</th>
+                        <th>Graph</th>
+                    </tr>
+                </thead>
+                <tbody id="performanceMonitoringAttentionBody">
+                    <tr><td colspan="8" class="text-center py-4">Attention sheet is loading.</td></tr>
+                </tbody>
+            </table>
+        </div>
     </section>
 </div>
 {% endblock %}

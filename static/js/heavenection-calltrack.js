@@ -5209,5 +5209,473 @@
     bindAdminAlertCenter();
     bindSidebarSections();
     bindEmiCalculator();
+
+    function bindPerformanceMonitoringPage() {
+        const root = document.getElementById("heavenectionPerformanceMonitoringPage");
+        if (!root) {
+            return;
+        }
+
+        const apiUrl = root.dataset.apiUrl || window.heavenectionAdmin?.liveMonitoringUrl || "";
+        const profileUrlTemplate = root.dataset.profileUrlTemplate || "";
+        const overviewBody = document.getElementById("performanceMonitoringOverviewBody");
+        const followupBody = document.getElementById("performanceMonitoringFollowupBody");
+        const qualityBody = document.getElementById("performanceMonitoringQualityBody");
+        const attentionBody = document.getElementById("performanceMonitoringAttentionBody");
+        const sheetButtons = Array.from(document.querySelectorAll(".js-performance-sheet"));
+        const sheetPanels = Array.from(document.querySelectorAll("[data-sheet-panel]"));
+        const refreshButton = document.getElementById("performanceMonitoringRefreshButton");
+        const syncBadge = document.getElementById("performanceMonitoringSyncBadge");
+        const syncStateNode = document.getElementById("performanceMonitoringSyncState");
+        const syncDetailNode = document.getElementById("performanceMonitoringSyncDetail");
+        const generatedAtNode = document.getElementById("performanceMonitoringGeneratedAt");
+        const nextRefreshNode = document.getElementById("performanceMonitoringNextRefresh");
+        const liveStaffNode = document.getElementById("performanceMonitoringLiveStaff");
+        const activeHoursNode = document.getElementById("performanceMonitoringActiveHours");
+        const followupRateNode = document.getElementById("performanceMonitoringFollowupRate");
+        const followupMetaNode = document.getElementById("performanceMonitoringFollowupMeta");
+        const reviewPressureNode = document.getElementById("performanceMonitoringReviewPressure");
+        const convertedNode = document.getElementById("performanceMonitoringConverted");
+
+        const refreshMs = 8000;
+        let refreshTimer = null;
+        let countdownTimer = null;
+        let nextRefreshAt = null;
+        let refreshInFlight = false;
+        let activeSheet = "overview";
+        let latestPayload = readJsonScript("heavenectionPerformanceMonitoringPayload") || {};
+        let latestRows = Array.isArray(latestPayload?.staff_rows) ? latestPayload.staff_rows : [];
+
+        function asNumber(value) {
+            const parsed = Number(value || 0);
+            return Number.isFinite(parsed) ? parsed : 0;
+        }
+
+        function parseDurationLabel(label) {
+            const text = String(label || "").trim().toLowerCase();
+            if (!text) {
+                return 0;
+            }
+            let totalMinutes = 0;
+            const hourMatch = text.match(/(\d+(?:\.\d+)?)\s*h/);
+            const minuteMatch = text.match(/(\d+(?:\.\d+)?)\s*m/);
+            const secondMatch = text.match(/(\d+(?:\.\d+)?)\s*s/);
+            if (hourMatch) {
+                totalMinutes += Number(hourMatch[1]) * 60;
+            }
+            if (minuteMatch) {
+                totalMinutes += Number(minuteMatch[1]);
+            }
+            if (secondMatch) {
+                totalMinutes += Number(secondMatch[1]) / 60;
+            }
+            if (!totalMinutes && /^\d+(?:\.\d+)?$/.test(text)) {
+                totalMinutes = Number(text);
+            }
+            return Number.isFinite(totalMinutes) ? totalMinutes : 0;
+        }
+
+        function profileUrlForRow(row) {
+            const staffId = String(row?.id || "").trim();
+            if (!profileUrlTemplate || !staffId) {
+                return "#";
+            }
+            return profileUrlTemplate.replace("00000000-0000-0000-0000-000000000000", staffId);
+        }
+
+        function clearScheduledRefresh() {
+            if (refreshTimer) {
+                window.clearTimeout(refreshTimer);
+                refreshTimer = null;
+            }
+            if (countdownTimer) {
+                window.clearInterval(countdownTimer);
+                countdownTimer = null;
+            }
+        }
+
+        function startCountdown() {
+            if (!nextRefreshNode) {
+                return;
+            }
+            if (countdownTimer) {
+                window.clearInterval(countdownTimer);
+            }
+            countdownTimer = window.setInterval(() => {
+                if (!nextRefreshAt) {
+                    nextRefreshNode.textContent = "--";
+                    return;
+                }
+                const seconds = Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000));
+                nextRefreshNode.textContent = `${seconds}s`;
+            }, 250);
+        }
+
+        function scheduleRefresh() {
+            clearScheduledRefresh();
+            nextRefreshAt = Date.now() + refreshMs;
+            startCountdown();
+            refreshTimer = window.setTimeout(() => {
+                refreshPayload({ silent: true });
+            }, refreshMs);
+        }
+
+        function setSyncState(state, detail) {
+            if (syncBadge) {
+                syncBadge.classList.remove("is-live", "is-warning", "is-danger");
+                if (state === "error") {
+                    syncBadge.classList.add("is-danger");
+                } else if (state === "syncing") {
+                    syncBadge.classList.add("is-warning");
+                } else {
+                    syncBadge.classList.add("is-live");
+                }
+            }
+            if (syncStateNode) {
+                syncStateNode.textContent = state === "error"
+                    ? "Sync Paused"
+                    : state === "syncing"
+                        ? "Refreshing Sheets"
+                        : "Live Sync Active";
+            }
+            if (syncDetailNode) {
+                syncDetailNode.textContent = detail || "";
+            }
+        }
+
+        function buildPerformanceScore(row) {
+            const calls = asNumber(row?.calls_today);
+            const quality = asNumber(row?.quality_score);
+            const converted = asNumber(row?.converted_today);
+            const assigned = asNumber(row?.assigned_leads);
+            const workMinutes = parseDurationLabel(row?.active_hours_today);
+            return (calls * 1.7) + (quality * 0.85) + (converted * 8) + (workMinutes * 0.42) + Math.min(assigned, 16);
+        }
+
+        function buildRiskScore(row) {
+            const suspicious = asNumber(row?.suspicious_block_count);
+            const zeroOnly = asNumber(row?.zero_only_block_count);
+            const invalidShort = asNumber(row?.invalid_short_count);
+            const missed = asNumber(row?.missed_callbacks);
+            const reviewNeed = row?.needs_review ? 12 : 0;
+            return (suspicious * 9) + (zeroOnly * 7) + (invalidShort * 5) + (missed * 4) + reviewNeed;
+        }
+
+        function qualityFactorRows(row) {
+            const factors = [];
+            const consistency = String(row?.outcome_consistency_label || "--").trim();
+            if (consistency && consistency !== "--") {
+                factors.push(`Consistency: ${consistency}`);
+            }
+            factors.push(`Real calls: ${asNumber(row?.real_call_count)}/${asNumber(row?.verified_attempt_count)}`);
+            if (asNumber(row?.zero_only_block_count) > 0) {
+                factors.push(`Zero-talk blocks: ${asNumber(row?.zero_only_block_count)}`);
+            }
+            if (asNumber(row?.suspicious_block_count) > 0) {
+                factors.push(`Call review blocks: ${asNumber(row?.suspicious_block_count)}`);
+            }
+            if (asNumber(row?.invalid_short_count) > 0) {
+                factors.push(`Invalid short: ${asNumber(row?.invalid_short_count)}`);
+            }
+            if (asNumber(row?.zero_second_attempt_count) > 0) {
+                factors.push(`Zero-second attempts: ${asNumber(row?.zero_second_attempt_count)}`);
+            }
+            if (asNumber(row?.missed_callbacks) > 0) {
+                factors.push(`Missed follow-up: ${asNumber(row?.missed_callbacks)}`);
+            }
+            if (asNumber(row?.long_away_count) > 0) {
+                factors.push(`Long away periods: ${asNumber(row?.long_away_count)}`);
+            }
+            return factors;
+        }
+
+        function setActiveSheet(sheetName) {
+            activeSheet = sheetName || "overview";
+            sheetButtons.forEach((button) => {
+                button.classList.toggle("is-active", (button.dataset.sheet || "overview") === activeSheet);
+            });
+            sheetPanels.forEach((panel) => {
+                const isActive = (panel.dataset.sheetPanel || "overview") === activeSheet;
+                panel.hidden = !isActive;
+                panel.classList.toggle("is-active", isActive);
+            });
+        }
+
+        function summarizeTeam(payload) {
+            const summary = payload?.summary || {};
+            if (liveStaffNode) {
+                liveStaffNode.textContent = summary.online_now ?? 0;
+            }
+            if (activeHoursNode) {
+                activeHoursNode.textContent = summary.active_hours_label || "0m";
+            }
+            if (reviewPressureNode) {
+                reviewPressureNode.textContent = summary.review_needed_now ?? 0;
+            }
+            if (convertedNode) {
+                convertedNode.textContent = summary.total_converted_today ?? 0;
+            }
+            if (generatedAtNode) {
+                generatedAtNode.textContent = payload?.generated_at_label || "--";
+            }
+            const totalFollowupCalls = latestRows.reduce((sum, row) => sum + asNumber(row.callback_total), 0);
+            const totalFollowupMissed = latestRows.reduce((sum, row) => sum + asNumber(row.missed_callbacks), 0);
+            const followupRate = totalFollowupCalls > 0
+                ? ((totalFollowupCalls - totalFollowupMissed) / totalFollowupCalls) * 100
+                : null;
+            if (followupRateNode) {
+                followupRateNode.textContent = followupRate === null ? "--" : `${Math.max(0, Math.min(100, Math.round(followupRate)))}%`;
+            }
+            if (followupMetaNode) {
+                followupMetaNode.textContent = totalFollowupCalls > 0
+                    ? `${totalFollowupCalls} follow-up calls / ${totalFollowupMissed} missed`
+                    : "No follow-up calling has been recorded yet";
+            }
+        }
+
+        function renderOverviewSheet(rows) {
+            if (!overviewBody) {
+                return;
+            }
+            if (!rows.length) {
+                overviewBody.innerHTML = '<tr><td colspan="8" class="text-center py-4">No staff available for the overview sheet.</td></tr>';
+                return;
+            }
+            const ranked = rows
+                .slice()
+                .sort((left, right) => buildPerformanceScore(right) - buildPerformanceScore(left));
+            const maxScore = Math.max(...ranked.map((row) => buildPerformanceScore(row)), 1);
+            overviewBody.innerHTML = ranked.map((row) => {
+                const width = Math.max(12, Math.round((buildPerformanceScore(row) / maxScore) * 100));
+                return `
+                    <tr>
+                        <td>
+                            <strong>${escapeHtml(row.name || "Staff")}</strong>
+                            <div class="small text-muted">${escapeHtml(row.phone || "--")}</div>
+                        </td>
+                        <td>
+                            <span class="hc-status hc-status-${escapeHtml(row.status_tone || "muted")} mb-1">${escapeHtml(row.online_label || row.status_note || "Tracking")}</span>
+                            <div class="small text-muted">${escapeHtml(row.session_state_label || row.status_note || "--")}</div>
+                        </td>
+                        <td>${asNumber(row.calls_today)}</td>
+                        <td>${escapeHtml(row.active_hours_today || "0m")}</td>
+                        <td>${asNumber(row.assigned_leads)}</td>
+                        <td>${asNumber(row.converted_today)}</td>
+                        <td>
+                            <span class="hc-status hc-status-${escapeHtml(row.quality_tone || "muted")} mb-1">${escapeHtml(row.quality_label || "--")}</span>
+                            <div class="small text-muted">${asNumber(row.quality_score)}</div>
+                        </td>
+                        <td>
+                            <div class="hc-performance-sheet-meter">
+                                <span style="width:${width}%"></span>
+                            </div>
+                            <div class="small text-muted mt-1">${escapeHtml(row.status_note || "Live tracking")}</div>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        function renderFollowupSheet(rows) {
+            if (!followupBody) {
+                return;
+            }
+            if (!rows.length) {
+                followupBody.innerHTML = '<tr><td colspan="8" class="text-center py-4">No follow-up data is available yet.</td></tr>';
+                return;
+            }
+            const ranked = rows.slice().sort((left, right) => {
+                const rightTotal = asNumber(right.callback_total);
+                const leftTotal = asNumber(left.callback_total);
+                if (rightTotal !== leftTotal) {
+                    return rightTotal - leftTotal;
+                }
+                const rightMissed = asNumber(right.missed_callbacks);
+                const leftMissed = asNumber(left.missed_callbacks);
+                if (rightMissed !== leftMissed) {
+                    return rightMissed - leftMissed;
+                }
+                return buildPerformanceScore(right) - buildPerformanceScore(left);
+            });
+            const maxFollowup = Math.max(...ranked.map((row) => asNumber(row.callback_total)), 1);
+            followupBody.innerHTML = ranked.map((row) => {
+                const completed = Math.max(asNumber(row.callback_total) - asNumber(row.missed_callbacks), 0);
+                const width = Math.max(12, Math.round((asNumber(row.callback_total) / maxFollowup) * 100));
+                return `
+                    <tr>
+                        <td>
+                            <strong>${escapeHtml(row.name || "Staff")}</strong>
+                            <div class="small text-muted">${escapeHtml(row.phone || "--")}</div>
+                        </td>
+                        <td>${asNumber(row.callback_total)}</td>
+                        <td>
+                            <span class="hc-status hc-status-${asNumber(row.missed_callbacks) > 0 ? "warning" : "success"} mb-1">${escapeHtml(row.callback_discipline_label || "--")}</span>
+                        </td>
+                        <td>${asNumber(row.missed_callbacks)}</td>
+                        <td>${asNumber(row.expired_followup_count)}</td>
+                        <td>${asNumber(row.followup_started_count)}</td>
+                        <td>${asNumber(row.followup_closed_count)}</td>
+                        <td>
+                            <div class="hc-performance-sheet-meter is-followup">
+                                <span style="width:${width}%"></span>
+                            </div>
+                            <div class="small text-muted mt-1">${completed} completed / ${asNumber(row.callback_total)} total</div>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        function renderQualitySheet(rows) {
+            if (!qualityBody) {
+                return;
+            }
+            if (!rows.length) {
+                qualityBody.innerHTML = '<tr><td colspan="8" class="text-center py-4">No quality rows are available yet.</td></tr>';
+                return;
+            }
+            const ranked = rows.slice().sort((left, right) => buildPerformanceScore(right) - buildPerformanceScore(left));
+            const maxScore = Math.max(...ranked.map((row) => asNumber(row.quality_score)), 1);
+            qualityBody.innerHTML = ranked.map((row) => {
+                const width = Math.max(12, Math.round((asNumber(row.quality_score) / maxScore) * 100));
+                return `
+                    <tr>
+                        <td>
+                            <strong>${escapeHtml(row.name || "Staff")}</strong>
+                            <div class="small text-muted">${escapeHtml(row.quality_note || "--")}</div>
+                        </td>
+                        <td>
+                            <span class="hc-status hc-status-${escapeHtml(row.quality_tone || "muted")} mb-1">${escapeHtml(row.quality_label || "--")}</span>
+                            <div class="small text-muted">${asNumber(row.quality_score)}</div>
+                        </td>
+                        <td>${escapeHtml(row.outcome_consistency_label || "--")}</td>
+                        <td>${asNumber(row.invalid_short_count)}</td>
+                        <td>${asNumber(row.zero_only_block_count)}</td>
+                        <td>${asNumber(row.suspicious_block_count)}</td>
+                        <td>${asNumber(row.total_penalty_points)}</td>
+                        <td>
+                            <div class="hc-performance-sheet-meter is-quality">
+                                <span style="width:${width}%"></span>
+                            </div>
+                            <div class="small text-muted mt-1">${escapeHtml(row.attempt_review_label || "--")}</div>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        function renderAttentionSheet(rows) {
+            if (!attentionBody) {
+                return;
+            }
+            if (!rows.length) {
+                attentionBody.innerHTML = '<tr><td colspan="8" class="text-center py-4">No attention rows are active right now.</td></tr>';
+                return;
+            }
+            const ranked = rows
+                .map((row) => ({
+                    ...row,
+                    riskScore: buildRiskScore(row),
+                }))
+                .filter((row) => row.riskScore > 0 || row.needs_review)
+                .sort((left, right) => right.riskScore - left.riskScore);
+            const maxRisk = Math.max(...ranked.map((row) => row.riskScore), 1);
+            attentionBody.innerHTML = ranked.map((row) => {
+                const width = Math.max(12, Math.round((row.riskScore / maxRisk) * 100));
+                const stateLabel = row.needs_review ? "Review Needed" : (row.quality_label || "Attention");
+                const stateTone = row.needs_review ? "danger" : (row.quality_tone || "warning");
+                return `
+                    <tr>
+                        <td>
+                            <strong>${escapeHtml(row.name || "Staff")}</strong>
+                            <div class="small text-muted">${escapeHtml(row.quality_label || "Monitoring")}</div>
+                        </td>
+                        <td>
+                            <span class="hc-status hc-status-${escapeHtml(stateTone)} mb-1">${escapeHtml(stateLabel)}</span>
+                        </td>
+                        <td>${row.riskScore}</td>
+                        <td>${escapeHtml(row.quality_note || row.status_note || "--")}</td>
+                        <td>${asNumber(row.missed_callbacks)}</td>
+                        <td>${asNumber(row.expired_followup_count)}</td>
+                        <td>${asNumber(row.assigned_leads)}</td>
+                        <td>
+                            <div class="hc-performance-sheet-meter is-risk">
+                                <span style="width:${width}%"></span>
+                            </div>
+                            <div class="small text-muted mt-1">${escapeHtml(row.attempt_review_label || "--")}</div>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        function renderPayload(payload) {
+            latestPayload = payload || {};
+            latestRows = Array.isArray(latestPayload?.staff_rows) ? latestPayload.staff_rows : [];
+            summarizeTeam(latestPayload);
+            renderOverviewSheet(latestRows);
+            renderFollowupSheet(latestRows);
+            renderQualitySheet(latestRows);
+            renderAttentionSheet(latestRows);
+            setActiveSheet(activeSheet);
+        }
+
+        async function refreshPayload(options = {}) {
+            if (!apiUrl || refreshInFlight) {
+                return;
+            }
+            refreshInFlight = true;
+            setSyncState("syncing", options.silent ? "Refreshing performance sheets quietly in the background." : "Pulling the latest performance sheet data right now.");
+            try {
+                const payload = await requestJson(apiUrl, { method: "GET" });
+                renderPayload(payload);
+                setSyncState("live", "Performance sheets are synced and ready for the next refresh.");
+                scheduleRefresh();
+            } catch (error) {
+                setSyncState("error", error.message || "Performance sheets could not refresh right now.");
+                clearScheduledRefresh();
+            } finally {
+                refreshInFlight = false;
+            }
+        }
+
+        sheetButtons.forEach((button) => {
+            button.addEventListener("click", () => {
+                setActiveSheet(button.dataset.sheet || "overview");
+            });
+        });
+
+        refreshButton?.addEventListener("click", () => {
+            refreshPayload({ silent: false });
+        });
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+                clearScheduledRefresh();
+                setSyncState("paused", "Tab is hidden. Performance sheets will resume when you return.");
+                return;
+            }
+            refreshPayload({ silent: true });
+        });
+
+        window.addEventListener("focus", () => {
+            if (!document.hidden) {
+                refreshPayload({ silent: true });
+            }
+        });
+
+        window.addEventListener("online", () => {
+            refreshPayload({ silent: false });
+        });
+
+        window.addEventListener("offline", () => {
+            clearScheduledRefresh();
+            setSyncState("reconnecting", "Connection is unavailable. Performance sheets will continue when the network returns.");
+        });
+
+        renderPayload(latestPayload);
+        setActiveSheet(activeSheet);
+        scheduleRefresh();
+    }
 })();
 

@@ -7737,6 +7737,117 @@ body.hc-live-monitoring-focus .hc-cc-shell-v3 .hc-cc-stage {
     font-weight: 700;
 }
 
+.hc-performance-sheet-shell {
+    display: grid;
+    gap: 1rem;
+}
+
+.hc-performance-sheet-hero {
+    position: relative;
+}
+
+.hc-performance-sheet-switcher {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+}
+
+.hc-performance-sheet-switcher .btn.is-active {
+    background: linear-gradient(135deg, rgba(40, 167, 255, 0.28), rgba(108, 92, 231, 0.28));
+    border-color: rgba(121, 186, 255, 0.42);
+    color: #eff7ff;
+}
+
+.hc-performance-sheet-panel {
+    display: grid;
+    gap: 0.95rem;
+    padding: 1rem;
+    border-radius: 24px;
+    border: 1px solid rgba(148, 175, 218, 0.18);
+    background: linear-gradient(180deg, rgba(10, 17, 34, 0.96), rgba(9, 14, 28, 0.92));
+    box-shadow: 0 22px 48px rgba(3, 7, 16, 0.28);
+}
+
+.hc-performance-sheet-panel[hidden] {
+    display: none !important;
+}
+
+.hc-performance-sheet-table-wrap {
+    overflow-x: auto;
+    border-radius: 18px;
+    border: 1px solid rgba(128, 158, 214, 0.14);
+    background: rgba(7, 12, 24, 0.78);
+}
+
+.hc-performance-sheet-table {
+    min-width: 1080px;
+    color: #edf4ff;
+    margin-bottom: 0;
+}
+
+.hc-performance-sheet-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: rgba(9, 15, 29, 0.98);
+    color: rgba(232, 241, 255, 0.84);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.72rem;
+    border-bottom: 1px solid rgba(118, 147, 204, 0.18);
+}
+
+.hc-performance-sheet-table tbody tr:nth-child(odd) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.hc-performance-sheet-table td,
+.hc-performance-sheet-table th {
+    padding: 0.9rem 0.85rem;
+    vertical-align: middle;
+    border-color: rgba(118, 147, 204, 0.12);
+}
+
+.hc-performance-sheet-table td .small.text-muted {
+    color: rgba(214, 226, 255, 0.68) !important;
+}
+
+.hc-performance-sheet-meter {
+    width: 100%;
+    height: 0.55rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+}
+
+.hc-performance-sheet-meter span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, rgba(60, 192, 255, 0.95), rgba(109, 92, 255, 0.95));
+}
+
+.hc-performance-sheet-meter.is-followup span {
+    background: linear-gradient(90deg, rgba(44, 189, 121, 0.96), rgba(109, 220, 166, 0.96));
+}
+
+.hc-performance-sheet-meter.is-quality span {
+    background: linear-gradient(90deg, rgba(247, 182, 48, 0.96), rgba(255, 147, 52, 0.96));
+}
+
+.hc-performance-sheet-meter.is-risk span {
+    background: linear-gradient(90deg, rgba(255, 110, 110, 0.96), rgba(255, 62, 102, 0.96));
+}
+
+.hc-performance-sheet-panel .hc-status {
+    display: inline-flex;
+    max-width: 100%;
+}
+
+.hc-performance-sheet-panel .hc-status + .small {
+    margin-top: 0.28rem;
+}
+
 @keyframes hcCcV3Pulse {
     0%,
     100% {
