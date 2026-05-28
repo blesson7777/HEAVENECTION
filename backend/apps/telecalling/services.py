@@ -9047,6 +9047,25 @@ def recover_recovery_lead_to_owner(lead_id, *, target_status=Lead.Status.NEW):
     }
 
 
+def recover_interested_lead_to_owner(lead_id):
+    try:
+        parsed_id = uuid.UUID(str(lead_id))
+    except (TypeError, ValueError, AttributeError):
+        raise ValueError("Select a valid interested lead.") from None
+
+    lead = (
+        Lead.objects.select_related("assigned_to", "interested_detail__staff")
+        .filter(id=parsed_id)
+        .first()
+    )
+    if lead is None:
+        raise ValueError("Interested lead not found.")
+
+    if lead.status == Lead.Status.EXPIRED_FOLLOWUP:
+        return reallocate_expired_followup_to_owner(lead_id)
+    return recover_recovery_lead_to_owner(lead_id, target_status=Lead.Status.INTERESTED)
+
+
 def reallocate_expired_followup_to_owner(lead_id):
     try:
         parsed_id = uuid.UUID(str(lead_id))
@@ -10248,7 +10267,7 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
             Lead.Status.INTERESTED: "warning",
             Lead.Status.NOT_INTERESTED: "danger",
             Lead.Status.NO_ANSWER: "danger",
-            Lead.Status.EXPIRED_FOLLOWUP: "danger",
+            Lead.Status.EXPIRED_FOLLOWUP: "warning",
             Lead.Status.NEW: "muted",
         }.get(lead_status, "muted")
         outcome_key = {
@@ -10262,7 +10281,9 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
             lead_status_label = "Successful"
         elif lead_status == Lead.Status.INTERESTED:
             lead_status_label = detail.lead.get_status_display()
-        elif lead_status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER, Lead.Status.EXPIRED_FOLLOWUP}:
+        elif lead_status == Lead.Status.EXPIRED_FOLLOWUP:
+            lead_status_label = "Expired"
+        elif lead_status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER}:
             lead_status_label = "Unsuccessful"
         else:
             lead_status_label = detail.lead.get_status_display()

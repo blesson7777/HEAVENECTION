@@ -217,7 +217,7 @@
                     </td>
                     <td>
                         <div class="d-flex gap-2 flex-wrap align-items-center">
-                            {% if row.lead_status == "not_interested" or row.lead_status == "no_answer" %}
+                            {% if row.lead_status == "not_interested" or row.lead_status == "no_answer" or row.lead_status == "expired_followup" %}
                             <button
                                 type="button"
                                 class="btn btn-outline-warning btn-sm js-interested-recover"

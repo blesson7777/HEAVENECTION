@@ -149,6 +149,7 @@ from backend.apps.telecalling.services import (
     reset_staff_review_leads_to_new_queue,
     release_staff_queue,
     reactivate_oldest_recovery_leads,
+    recover_interested_lead_to_owner,
     recover_recovery_lead_to_owner,
     reallocate_expired_followup_to_owner,
     run_automatic_lead_cleanup_if_due,
@@ -3490,7 +3491,7 @@ def lead_route_map_api(request, lead_id):
 @permission_classes([IsAdminStaff])
 def lead_recover_api(request, lead_id):
     try:
-        summary = recover_recovery_lead_to_owner(lead_id, target_status=Lead.Status.INTERESTED)
+        summary = recover_interested_lead_to_owner(lead_id)
     except ValueError as error:
         return Response({"detail": str(error)}, status=400)
     return Response(summary)
