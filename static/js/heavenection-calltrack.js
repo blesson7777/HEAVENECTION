@@ -1445,7 +1445,7 @@
             const timelineRows = payload?.timeline_rows || [];
             activeLeadName = lead.name || activeLeadName || "Lead";
             if (titleNode) {
-                titleNode.textContent = `${activeLeadName} Route Map`;
+                titleNode.textContent = `${activeLeadName} Lead Journey`;
             }
             if (subtitleNode) {
                 subtitleNode.textContent = `${lead.phone || "No phone"} • ${summary.route_state_label || "Open trail"}`;
@@ -1481,13 +1481,13 @@
             activeLeadName = leadName || "Lead";
             clearFeedback();
             if (titleNode) {
-                titleNode.textContent = `${activeLeadName} Route Map`;
+                titleNode.textContent = `${activeLeadName} Lead Journey`;
             }
             if (subtitleNode) {
                 subtitleNode.textContent = "Loading lead trail...";
             }
             if (bodyNode) {
-                bodyNode.innerHTML = '<div class="hc-route-map-empty">Loading the route map...</div>';
+                bodyNode.innerHTML = '<div class="hc-route-map-empty">Loading the lead journey...</div>';
             }
             modal.show();
 
@@ -1499,7 +1499,7 @@
             } catch (error) {
                 showFeedback(error.message, true);
                 if (bodyNode) {
-                    bodyNode.innerHTML = '<div class="hc-route-map-empty">Unable to load the route map right now. Please try again.</div>';
+                    bodyNode.innerHTML = '<div class="hc-route-map-empty">Unable to load the lead journey right now. Please try again.</div>';
                 }
                 if (subtitleNode) {
                     subtitleNode.textContent = "The trail could not be loaded.";
@@ -1516,10 +1516,10 @@
         modalNode.addEventListener("hidden.bs.modal", () => {
             clearFeedback();
             if (bodyNode) {
-                bodyNode.innerHTML = '<div class="text-muted small">Open a lead route map to see the trail.</div>';
+                bodyNode.innerHTML = '<div class="text-muted small">Open a lead journey to see the trail.</div>';
             }
             if (titleNode) {
-                titleNode.textContent = "Lead Route Map";
+                titleNode.textContent = "Lead Journey";
             }
             if (subtitleNode) {
                 subtitleNode.textContent = "Track the lead journey across the admin workspace.";
