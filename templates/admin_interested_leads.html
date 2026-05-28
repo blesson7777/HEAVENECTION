@@ -9,8 +9,8 @@
 <section class="hc-surface-card animate-on-scroll">
     <div class="mf-db2-panel-head mb-3">
         <div>
-            <span class="mf-db2-kicker">Interested Records</span>
-            <h5>Active items, success history, and closed history</h5>
+            <span class="mf-db2-kicker">Interested Leads</span>
+            <h5>One list with open leads and result history together</h5>
         </div>
     </div>
 
@@ -167,86 +167,8 @@
     <div class="hc-surface-card border mb-4">
         <div class="mf-db2-panel-head mb-3">
             <div>
-                <span class="mf-db2-kicker">Open Items</span>
-                <h6 class="mb-0">Active interested leads waiting for a final result</h6>
-            </div>
-        </div>
-        <div class="table-responsive">
-        <table class="table hc-table align-middle mb-0">
-            <thead>
-                <tr>
-                    <th>Customer</th>
-                    <th>Product</th>
-                    <th>Preferred Call Time</th>
-                    <th>Notes</th>
-                    <th>Staff</th>
-                    <th>Outcome</th>
-                    <th>Updated</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in interested_lead_rows %}
-                <tr>
-                    <td>
-                        <strong>{{ row.customer_name }}</strong>
-                        <div class="small text-muted">{{ row.customer_phone }}</div>
-                        <div class="small text-muted">Tracked from {{ row.created_at }}</div>
-                    </td>
-                    <td>{{ row.product_enquired }}</td>
-                    <td>{{ row.preferred_call_time|default:"Not set" }}</td>
-                    <td>{{ row.enquiry_notes|default:"No notes" }}</td>
-                    <td>
-                        <strong>{{ row.staff_name }}</strong>
-                        <div class="small text-muted">{{ row.staff_phone }}</div>
-                    </td>
-                    <td>
-                        <span class="hc-status hc-status-{{ row.lead_status_tone }}">{{ row.lead_status_label }}</span>
-                    </td>
-                    <td>
-                        <div>{{ row.updated_at }}</div>
-                        <div class="small text-muted">Lead {{ row.lead_id }}</div>
-                    </td>
-                    <td>
-                        <div class="d-flex gap-2 flex-wrap">
-                            <button
-                                type="button"
-                                class="btn btn-outline-dark btn-sm js-open-lead-route-map"
-                                data-lead-route-map-id="{{ row.lead_id }}"
-                                data-lead-route-map-name="{{ row.customer_name }}"
-                            >Lead Journey</button>
-                            <button
-                                type="button"
-                                class="btn btn-outline-success btn-sm js-interested-success"
-                                data-lead-id="{{ row.lead_id }}"
-                                data-lead-name="{{ row.customer_name }}"
-                                {% if row.is_converted %}disabled{% endif %}
-                            >
-                                {% if row.is_converted %}Successful{% else %}Set Successful{% endif %}
-                            </button>
-                            <button
-                                type="button"
-                                class="btn btn-outline-secondary btn-sm js-interested-unsuccessful"
-                                data-lead-id="{{ row.lead_id }}"
-                                data-lead-name="{{ row.customer_name }}"
-                                data-current-status="{{ row.lead_status }}"
-                            >Set Unsuccessful</button>
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="8" class="text-center py-4">No interested outcome rows match the current filter.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    </div>
-
-    <div class="hc-surface-card border mb-4">
-        <div class="mf-db2-panel-head mb-3">
-            <div>
-                <span class="mf-db2-kicker">Successful History</span>
-                <h6 class="mb-0">Interested leads that converted and earned reward</h6>
+                <span class="mf-db2-kicker">Interested List</span>
+                <h6 class="mb-0">Open leads and result history in one place</h6>
             </div>
         </div>
         <div class="table-responsive">
@@ -260,11 +182,12 @@
                     <th>Staff</th>
                     <th>Outcome</th>
                     <th>Reward</th>
-                    <th>History</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
-                {% for row in interested_success_rows %}
+                {% for row in interested_all_rows %}
                 <tr>
                     <td>
                         <strong>{{ row.customer_name }}</strong>
@@ -282,69 +205,11 @@
                         <span class="hc-status hc-status-{{ row.lead_status_tone }}">{{ row.lead_status_label }}</span>
                     </td>
                     <td>
-                        <span class="hc-status hc-status-success">{{ row.reward_amount_label|default:"Rs. 10.00" }}</span>
-                    </td>
-                    <td>
-                        <div class="d-flex gap-2 flex-wrap align-items-center">
-                            <button
-                                type="button"
-                                class="btn btn-outline-dark btn-sm js-open-lead-route-map"
-                                data-lead-route-map-id="{{ row.lead_id }}"
-                                data-lead-route-map-name="{{ row.customer_name }}"
-                            >Lead Journey</button>
-                            <div>
-                                <div>{{ row.result_at }}</div>
-                                <div class="small text-muted">Lead {{ row.lead_id }}</div>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="8" class="text-center py-4">No successful history matches the current filter.</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    </div>
-
-    <div class="hc-surface-card border mb-4">
-        <div class="mf-db2-panel-head mb-3">
-            <div>
-                <span class="mf-db2-kicker">Unsuccessful History</span>
-                <h6 class="mb-0">Rejected and no response results kept for reference</h6>
-            </div>
-        </div>
-        <div class="table-responsive">
-        <table class="table hc-table align-middle mb-0">
-            <thead>
-                <tr>
-                    <th>Customer</th>
-                    <th>Product</th>
-                    <th>Preferred Call Time</th>
-                    <th>Notes</th>
-                    <th>Staff</th>
-                    <th>Outcome</th>
-                    <th>Recorded</th>
-                    <th>History</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in interested_unsuccessful_rows %}
-                <tr>
-                    <td>
-                        <strong>{{ row.customer_name }}</strong>
-                        <div class="small text-muted">{{ row.customer_phone }}</div>
-                        <div class="small text-muted">Tracked from {{ row.created_at }}</div>
-                    </td>
-                    <td>{{ row.product_enquired }}</td>
-                    <td>{{ row.preferred_call_time|default:"Not set" }}</td>
-                    <td>{{ row.enquiry_notes|default:"No notes" }}</td>
-                    <td>
-                        <strong>{{ row.staff_name }}</strong>
-                        <div class="small text-muted">{{ row.staff_phone }}</div>
-                    </td>
-                    <td>
-                        <span class="hc-status hc-status-{{ row.lead_status_tone }}">{{ row.lead_status_label }}</span>
+                        {% if row.reward_amount_label %}
+                        <span class="hc-status hc-status-success">{{ row.reward_amount_label }}</span>
+                        {% else %}
+                        <span class="small text-muted">--</span>
+                        {% endif %}
                     </td>
                     <td>
                         <div>{{ row.result_at }}</div>
@@ -358,12 +223,28 @@
                                 data-lead-route-map-id="{{ row.lead_id }}"
                                 data-lead-route-map-name="{{ row.customer_name }}"
                             >Lead Journey</button>
+                            {% if row.lead_status == "interested" %}
+                            <button
+                                type="button"
+                                class="btn btn-outline-success btn-sm js-interested-success"
+                                data-lead-id="{{ row.lead_id }}"
+                                data-lead-name="{{ row.customer_name }}"
+                            >Set Successful</button>
+                            <button
+                                type="button"
+                                class="btn btn-outline-secondary btn-sm js-interested-unsuccessful"
+                                data-lead-id="{{ row.lead_id }}"
+                                data-lead-name="{{ row.customer_name }}"
+                                data-current-status="{{ row.lead_status }}"
+                            >Set Unsuccessful</button>
+                            {% else %}
                             <span class="small text-muted">History only</span>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8" class="text-center py-4">No unsuccessful history matches the current filter.</td></tr>
+                <tr><td colspan="9" class="text-center py-4">No interested leads match the current filter.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
