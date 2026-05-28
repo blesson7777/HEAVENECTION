@@ -9,8 +9,8 @@
 <section class="hc-surface-card animate-on-scroll">
     <div class="mf-db2-panel-head mb-3">
         <div>
-            <span class="mf-db2-kicker">Interested Outcome Tracker</span>
-            <h5>Interested customer details and final outcomes</h5>
+            <span class="mf-db2-kicker">Interested Records</span>
+            <h5>Active items, success history, and closed history</h5>
         </div>
     </div>
 
@@ -47,14 +47,14 @@
             <div class="hc-summary-card h-100">
                 <span class="mf-db2-kicker">Converted</span>
                 <h3 class="mb-1">{{ interested_lead_summary.converted_count }}</h3>
-                <p class="mb-0 text-muted">Interested leads that became successful.</p>
+                <p class="mb-0 text-muted">Interested leads that became successful and earned reward.</p>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
             <div class="hc-summary-card h-100">
                 <span class="mf-db2-kicker">Unsuccessful</span>
                 <h3 class="mb-1">{{ interested_lead_summary.unsuccessful_count }}</h3>
-                <p class="mb-0 text-muted">Interested leads that closed without success.</p>
+                <p class="mb-0 text-muted">Interested leads that closed without success and stay in history.</p>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
@@ -69,13 +69,6 @@
                 <span class="mf-db2-kicker">No Response</span>
                 <h3 class="mb-1">{{ interested_lead_summary.no_response_count }}</h3>
                 <p class="mb-0 text-muted">Interested leads that did not move forward.</p>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Expired</span>
-                <h3 class="mb-1">{{ interested_lead_summary.expired_followup_count }}</h3>
-                <p class="mb-0 text-muted">Interested leads that later expired.</p>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
@@ -174,8 +167,8 @@
     <div class="hc-surface-card border mb-4">
         <div class="mf-db2-panel-head mb-3">
             <div>
-                <span class="mf-db2-kicker">Interested Leads</span>
-                <h6 class="mb-0">These are still open and interested</h6>
+                <span class="mf-db2-kicker">Open Items</span>
+                <h6 class="mb-0">Active interested leads waiting for a final result</h6>
             </div>
         </div>
         <div class="table-responsive">
@@ -229,7 +222,7 @@
                                 data-lead-name="{{ row.customer_name }}"
                                 {% if row.is_converted %}disabled{% endif %}
                             >
-                                {% if row.is_converted %}Successful{% else %}Mark Successful{% endif %}
+                                {% if row.is_converted %}Successful{% else %}Set Successful{% endif %}
                             </button>
                             <button
                                 type="button"
@@ -237,7 +230,7 @@
                                 data-lead-id="{{ row.lead_id }}"
                                 data-lead-name="{{ row.customer_name }}"
                                 data-current-status="{{ row.lead_status }}"
-                            >Mark Unsuccessful</button>
+                            >Set Unsuccessful</button>
                         </div>
                     </td>
                 </tr>
@@ -252,8 +245,8 @@
     <div class="hc-surface-card border mb-4">
         <div class="mf-db2-panel-head mb-3">
             <div>
-                <span class="mf-db2-kicker">Successful Leads</span>
-                <h6 class="mb-0">Interested leads that converted</h6>
+                <span class="mf-db2-kicker">Successful History</span>
+                <h6 class="mb-0">Interested leads that converted and earned reward</h6>
             </div>
         </div>
         <div class="table-responsive">
@@ -266,8 +259,8 @@
                     <th>Notes</th>
                     <th>Staff</th>
                     <th>Outcome</th>
-                    <th>Updated</th>
-                    <th>Actions</th>
+                    <th>Reward</th>
+                    <th>History</th>
                 </tr>
             </thead>
             <tbody>
@@ -289,38 +282,25 @@
                         <span class="hc-status hc-status-{{ row.lead_status_tone }}">{{ row.lead_status_label }}</span>
                     </td>
                     <td>
-                        <div>{{ row.updated_at }}</div>
-                        <div class="small text-muted">Lead {{ row.lead_id }}</div>
+                        <span class="hc-status hc-status-success">{{ row.reward_amount_label|default:"Rs. 10.00" }}</span>
                     </td>
                     <td>
-                        <div class="d-flex gap-2 flex-wrap">
+                        <div class="d-flex gap-2 flex-wrap align-items-center">
                             <button
                                 type="button"
                                 class="btn btn-outline-dark btn-sm js-open-lead-route-map"
                                 data-lead-route-map-id="{{ row.lead_id }}"
                                 data-lead-route-map-name="{{ row.customer_name }}"
                             >Lead Journey</button>
-                            <button
-                                type="button"
-                                class="btn btn-outline-success btn-sm js-interested-success"
-                                data-lead-id="{{ row.lead_id }}"
-                                data-lead-name="{{ row.customer_name }}"
-                                {% if row.is_converted %}disabled{% endif %}
-                            >
-                                {% if row.is_converted %}Successful{% else %}Mark Successful{% endif %}
-                            </button>
-                            <button
-                                type="button"
-                                class="btn btn-outline-secondary btn-sm js-interested-unsuccessful"
-                                data-lead-id="{{ row.lead_id }}"
-                                data-lead-name="{{ row.customer_name }}"
-                                data-current-status="{{ row.lead_status }}"
-                            >Mark Unsuccessful</button>
+                            <div>
+                                <div>{{ row.result_at }}</div>
+                                <div class="small text-muted">Lead {{ row.lead_id }}</div>
+                            </div>
                         </div>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8" class="text-center py-4">No successful leads match the current filter.</td></tr>
+                <tr><td colspan="8" class="text-center py-4">No successful history matches the current filter.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -330,8 +310,8 @@
     <div class="hc-surface-card border mb-4">
         <div class="mf-db2-panel-head mb-3">
             <div>
-                <span class="mf-db2-kicker">Unsuccessful Leads</span>
-                <h6 class="mb-0">Rejected, no response, and expired follow-ups</h6>
+                <span class="mf-db2-kicker">Unsuccessful History</span>
+                <h6 class="mb-0">Rejected and no response results kept for reference</h6>
             </div>
         </div>
         <div class="table-responsive">
@@ -344,8 +324,8 @@
                     <th>Notes</th>
                     <th>Staff</th>
                     <th>Outcome</th>
-                    <th>Updated</th>
-                    <th>Actions</th>
+                    <th>Recorded</th>
+                    <th>History</th>
                 </tr>
             </thead>
             <tbody>
@@ -367,38 +347,23 @@
                         <span class="hc-status hc-status-{{ row.lead_status_tone }}">{{ row.lead_status_label }}</span>
                     </td>
                     <td>
-                        <div>{{ row.updated_at }}</div>
+                        <div>{{ row.result_at }}</div>
                         <div class="small text-muted">Lead {{ row.lead_id }}</div>
                     </td>
                     <td>
-                        <div class="d-flex gap-2 flex-wrap">
+                        <div class="d-flex gap-2 flex-wrap align-items-center">
                             <button
                                 type="button"
                                 class="btn btn-outline-dark btn-sm js-open-lead-route-map"
                                 data-lead-route-map-id="{{ row.lead_id }}"
                                 data-lead-route-map-name="{{ row.customer_name }}"
                             >Lead Journey</button>
-                            <button
-                                type="button"
-                                class="btn btn-outline-success btn-sm js-interested-success"
-                                data-lead-id="{{ row.lead_id }}"
-                                data-lead-name="{{ row.customer_name }}"
-                                {% if row.is_converted %}disabled{% endif %}
-                            >
-                                {% if row.is_converted %}Successful{% else %}Mark Successful{% endif %}
-                            </button>
-                            <button
-                                type="button"
-                                class="btn btn-outline-secondary btn-sm js-interested-unsuccessful"
-                                data-lead-id="{{ row.lead_id }}"
-                                data-lead-name="{{ row.customer_name }}"
-                                data-current-status="{{ row.lead_status }}"
-                            >Mark Unsuccessful</button>
+                            <span class="small text-muted">History only</span>
                         </div>
                     </td>
                 </tr>
                 {% empty %}
-                <tr><td colspan="8" class="text-center py-4">No unsuccessful leads match the current filter.</td></tr>
+                <tr><td colspan="8" class="text-center py-4">No unsuccessful history matches the current filter.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -411,20 +376,20 @@
         <div class="modal-content hc-modal-card">
             <div class="modal-header border-0 pb-0">
                 <div>
-                    <span class="mf-db2-kicker">Successful Lead</span>
-                    <h5 class="modal-title mt-1" id="interestedSuccessTitle">Mark Successful</h5>
+                    <span class="mf-db2-kicker">Successful Result</span>
+                    <h5 class="modal-title mt-1" id="interestedSuccessTitle">Set as Successful</h5>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body pt-3">
                 <p class="text-muted mb-3" id="interestedSuccessMessage">Mark this interested lead as successful and converted?</p>
                 <div class="alert alert-light border mb-0">
-                    Once marked successful, this lead becomes <strong>Converted</strong> and the staff reward is counted with the successful-lead bonus.
+                    Once marked successful, this lead becomes <strong>Converted</strong> and the staff conversion reward is added automatically.
                 </div>
                 <div id="interestedSuccessFeedback" class="hc-form-feedback d-none mt-3"></div>
                 <div class="d-flex justify-content-end gap-2 mt-4">
                     <button type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-success" id="interestedSuccessConfirm">Yes, Mark Successful</button>
+                    <button type="button" class="btn btn-success" id="interestedSuccessConfirm">Save Success</button>
                 </div>
             </div>
         </div>
@@ -436,8 +401,8 @@
         <div class="modal-content hc-modal-card">
             <div class="modal-header border-0 pb-0">
                 <div>
-                    <span class="mf-db2-kicker">Unsuccessful Lead</span>
-                    <h5 class="modal-title mt-1" id="interestedUnsuccessfulTitle">Mark Unsuccessful</h5>
+                    <span class="mf-db2-kicker">Closed Result</span>
+                    <h5 class="modal-title mt-1" id="interestedUnsuccessfulTitle">Set as Unsuccessful</h5>
                 </div>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -445,15 +410,14 @@
                 <form id="interestedUnsuccessfulForm">
                     <input type="hidden" id="interestedUnsuccessfulLeadId">
                     <div class="mb-3">
-                        <label class="form-label fw-semibold" for="interestedUnsuccessfulStatus">Move lead to</label>
+                        <label class="form-label fw-semibold" for="interestedUnsuccessfulStatus">Set result as</label>
                         <select class="form-select" id="interestedUnsuccessfulStatus" required>
-                            <option value="interested">Follow Up</option>
                             <option value="not_interested">Rejected</option>
                             <option value="no_answer">No Response</option>
                         </select>
                     </div>
                     <div class="alert alert-light border mb-0">
-                        Use <strong>Follow Up</strong> if the customer still has a chance, <strong>Rejected</strong> if they clearly declined, or <strong>No Response</strong> if the attempt did not move forward.
+                        Use <strong>Rejected</strong> if they clearly declined, or <strong>No Response</strong> if the attempt did not move forward.
                     </div>
                     <div id="interestedUnsuccessfulFeedback" class="hc-form-feedback d-none mt-3"></div>
                     <div class="d-flex justify-content-end gap-2 mt-4">

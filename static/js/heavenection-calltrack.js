@@ -1579,7 +1579,7 @@
                 activeLeadId = button.dataset.leadId || "";
                 const leadName = button.dataset.leadName || "this lead";
                 if (successTitleNode) {
-                    successTitleNode.textContent = "Mark Successful";
+                    successTitleNode.textContent = "Set as Successful";
                 }
                 if (successMessageNode) {
                     successMessageNode.textContent = `Confirm ${leadName} as successful? This will move the lead to Converted.`;
@@ -1617,13 +1617,13 @@
                     unsuccessfulLeadIdInput.value = button.dataset.leadId || "";
                 }
                 if (unsuccessfulStatusInput) {
-                    unsuccessfulStatusInput.value = button.dataset.currentStatus || "interested";
-                    if (!["interested", "not_interested", "no_answer"].includes(unsuccessfulStatusInput.value)) {
-                        unsuccessfulStatusInput.value = "interested";
+                    unsuccessfulStatusInput.value = button.dataset.currentStatus || "not_interested";
+                    if (!["not_interested", "no_answer"].includes(unsuccessfulStatusInput.value)) {
+                        unsuccessfulStatusInput.value = "not_interested";
                     }
                 }
                 if (unsuccessfulTitleNode) {
-                    unsuccessfulTitleNode.textContent = `Mark Unsuccessful - ${button.dataset.leadName || "Lead"}`;
+                    unsuccessfulTitleNode.textContent = `Set as Unsuccessful - ${button.dataset.leadName || "Lead"}`;
                 }
                 unsuccessfulModal?.show();
             });
@@ -1634,7 +1634,7 @@
                 event.preventDefault();
                 clearFeedback(unsuccessfulFeedback);
                 const leadId = unsuccessfulLeadIdInput?.value || "";
-                const targetStatus = unsuccessfulStatusInput?.value || "interested";
+                const targetStatus = unsuccessfulStatusInput?.value || "not_interested";
                 if (!leadId) {
                     showFeedback(unsuccessfulFeedback, "Select a lead before saving.", true);
                     return;

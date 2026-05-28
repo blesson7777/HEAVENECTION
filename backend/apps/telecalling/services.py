@@ -80,6 +80,9 @@ FOLLOWUP_STAFF_WARNING_DAYS = 7
 FOLLOWUP_UNCALLED_ALERT_HOURS = 24
 FOLLOWUP_EXPIRED_SCORE_PENALTY_POINTS = 4
 FOLLOWUP_EXPIRED_SCORE_PENALTY_CAP = 24
+FOLLOW_UP_AUTO_EXPIRE_STATUSES = (
+    Lead.Status.CALL_BACK,
+)
 ACTIVE_QUEUE_STATUSES = (
     Lead.Status.NEW,
     Lead.Status.INTERESTED,
@@ -3325,7 +3328,9 @@ def expire_stale_followups(*, now=None, expiry_days=None, enabled=None, company_
 
     cutoff = timezone.localtime(now - timedelta(days=resolved_expiry_days))
     stale_followups = list(
-        Lead.objects.select_related("assigned_to", "interested_detail__staff").filter(status__in=FOLLOW_UP_STATUSES)
+        Lead.objects.select_related("assigned_to", "interested_detail__staff").filter(
+            status__in=FOLLOW_UP_AUTO_EXPIRE_STATUSES
+        )
     )
     expired_count = 0
     for lead in stale_followups:
@@ -10242,7 +10247,7 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
             Lead.Status.CONVERTED: "success",
             Lead.Status.INTERESTED: "warning",
             Lead.Status.NOT_INTERESTED: "danger",
-            Lead.Status.NO_ANSWER: "primary",
+            Lead.Status.NO_ANSWER: "danger",
             Lead.Status.EXPIRED_FOLLOWUP: "danger",
             Lead.Status.NEW: "muted",
         }.get(lead_status, "muted")
@@ -10251,8 +10256,20 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
             Lead.Status.NOT_INTERESTED: "rejected",
             Lead.Status.NO_ANSWER: "no_response",
             Lead.Status.INTERESTED: "open",
-            Lead.Status.EXPIRED_FOLLOWUP: "expired_followup",
+            Lead.Status.EXPIRED_FOLLOWUP: "unsuccessful",
         }.get(lead_status, "other")
+        if lead_status == Lead.Status.CONVERTED:
+            lead_status_label = "Successful"
+        elif lead_status == Lead.Status.INTERESTED:
+            lead_status_label = detail.lead.get_status_display()
+        elif lead_status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER, Lead.Status.EXPIRED_FOLLOWUP}:
+            lead_status_label = "Unsuccessful"
+        else:
+            lead_status_label = detail.lead.get_status_display()
+        if detail.call:
+            result_at = detail.call.end_time or detail.call.created_at or detail.updated_at or detail.created_at
+        else:
+            result_at = detail.updated_at or detail.created_at
         rows.append(
             {
                 "id": str(detail.id),
@@ -10267,8 +10284,9 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
                 "updated_at": _format_datetime(detail.updated_at),
                 "created_at": _format_datetime(detail.created_at),
                 "created_at_date": detail.created_at.date().isoformat(),
+                "result_at": _format_datetime(result_at),
                 "lead_status": lead_status,
-                "lead_status_label": detail.lead.get_status_display(),
+                "lead_status_label": lead_status_label,
                 "lead_status_tone": status_tone,
                 "outcome_group": outcome_group,
                 "outcome_group_label": {
@@ -10282,6 +10300,7 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
                     "unsuccessful": "danger",
                 }.get(outcome_group, "muted"),
                 "is_converted": lead_status == Lead.Status.CONVERTED,
+                "reward_amount_label": _format_currency(detail.staff.bonus_per_conversion) if lead_status == Lead.Status.CONVERTED else "",
                 "outcome_key": outcome_key,
             }
         )
@@ -10333,7 +10352,6 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
             "converted_count": len(interested_success_rows),
             "rejected_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.NOT_INTERESTED),
             "no_response_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.NO_ANSWER),
-            "expired_followup_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.EXPIRED_FOLLOWUP),
             "open_count": len(interested_open_rows),
             "unsuccessful_count": len(interested_unsuccessful_rows),
             "staff_count": len(staff_breakdown_rows),
@@ -10370,6 +10388,8 @@ def build_interested_lead_csv_response(*, query="", date_from="", date_to="", st
             "Staff",
             "Staff Phone",
             "Outcome",
+            "Result At",
+            "Reward Amount",
             "Created At",
             "Updated At",
         ]
@@ -10386,6 +10406,8 @@ def build_interested_lead_csv_response(*, query="", date_from="", date_to="", st
                 row["staff_name"],
                 row["staff_phone"],
                 row["lead_status_label"],
+                row["result_at"],
+                row["reward_amount_label"] or "--",
                 row["created_at"],
                 row["updated_at"],
             ]
@@ -10419,6 +10441,8 @@ def build_interested_lead_excel_response(*, query="", date_from="", date_to="", 
             "Staff",
             "Staff Phone",
             "Outcome",
+            "Result At",
+            "Reward Amount",
             "Created At",
             "Updated At",
         ]
@@ -10435,6 +10459,8 @@ def build_interested_lead_excel_response(*, query="", date_from="", date_to="", 
                 row["staff_name"],
                 row["staff_phone"],
                 row["lead_status_label"],
+                row["result_at"],
+                row["reward_amount_label"] or "--",
                 row["created_at"],
                 row["updated_at"],
             ]
