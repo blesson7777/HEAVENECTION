@@ -1410,29 +1410,204 @@
                 .join("");
         }
 
+        function renderRouteMapHero(rows) {
+            const eventCount = Array.isArray(rows) ? rows.length : 0;
+            return `
+                <div class="hc-route-map-hero">
+                    <div class="hc-route-map-hero-graphic" aria-hidden="true">
+                        <span class="hc-route-map-hero-sign"><i class="bi bi-signpost-split-fill"></i></span>
+                        <span class="hc-route-map-hero-car"><i class="bi bi-car-front-fill"></i></span>
+                        <span class="hc-route-map-hero-spark"><i class="bi bi-stars"></i></span>
+                    </div>
+                    <div class="hc-route-map-hero-copy">
+                        <strong>Journey road</strong>
+                        <p>${eventCount ? `${eventCount} stop${eventCount === 1 ? "" : "s"} on the lane. Every touch point gets its own little scene.` : "A playful road trip of the lead is waiting here."}</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        function getRouteMapEventVisual(row, index) {
+            const title = String(row?.title || "").toLowerCase();
+            const description = String(row?.description || "").toLowerCase();
+            const tone = row?.tone || "muted";
+            const side = index % 2 === 0 ? "left" : "right";
+            let icon = row?.icon || "circle";
+            let sticker = "Cruise";
+            let caption = "A tiny marker on the lane.";
+            let accentTone = tone;
+
+            if (title.includes("lead created")) {
+                icon = "signpost-split-fill";
+                sticker = "START";
+                caption = "The road begins here.";
+                accentTone = "primary";
+            } else if (title.includes("call started")) {
+                icon = "telephone-forward-fill";
+                sticker = "DIAL";
+                caption = "The phone is rolling.";
+                accentTone = "primary";
+            } else if (title.includes("marked rejected") || title.includes("rejected")) {
+                icon = "hand-index-thumb-fill";
+                sticker = "NOPE!";
+                caption = "Not interested. Friendly wave out.";
+                accentTone = "danger";
+            } else if (title.includes("marked no response") || title.includes("no response")) {
+                icon = "telephone-x-fill";
+                sticker = "RING...";
+                caption = "The call went into the quiet zone.";
+                accentTone = "primary";
+            } else if (title.includes("marked successful") || title.includes("successful")) {
+                icon = "check2-circle-fill";
+                sticker = "YES!";
+                caption = "Green light and celebration.";
+                accentTone = "success";
+            } else if (title.includes("interested details")) {
+                icon = "chat-heart-fill";
+                sticker = "COOL!";
+                caption = "The lead showed a spark.";
+                accentTone = "warning";
+            } else if (title.includes("moved back")) {
+                icon = "arrow-counterclockwise";
+                sticker = "BACK!";
+                caption = "Recovered to the live lane.";
+                accentTone = "warning";
+            } else if (title.includes("expired")) {
+                icon = "hourglass-split";
+                sticker = "TICK TOCK";
+                caption = "The lane waited too long.";
+                accentTone = "danger";
+            } else if (title.includes("updated")) {
+                icon = "pencil-square";
+                sticker = "PATCH";
+                caption = "The route got a fresh edit.";
+                accentTone = "info";
+            } else if (title.includes("handover")) {
+                icon = "box-seam";
+                sticker = "OFFICE";
+                caption = "Office side took over.";
+                accentTone = "info";
+            } else if (description.includes("recovered")) {
+                icon = "arrow-repeat";
+                sticker = "BACK";
+                caption = "Pulled back into action.";
+                accentTone = "warning";
+            } else if (title.includes("marked follow up") || title.includes("marked call back") || title.includes("call back")) {
+                icon = "arrow-repeat";
+                sticker = "AGAIN";
+                caption = "The lead wants one more round.";
+                accentTone = "warning";
+            }
+
+            return {
+                side,
+                icon,
+                sticker,
+                caption,
+                tone: accentTone,
+            };
+        }
+
+        function renderRoadSvg(rows) {
+            if (!Array.isArray(rows) || !rows.length) {
+                return "";
+            }
+            const width = 1080;
+            const height = Math.max(360, rows.length * 170 + 100);
+            const startX = width / 2;
+            const startY = 42;
+            const stepY = 170;
+            const sway = 170;
+            let path = `M ${startX} ${startY}`;
+            let currentX = startX;
+            let currentY = startY;
+            const nodeDots = [];
+
+            rows.forEach((row, index) => {
+                const nextY = startY + ((index + 1) * stepY);
+                const nextX = index % 2 === 0 ? startX - sway : startX + sway;
+                const c1x = currentX + (index % 2 === 0 ? -120 : 120);
+                const c1y = currentY + 58;
+                const c2x = nextX + (index % 2 === 0 ? 120 : -120);
+                const c2y = nextY - 58;
+                path += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${nextX} ${nextY}`;
+                nodeDots.push(`
+                    <circle cx="${nextX}" cy="${nextY}" r="18" class="hc-route-map-road-node-dot is-${escapeHtml(row?.tone || "muted")}"></circle>
+                    <circle cx="${nextX}" cy="${nextY}" r="8" class="hc-route-map-road-node-core is-${escapeHtml(row?.tone || "muted")}"></circle>
+                `);
+                currentX = nextX;
+                currentY = nextY;
+            });
+
+            return `
+                <svg class="hc-route-map-road-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
+                    <defs>
+                        <linearGradient id="hcRouteMapRoadGlow" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#7c8eff" stop-opacity="0.25"></stop>
+                            <stop offset="100%" stop-color="#f7a774" stop-opacity="0.18"></stop>
+                        </linearGradient>
+                    </defs>
+                    <path d="${path}" class="hc-route-map-road-shadow"></path>
+                    <path d="${path}" class="hc-route-map-road-track"></path>
+                    <path d="${path}" class="hc-route-map-road-lane"></path>
+                    ${nodeDots.join("")}
+                </svg>
+            `;
+        }
+
+        function renderRoadCard(row, visual) {
+            return `
+                <div class="hc-route-road-card is-${escapeHtml(visual.tone)}">
+                    <div class="hc-route-road-card-head">
+                        <div class="hc-route-road-avatar is-${escapeHtml(visual.tone)}">
+                            <i class="bi bi-${escapeHtml(visual.icon)}"></i>
+                            <span class="hc-route-road-avatar-sticker">${escapeHtml(visual.sticker)}</span>
+                        </div>
+                        <div class="hc-route-road-card-copy">
+                            <strong>${escapeHtml(row.title || "Activity")}</strong>
+                            <span>${escapeHtml(row.time_label || "--")}</span>
+                        </div>
+                    </div>
+                    <p>${escapeHtml(row.description || "")}</p>
+                    <div class="hc-route-road-caption">${escapeHtml(visual.caption)}</div>
+                    <div class="hc-route-map-step-meta">${renderMetaLines(row.meta_lines)}</div>
+                </div>
+            `;
+        }
+
+        function renderRoadRow(row, index) {
+            const visual = getRouteMapEventVisual(row, index);
+            const leftSide = visual.side === "left";
+            return `
+                <article class="hc-route-road-row is-${escapeHtml(visual.side)} is-${escapeHtml(visual.tone)}">
+                    <div class="hc-route-road-side hc-route-road-side-card ${leftSide ? "" : "hc-route-road-side-empty"}">
+                        ${leftSide ? renderRoadCard(row, visual) : ""}
+                    </div>
+                    <div class="hc-route-road-side hc-route-road-side-node">
+                        <div class="hc-route-road-node is-${escapeHtml(visual.tone)}">
+                            <span class="hc-route-road-node-ring"></span>
+                            <span class="hc-route-road-node-core">
+                                <i class="bi bi-${escapeHtml(visual.icon)}"></i>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="hc-route-road-side hc-route-road-side-card ${!leftSide ? "" : "hc-route-road-side-empty"}">
+                        ${!leftSide ? renderRoadCard(row, visual) : ""}
+                    </div>
+                </article>
+            `;
+        }
+
         function renderTimeline(rows) {
             if (!Array.isArray(rows) || !rows.length) {
                 return '<div class="hc-route-map-empty">No route activity was captured yet.</div>';
             }
             return `
-                <div class="hc-route-map-timeline">
-                    ${rows
-                        .map(
-                            (row) => `
-                            <article class="hc-route-map-step">
-                                    <div class="hc-route-map-step-marker is-${escapeHtml(row.tone || "muted")}">
-                                        <i class="bi bi-${escapeHtml(row.icon || "circle")}"></i>
-                                    </div>
-                                    <div class="hc-route-map-step-body">
-                                        <strong>${escapeHtml(row.title || "Activity")}</strong>
-                                        <div class="small text-muted mt-1">${escapeHtml(row.time_label || "--")}</div>
-                                        <p>${escapeHtml(row.description || "")}</p>
-                                        <div class="hc-route-map-step-meta">${renderMetaLines(row.meta_lines)}</div>
-                                    </div>
-                                </article>
-                            `,
-                        )
-                        .join("")}
+                <div class="hc-route-map-road-stage">
+                    ${renderRoadSvg(rows)}
+                    <div class="hc-route-map-road-list">
+                        ${rows.map((row, index) => renderRoadRow(row, index)).join("")}
+                    </div>
                 </div>
             `;
         }
@@ -1456,15 +1631,16 @@
                 titleNode.textContent = `${activeLeadName} Lead Journey`;
             }
             if (subtitleNode) {
-                subtitleNode.textContent = `${lead.phone || "No phone"} • ${summary.route_state_label || "Open trail"}`;
+                subtitleNode.textContent = `${lead.phone || "No phone"} | ${summary.route_state_label || "Open lane"}`;
             }
             if (!bodyNode) {
                 return;
             }
             const statusTone = summary.current_status_tone || lead.status_tone || "muted";
-            const ownerLine = lead.owner_phone ? `${lead.owner_name || "Unassigned"} • ${lead.owner_phone}` : (lead.owner_name || "Unassigned");
+            const ownerLine = lead.owner_phone ? `${lead.owner_name || "Unassigned"} | ${lead.owner_phone}` : (lead.owner_name || "Unassigned");
             bodyNode.innerHTML = `
                 <div class="hc-route-map-shell">
+                    ${renderRouteMapHero(timelineRows)}
                     <div class="hc-route-map-summary">
                         ${renderSummaryCard("Current status", summary.current_status_label || lead.status_label, summary.route_state_label || "Current outcome")}
                         ${renderSummaryCard("Loan stage", lead.loan_stage_label || summary.loan_stage_label || "Not set", "Office progress")}
@@ -1494,10 +1670,10 @@
                 titleNode.textContent = `${activeLeadName} Lead Journey`;
             }
             if (subtitleNode) {
-                subtitleNode.textContent = "Loading lead trail...";
+                subtitleNode.textContent = "Loading the road trip...";
             }
             if (bodyNode) {
-                bodyNode.innerHTML = '<div class="hc-route-map-empty">Loading the lead journey...</div>';
+                bodyNode.innerHTML = '<div class="hc-route-map-empty">Loading the road trip...</div>';
             }
             modal.show();
 
@@ -1509,10 +1685,10 @@
             } catch (error) {
                 showFeedback(error.message, true);
                 if (bodyNode) {
-                    bodyNode.innerHTML = '<div class="hc-route-map-empty">Unable to load the lead journey right now. Please try again.</div>';
+                    bodyNode.innerHTML = '<div class="hc-route-map-empty">Unable to load the road trip right now. Please try again.</div>';
                 }
                 if (subtitleNode) {
-                    subtitleNode.textContent = "The trail could not be loaded.";
+                    subtitleNode.textContent = "The road trip could not be loaded.";
                 }
             }
         }
@@ -1526,13 +1702,13 @@
         modalNode.addEventListener("hidden.bs.modal", () => {
             clearFeedback();
             if (bodyNode) {
-                bodyNode.innerHTML = '<div class="text-muted small">Open a lead journey to see the trail.</div>';
+                bodyNode.innerHTML = '<div class="text-muted small">Open a lead journey to see the road trip.</div>';
             }
             if (titleNode) {
                 titleNode.textContent = "Lead Journey";
             }
             if (subtitleNode) {
-                subtitleNode.textContent = "Track the lead journey across the admin workspace.";
+                subtitleNode.textContent = "Track the road trip across the admin workspace.";
             }
             activeLeadName = "Lead";
         });
@@ -2553,7 +2729,7 @@
                     <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
                     <span class="hc-live-supervisor-copy">
                         <strong>${escapeHtml(row.name || "Staff")}</strong>
-                        <small>${escapeHtml(row.online_label || "Offline")} · ${asNumber(row.assigned_leads)} queue</small>
+                        <small>${escapeHtml(row.online_label || "Offline")}  |  ${asNumber(row.assigned_leads)} queue</small>
                     </span>
                     <span class="hc-status hc-status-${escapeHtml(row.quality_tone || "muted")}">${escapeHtml(row.quality_label || "No Recent Activity")}</span>
                 </button>
@@ -2678,7 +2854,7 @@
                             <span class="hc-staff-avatar">${escapeHtml((row.name || "S").slice(0, 1).toUpperCase())}</span>
                             <span class="hc-live-supervisor-copy">
                                 <strong>${escapeHtml(row.name || "Staff")}</strong>
-                                <small>${escapeHtml(row.online_label || "Offline")} · ${asNumber(row.assigned_leads)} queue</small>
+                                <small>${escapeHtml(row.online_label || "Offline")}  |  ${asNumber(row.assigned_leads)} queue</small>
                             </span>
                             <span class="hc-status hc-status-${escapeHtml(row.quality_tone || "muted")}">${escapeHtml(row.quality_label || "No Recent Activity")}</span>
                         </button>
@@ -3024,7 +3200,7 @@
                         <div class="hc-liveboard-graph-head">
                             <div>
                                 <strong>${escapeHtml(row.name || "Staff")}</strong>
-                                <span>${escapeHtml(row.online_label || "Offline")} · ${escapeHtml(row.session_state_label || "--")}</span>
+                                <span>${escapeHtml(row.online_label || "Offline")}  |  ${escapeHtml(row.session_state_label || "--")}</span>
                             </div>
                             <span class="hc-liveboard-graph-score">${Math.max(0, Math.round(boardPerformanceScore(row)))}</span>
                         </div>
@@ -3887,7 +4063,7 @@
                 return `
                     <button type="button" class="hc-performance-compare-chip ${selected ? "is-selected" : ""}" data-compare-staff="${escapeHtml(String(row.id || ""))}">
                         <strong>${escapeHtml(row.name || "Staff")}</strong>
-                        <span>${asNumber(row.calls_today)} calls · ${escapeHtml(row.active_hours_today || "0m")}</span>
+                        <span>${asNumber(row.calls_today)} calls  |  ${escapeHtml(row.active_hours_today || "0m")}</span>
                     </button>
                 `;
             }).join("");
@@ -4587,7 +4763,7 @@
                                 <span>${timestamp}</span>
                             </div>
                             <div class="hc-emi-history-meta">
-                                EMI ${formatCurrency(row?.monthlyEmi || 0)} · ${formatMonthsLabel(row?.payoffMonths || 0)}
+                                EMI ${formatCurrency(row?.monthlyEmi || 0)}  |  ${formatMonthsLabel(row?.payoffMonths || 0)}
                             </div>
                         </button>
                     `;
@@ -5003,3 +5179,4 @@
     bindSidebarSections();
     bindEmiCalculator();
 })();
+

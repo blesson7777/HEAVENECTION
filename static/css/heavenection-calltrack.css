@@ -1318,6 +1318,92 @@
     gap: 1rem;
 }
 
+.hc-route-map-hero {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.95rem;
+    align-items: center;
+    padding: 1rem 1.1rem;
+    border-radius: 24px;
+    border: 1px solid #dce3f4;
+    background: linear-gradient(140deg, #ffffff 0%, #eef3ff 55%, #fbeee6 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.hc-route-map-hero-graphic {
+    position: relative;
+    width: 86px;
+    height: 86px;
+    border-radius: 24px;
+    background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.95), rgba(200, 214, 255, 0.68));
+    border: 1px solid rgba(77, 92, 144, 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.68), 0 16px 28px rgba(77, 92, 144, 0.12);
+    overflow: hidden;
+}
+
+.hc-route-map-hero-graphic::before {
+    content: "";
+    position: absolute;
+    inset: 16px 8px 14px;
+    border-radius: 999px;
+    border: 3px solid rgba(77, 92, 144, 0.14);
+    border-right-color: rgba(77, 92, 144, 0.3);
+    transform: rotate(-12deg);
+}
+
+.hc-route-map-hero-sign,
+.hc-route-map-hero-car,
+.hc-route-map-hero-spark {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    animation: hcRouteBob 4.5s ease-in-out infinite;
+}
+
+.hc-route-map-hero-sign {
+    width: 36px;
+    height: 36px;
+    top: 12px;
+    left: 12px;
+    background: #22315a;
+    color: #fff;
+}
+
+.hc-route-map-hero-car {
+    width: 42px;
+    height: 42px;
+    bottom: 10px;
+    right: 10px;
+    background: linear-gradient(145deg, #ff9b6c, #f24f67);
+    color: #fff;
+    animation-delay: 0.4s;
+}
+
+.hc-route-map-hero-spark {
+    top: 50%;
+    left: 50%;
+    width: 28px;
+    height: 28px;
+    transform: translate(-50%, -50%);
+    color: #5a69d6;
+    animation-delay: 0.8s;
+}
+
+.hc-route-map-hero-copy strong {
+    display: block;
+    margin-bottom: 0.25rem;
+    color: #22315a;
+    font-size: 1.02rem;
+    font-weight: 900;
+}
+
+.hc-route-map-hero-copy p {
+    margin: 0;
+    color: #556483;
+    line-height: 1.5;
+}
+
 .hc-route-map-summary {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1354,82 +1440,377 @@
     color: #637694;
 }
 
-.hc-route-map-timeline {
+.hc-route-map-road-stage {
+    position: relative;
+    padding: 0.25rem 0 0.5rem;
+}
+
+.hc-route-map-road-stage::before {
+    content: "";
+    position: absolute;
+    inset: 0 9%;
+    border-radius: 40px;
+    background:
+        radial-gradient(circle at top left, rgba(124, 142, 255, 0.12), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(247, 167, 116, 0.1), transparent 30%);
+    pointer-events: none;
+}
+
+.hc-route-map-road-svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0.9;
+}
+
+.hc-route-map-road-shadow {
+    fill: none;
+    stroke: rgba(24, 31, 58, 0.16);
+    stroke-width: 30;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.hc-route-map-road-track {
+    fill: none;
+    stroke: url(#hcRouteMapRoadGlow);
+    stroke-width: 22;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.hc-route-map-road-lane {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.92);
+    stroke-width: 4;
+    stroke-dasharray: 14 16;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0.95;
+    animation: hcRouteLaneDrift 12s linear infinite;
+}
+
+.hc-route-map-road-node-dot {
+    fill: rgba(34, 49, 90, 0.96);
+    stroke: rgba(255, 255, 255, 0.9);
+    stroke-width: 4;
+}
+
+.hc-route-map-road-node-core {
+    fill: #fff;
+    stroke-width: 0;
+}
+
+.hc-route-map-road-node-dot.is-primary,
+.hc-route-map-road-node-core.is-primary {
+    fill: #4d5c90;
+}
+
+.hc-route-map-road-node-dot.is-success,
+.hc-route-map-road-node-core.is-success {
+    fill: #109e65;
+}
+
+.hc-route-map-road-node-dot.is-warning,
+.hc-route-map-road-node-core.is-warning {
+    fill: #b16d00;
+}
+
+.hc-route-map-road-node-dot.is-danger,
+.hc-route-map-road-node-core.is-danger {
+    fill: #e2585e;
+}
+
+.hc-route-map-road-node-dot.is-info,
+.hc-route-map-road-node-core.is-info {
+    fill: #317eff;
+}
+
+.hc-route-map-road-node-dot.is-muted,
+.hc-route-map-road-node-core.is-muted {
+    fill: #7584a0;
+}
+
+.hc-route-map-road-list {
+    position: relative;
+    z-index: 1;
     display: grid;
     gap: 0.8rem;
+    padding: 0.6rem 0;
 }
 
-.hc-route-map-step {
+.hc-route-road-row {
     display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.9rem;
-    padding: 0.95rem 1rem;
-    border-radius: 18px;
-    border: 1px solid #dce3f4;
-    background: linear-gradient(150deg, #ffffff 0%, #f7f9ff 100%);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    grid-template-columns: minmax(0, 1fr) 104px minmax(0, 1fr);
+    align-items: center;
+    min-height: 154px;
 }
 
-.hc-route-map-step-marker {
+.hc-route-road-side {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.hc-route-road-side-card {
+    min-width: 0;
+}
+
+.hc-route-road-row.is-left .hc-route-road-side-card:first-child {
+    justify-content: flex-end;
+    padding-right: 0.9rem;
+}
+
+.hc-route-road-row.is-left .hc-route-road-side-card:last-child {
+    justify-content: flex-start;
+}
+
+.hc-route-road-row.is-right .hc-route-road-side-card:first-child {
+    justify-content: flex-start;
+}
+
+.hc-route-road-row.is-right .hc-route-road-side-card:last-child {
+    justify-content: flex-start;
+    padding-left: 0.9rem;
+}
+
+.hc-route-road-node {
+    position: relative;
+    width: 68px;
+    height: 68px;
+    margin: 0 auto;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(232, 239, 255, 0.92));
+    border: 1px solid rgba(77, 92, 144, 0.16);
+    box-shadow: 0 14px 30px rgba(34, 49, 90, 0.14);
+}
+
+.hc-route-road-node-ring {
+    position: absolute;
+    inset: 8px;
+    border-radius: 999px;
+    border: 2px dashed rgba(77, 92, 144, 0.22);
+    animation: hcRouteSpin 18s linear infinite;
+}
+
+.hc-route-road-node-core {
+    position: relative;
     width: 42px;
     height: 42px;
     border-radius: 999px;
     display: grid;
     place-items: center;
-    font-size: 1.05rem;
-    background: rgba(77, 92, 144, 0.1);
-    color: #4d5c90;
+    font-size: 1rem;
+    color: #fff;
+    background: linear-gradient(145deg, #6f7ee8, #3e56c8);
+    box-shadow: 0 10px 18px rgba(62, 86, 200, 0.22);
 }
 
-.hc-route-map-step-marker.is-primary {
-    background: rgba(77, 92, 144, 0.14);
-    color: #4d5c90;
+.hc-route-road-node.is-success .hc-route-road-node-core {
+    background: linear-gradient(145deg, #48b885, #109e65);
 }
 
-.hc-route-map-step-marker.is-success {
-    background: rgba(16, 158, 101, 0.16);
-    color: #109e65;
+.hc-route-road-node.is-warning .hc-route-road-node-core {
+    background: linear-gradient(145deg, #ffbe66, #d48a00);
 }
 
-.hc-route-map-step-marker.is-warning {
-    background: rgba(255, 170, 0, 0.18);
-    color: #b16d00;
+.hc-route-road-node.is-danger .hc-route-road-node-core {
+    background: linear-gradient(145deg, #ff93a2, #e2585e);
 }
 
-.hc-route-map-step-marker.is-danger {
-    background: rgba(226, 88, 94, 0.16);
-    color: #e2585e;
+.hc-route-road-node.is-info .hc-route-road-node-core {
+    background: linear-gradient(145deg, #67a7ff, #317eff);
 }
 
-.hc-route-map-step-marker.is-info {
-    background: rgba(49, 126, 255, 0.14);
-    color: #317eff;
+.hc-route-road-node.is-muted .hc-route-road-node-core {
+    background: linear-gradient(145deg, #8a96b0, #65738d);
 }
 
-.hc-route-map-step-marker.is-muted {
-    background: rgba(117, 132, 160, 0.14);
-    color: #7584a0;
+.hc-route-road-card {
+    position: relative;
+    min-width: min(100%, 410px);
+    padding: 1rem 1.05rem;
+    border-radius: 24px;
+    border: 1px solid #dce3f4;
+    background:
+        linear-gradient(150deg, rgba(255, 255, 255, 0.98) 0%, rgba(244, 247, 255, 0.98) 100%);
+    box-shadow: 0 14px 28px rgba(34, 49, 90, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    overflow: hidden;
 }
 
-.hc-route-map-step-body strong {
+.hc-route-road-card::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 48px;
+    height: 16px;
+    border-top: 3px solid rgba(77, 92, 144, 0.3);
+    border-radius: 999px;
+    transform: translateY(-50%);
+}
+
+.hc-route-road-row.is-left .hc-route-road-card::after {
+    right: -34px;
+    border-right: 3px solid rgba(77, 92, 144, 0.3);
+}
+
+.hc-route-road-row.is-right .hc-route-road-card::after {
+    left: -34px;
+    border-left: 3px solid rgba(77, 92, 144, 0.3);
+}
+
+.hc-route-road-card::before {
+    content: "";
+    position: absolute;
+    inset: auto 1rem 0.75rem auto;
+    width: 86px;
+    height: 86px;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(124, 142, 255, 0.12), transparent 65%);
+    pointer-events: none;
+}
+
+.hc-route-road-card-head {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.85rem;
+    align-items: center;
+}
+
+.hc-route-road-avatar {
+    position: relative;
+    width: 60px;
+    height: 60px;
+    border-radius: 18px;
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: 1.2rem;
+    background: linear-gradient(145deg, #6f7ee8, #3e56c8);
+    box-shadow: 0 12px 20px rgba(62, 86, 200, 0.18);
+    overflow: hidden;
+    animation: hcRouteBob 5s ease-in-out infinite;
+}
+
+.hc-route-road-avatar::before {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.hc-route-road-avatar::after {
+    content: "";
+    position: absolute;
+    inset: auto -14px -10px auto;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.15);
+    filter: blur(2px);
+}
+
+.hc-route-road-avatar.is-success {
+    background: linear-gradient(145deg, #48b885, #109e65);
+}
+
+.hc-route-road-avatar.is-warning {
+    background: linear-gradient(145deg, #ffbe66, #d48a00);
+}
+
+.hc-route-road-avatar.is-danger {
+    background: linear-gradient(145deg, #ff93a2, #e2585e);
+}
+
+.hc-route-road-avatar.is-info {
+    background: linear-gradient(145deg, #67a7ff, #317eff);
+}
+
+.hc-route-road-avatar.is-muted {
+    background: linear-gradient(145deg, #8a96b0, #65738d);
+}
+
+.hc-route-road-avatar-sticker {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    padding: 0.14rem 0.46rem;
+    border-radius: 999px;
+    background: rgba(17, 24, 39, 0.9);
+    color: #fff;
+    font-size: 0.64rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    transform: rotate(8deg);
+    box-shadow: 0 10px 18px rgba(17, 24, 39, 0.2);
+    animation: hcRouteFloat 3.8s ease-in-out infinite;
+}
+
+.hc-route-road-card-copy strong {
     display: block;
     color: #22315a;
     font-size: 0.98rem;
+    font-weight: 900;
+}
+
+.hc-route-road-card-copy span {
+    display: block;
+    margin-top: 0.2rem;
+    color: #6b7c98;
+    font-size: 0.83rem;
+    font-weight: 700;
+}
+
+.hc-route-road-card p {
+    margin: 0.8rem 0 0;
+    color: #4f5d77;
+    font-size: 0.92rem;
+    line-height: 1.5;
+}
+
+.hc-route-road-caption {
+    margin-top: 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.62rem;
+    border-radius: 999px;
+    background: rgba(77, 92, 144, 0.08);
+    color: #4d5c90;
+    font-size: 0.75rem;
     font-weight: 800;
 }
 
-.hc-route-map-step-body p {
-    margin: 0.35rem 0 0;
-    color: #53627f;
-    font-size: 0.92rem;
-    line-height: 1.45;
+.hc-route-road-card.is-success .hc-route-road-caption {
+    background: rgba(16, 158, 101, 0.12);
+    color: #109e65;
+}
+
+.hc-route-road-card.is-warning .hc-route-road-caption {
+    background: rgba(255, 170, 0, 0.16);
+    color: #b16d00;
+}
+
+.hc-route-road-card.is-danger .hc-route-road-caption {
+    background: rgba(226, 88, 94, 0.14);
+    color: #c53f46;
+}
+
+.hc-route-road-card.is-info .hc-route-road-caption {
+    background: rgba(49, 126, 255, 0.12);
+    color: #317eff;
 }
 
 .hc-route-map-step-meta {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
-    margin-top: 0.55rem;
+    margin-top: 0.65rem;
 }
 
 .hc-route-map-pill {
@@ -1452,34 +1833,108 @@
     color: #5f6f8c;
 }
 
+body.mf-dark .hc-route-map-hero,
 body.mf-dark .hc-route-map-summary-card,
-body.mf-dark .hc-route-map-step,
+body.mf-dark .hc-route-road-card,
 body.mf-dark .hc-route-map-empty {
     border-color: rgba(255, 255, 255, 0.08);
-    background: linear-gradient(150deg, rgba(25, 30, 52, 0.9) 0%, rgba(34, 41, 68, 0.95) 100%);
+    background: linear-gradient(150deg, rgba(25, 30, 52, 0.92) 0%, rgba(34, 41, 68, 0.96) 100%);
 }
 
+body.mf-dark .hc-route-map-hero-copy strong,
+body.mf-dark .hc-route-map-summary-card strong,
+body.mf-dark .hc-route-road-card-copy strong {
+    color: #f2f5ff;
+}
+
+body.mf-dark .hc-route-map-hero-copy p,
 body.mf-dark .hc-route-map-summary-card span,
 body.mf-dark .hc-route-map-summary-card small,
-body.mf-dark .hc-route-map-step-body p,
+body.mf-dark .hc-route-road-card p,
+body.mf-dark .hc-route-road-card-copy span,
 body.mf-dark .hc-route-map-empty {
     color: #b9c4df;
 }
 
-body.mf-dark .hc-route-map-summary-card strong,
-body.mf-dark .hc-route-map-step-body strong {
-    color: #f2f5ff;
+body.mf-dark .hc-route-map-road-shadow {
+    stroke: rgba(255, 255, 255, 0.08);
 }
 
-body.mf-dark .hc-route-map-step-marker,
+body.mf-dark .hc-route-map-road-track {
+    stroke: url(#hcRouteMapRoadGlow);
+}
+
+body.mf-dark .hc-route-map-road-lane {
+    stroke: rgba(255, 255, 255, 0.65);
+}
+
+body.mf-dark .hc-route-map-road-node,
+body.mf-dark .hc-route-road-card {
+    box-shadow: 0 16px 28px rgba(0, 0, 0, 0.24);
+}
+
+body.mf-dark .hc-route-map-road-node {
+    background: linear-gradient(145deg, rgba(42, 49, 76, 0.98), rgba(30, 36, 58, 0.98));
+}
+
+body.mf-dark .hc-route-road-card {
+    background: linear-gradient(150deg, rgba(28, 34, 58, 0.98) 0%, rgba(38, 44, 70, 0.98) 100%);
+}
+
 body.mf-dark .hc-route-map-pill {
     background: rgba(141, 157, 207, 0.16);
     color: #dbe3ff;
 }
 
+@keyframes hcRouteBob {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-4px);
+    }
+}
+
+@keyframes hcRouteFloat {
+    0%,
+    100% {
+        transform: rotate(8deg) translateY(0);
+    }
+
+    50% {
+        transform: rotate(8deg) translateY(-3px);
+    }
+}
+
+@keyframes hcRouteSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes hcRouteLaneDrift {
+    from {
+        stroke-dashoffset: 0;
+    }
+
+    to {
+        stroke-dashoffset: -120;
+    }
+}
+
 @media (max-width: 991.98px) {
     .hc-route-map-summary {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .hc-route-road-row {
+        grid-template-columns: minmax(0, 1fr) 88px minmax(0, 1fr);
+    }
+
+    .hc-route-road-card {
+        min-width: 0;
     }
 }
 
@@ -1488,15 +1943,58 @@ body.mf-dark .hc-route-map-pill {
         grid-template-columns: 1fr;
     }
 
-    .hc-route-map-step {
-        gap: 0.75rem;
-        padding: 0.85rem 0.9rem;
+    .hc-route-map-hero {
+        grid-template-columns: 1fr;
+        justify-items: start;
     }
 
-    .hc-route-map-step-marker {
+    .hc-route-map-hero-graphic {
+        width: 74px;
+        height: 74px;
+    }
+
+    .hc-route-road-row {
+        grid-template-columns: 72px minmax(0, 1fr);
+        min-height: auto;
+        gap: 0.65rem;
+    }
+
+    .hc-route-road-row.is-left,
+    .hc-route-road-row.is-right {
+        grid-template-columns: 72px minmax(0, 1fr);
+    }
+
+    .hc-route-road-side-empty {
+        display: none;
+    }
+
+    .hc-route-road-row .hc-route-road-side-card:first-child,
+    .hc-route-road-row .hc-route-road-side-card:last-child {
+        grid-column: 2;
+        padding: 0;
+    }
+
+    .hc-route-road-row .hc-route-road-side-node {
+        grid-column: 1;
+    }
+
+    .hc-route-road-card::after {
+        display: none;
+    }
+
+    .hc-route-road-node {
+        width: 58px;
+        height: 58px;
+    }
+
+    .hc-route-road-node-core {
         width: 36px;
         height: 36px;
-        font-size: 0.95rem;
+        font-size: 0.92rem;
+    }
+
+    .hc-route-road-card {
+        padding: 0.9rem;
     }
 }
 
@@ -7462,4 +7960,5 @@ body.hc-live-monitoring-focus .hc-cc-shell-v3 .hc-cc-stage {
         align-items: flex-start;
     }
 }
+
 
