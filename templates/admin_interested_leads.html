@@ -217,6 +217,14 @@
                     </td>
                     <td>
                         <div class="d-flex gap-2 flex-wrap align-items-center">
+                            {% if row.lead_status == "not_interested" or row.lead_status == "no_answer" %}
+                            <button
+                                type="button"
+                                class="btn btn-outline-warning btn-sm js-interested-recover"
+                                data-lead-id="{{ row.lead_id }}"
+                                data-lead-name="{{ row.customer_name }}"
+                            >Recover to Interested</button>
+                            {% endif %}
                             <button
                                 type="button"
                                 class="btn btn-outline-dark btn-sm js-open-lead-route-map"
@@ -237,13 +245,6 @@
                                 data-lead-name="{{ row.customer_name }}"
                                 data-current-status="{{ row.lead_status }}"
                             >Set Unsuccessful</button>
-                            {% elif row.lead_status == "not_interested" or row.lead_status == "no_answer" %}
-                            <button
-                                type="button"
-                                class="btn btn-outline-warning btn-sm js-interested-recover"
-                                data-lead-id="{{ row.lead_id }}"
-                                data-lead-name="{{ row.customer_name }}"
-                            >Recover to Interested</button>
                             {% else %}
                             <span class="small text-muted">Closed</span>
                             {% endif %}
