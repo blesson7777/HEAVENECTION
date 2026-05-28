@@ -8,10 +8,12 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_FLOOR, ROUND_HALF_UP
 from threading import Thread
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
+from django.core.paginator import EmptyPage, Paginator
 from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, close_old_connections, transaction
 from django.db.models import Case, Count, F, IntegerField, Max, Q, Sum, Value, When
@@ -7276,6 +7278,8 @@ def build_lead_management_payload(
     sort_by="updated_at",
     sort_dir="desc",
     readd_only=False,
+    page=1,
+    page_size=25,
 ):
     company_profile = get_company_profile()
     active_queue = _lead_queue_queryset()
@@ -7311,6 +7315,16 @@ def build_lead_management_payload(
     normalized_sort_dir = (sort_dir or "desc").strip().lower()
     normalized_sort_dir = "asc" if normalized_sort_dir == "asc" else "desc"
     normalized_readd_only = bool(readd_only)
+    try:
+        normalized_page_size = int(page_size or 25)
+    except (TypeError, ValueError):
+        normalized_page_size = 25
+    normalized_page_size = max(10, min(normalized_page_size, 100))
+    try:
+        normalized_page = int(page or 1)
+    except (TypeError, ValueError):
+        normalized_page = 1
+    normalized_page = max(1, normalized_page)
 
     lead_queryset = _lead_management_queryset().select_related("assigned_to")
 
@@ -7421,9 +7435,33 @@ def build_lead_management_payload(
 
     total_lead_count = _lead_management_queryset().count()
     filtered_lead_count = lead_queryset.count()
+    status_counts = {
+        status_value: lead_queryset.filter(status=status_value).count()
+        for status_value, _label in Lead.Status.choices
+    }
+    assignment_counts = {
+        "assigned": lead_queryset.filter(assigned_to__isnull=False).count(),
+        "unassigned": lead_queryset.filter(assigned_to__isnull=True).count(),
+    }
+    contact_counts = {
+        "contacted": lead_queryset.filter(last_contacted_at__isnull=False).count(),
+        "not_contacted": lead_queryset.filter(last_contacted_at__isnull=True).count(),
+    }
+    callback_counts = {
+        callback_value: lead_queryset.filter(callback_window=callback_value).count()
+        for callback_value, _label in Lead.CallbackWindow.choices
+    }
+    notes_count = lead_queryset.exclude(Q(notes__isnull=True) | Q(notes="")).count()
+    readded_lead_count = lead_queryset.filter(readd_count__gt=0).count()
+
+    paginator = Paginator(lead_queryset, normalized_page_size)
+    try:
+        page_obj = paginator.page(normalized_page)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages or 1)
 
     lead_rows = []
-    for lead in lead_queryset:
+    for lead in page_obj.object_list:
         lead_rows.append(
             {
                 "id": str(lead.id),
@@ -7452,12 +7490,37 @@ def build_lead_management_payload(
             }
         )
 
-    status_counts = Counter(row["status"] for row in lead_rows)
-    assignment_counts = Counter("unassigned" if row["is_unassigned"] else "assigned" for row in lead_rows)
-    contact_counts = Counter("contacted" if row["is_contacted"] else "not_contacted" for row in lead_rows)
-    callback_counts = Counter(row["callback_window"] for row in lead_rows if row["callback_window"])
-    notes_count = sum(1 for row in lead_rows if row["has_notes"])
-    readded_lead_count = sum(1 for row in lead_rows if row["readd_count"])
+    page_window = 2
+    start_page = max(1, page_obj.number - page_window)
+    end_page = min(paginator.num_pages or 1, page_obj.number + page_window)
+    page_numbers = [
+        {
+            "number": page_number,
+            "is_current": page_number == page_obj.number,
+        }
+        for page_number in range(start_page, end_page + 1)
+    ]
+    base_query_params = [
+        ("q", trimmed_query),
+        ("status", normalized_status if normalized_status in valid_statuses else "all"),
+        ("assignment", normalized_assignment),
+        (
+            "callback_window",
+            normalized_callback_window if normalized_callback_window in valid_callback_windows else "all",
+        ),
+        ("contact_state", normalized_contact_state),
+        ("notes_state", normalized_notes_state),
+        ("date_field", normalized_date_field if normalized_date_field in valid_date_fields else "updated_at"),
+        ("date_from", from_date.isoformat() if from_date else ""),
+        ("date_to", to_date.isoformat() if to_date else ""),
+        ("sort_by", normalized_sort_by),
+        ("sort_dir", normalized_sort_dir),
+        ("page_size", str(normalized_page_size)),
+    ]
+    if normalized_readd_only:
+        base_query_params.append(("readd_only", "on"))
+    base_query_params = [(key, value) for key, value in base_query_params if value not in ("", None)]
+    base_querystring = f"?{urlencode(base_query_params)}" if base_query_params else ""
 
     return {
         "lead_rows": lead_rows,
@@ -7475,6 +7538,7 @@ def build_lead_management_payload(
             "sort_by": normalized_sort_by,
             "sort_dir": normalized_sort_dir,
             "readd_only": normalized_readd_only,
+            "page_size": normalized_page_size,
         },
         "lead_filter_options": {
             "statuses": [{"value": "all", "label": "All statuses"}]
@@ -7517,6 +7581,11 @@ def build_lead_management_payload(
                 {"value": "desc", "label": "Newest / highest first"},
                 {"value": "asc", "label": "Oldest / lowest first"},
             ],
+            "page_sizes": [
+                {"value": 25, "label": "25 per page"},
+                {"value": 50, "label": "50 per page"},
+                {"value": 100, "label": "100 per page"},
+            ],
         },
         "lead_summary": {
             "total_count": total_lead_count,
@@ -7539,6 +7608,20 @@ def build_lead_management_payload(
                 "evening": int(callback_counts.get(Lead.CallbackWindow.EVENING, 0)),
                 "night": int(callback_counts.get(Lead.CallbackWindow.NIGHT, 0)),
             },
+        },
+        "lead_pagination": {
+            "page_number": page_obj.number,
+            "page_size": normalized_page_size,
+            "num_pages": paginator.num_pages or 1,
+            "filtered_count": filtered_lead_count,
+            "has_previous": page_obj.has_previous(),
+            "has_next": page_obj.has_next(),
+            "previous_page_number": page_obj.previous_page_number() if page_obj.has_previous() else 1,
+            "next_page_number": page_obj.next_page_number() if page_obj.has_next() else (paginator.num_pages or 1),
+            "start_index": page_obj.start_index() if filtered_lead_count else 0,
+            "end_index": page_obj.end_index() if filtered_lead_count else 0,
+            "page_numbers": page_numbers,
+            "base_querystring": base_querystring,
         },
         "queue_summary": {
             "active_queue_total": active_queue.count(),

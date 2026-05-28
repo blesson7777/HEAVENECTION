@@ -1865,6 +1865,8 @@ def leads_page(request):
         sort_by=request.GET.get("sort_by", "updated_at"),
         sort_dir=request.GET.get("sort_dir", "desc"),
         readd_only=request.GET.get("readd_only") == "on",
+        page=request.GET.get("page", 1),
+        page_size=request.GET.get("page_size", 25),
     )
     context = _admin_web_context(
         request,
