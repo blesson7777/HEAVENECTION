@@ -2119,6 +2119,7 @@ def interested_leads_page(request):
     staff_id = request.GET.get("staff_id", "").strip()
     outcome = request.GET.get("outcome", "all").strip()
     page_size = request.GET.get("page_size", 25)
+    staff_breakdown_page = request.GET.get("staff_breakdown_page", 1)
     pending_page = request.GET.get("pending_page", 1)
     success_page = request.GET.get("success_page", 1)
     unsuccessful_page = request.GET.get("unsuccessful_page", 1)
@@ -2161,6 +2162,7 @@ def interested_leads_page(request):
             staff_id=staff_id,
             outcome=outcome,
             page_size=page_size,
+            staff_breakdown_page=staff_breakdown_page,
             pending_page=pending_page,
             success_page=success_page,
             unsuccessful_page=unsuccessful_page,

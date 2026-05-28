@@ -10325,6 +10325,7 @@ def build_interested_lead_payload(
     staff_id="",
     outcome="all",
     page_size=25,
+    staff_breakdown_page=1,
     pending_page=1,
     success_page=1,
     unsuccessful_page=1,
@@ -10526,6 +10527,13 @@ def build_interested_lead_payload(
             row["staff_name"].lower(),
         ),
     )
+    staff_breakdown_rows_page, staff_breakdown_pagination = _paginate_interested_rows(
+        staff_breakdown_rows,
+        page_value=staff_breakdown_page,
+        page_size=normalized_page_size,
+        base_params=base_page_params,
+        page_key="staff_breakdown_page",
+    )
     staff_options = [
         {"id": str(staff.id), "name": staff.name}
         for staff in Staff.objects.filter(role=Staff.Role.STAFF, is_active=True, receives_new_leads=True).order_by("name")
@@ -10542,6 +10550,8 @@ def build_interested_lead_payload(
         "interested_pending_pagination": pending_pagination,
         "interested_success_pagination": success_pagination,
         "interested_unsuccessful_pagination": unsuccessful_pagination,
+        "interested_staff_breakdown_rows_page": staff_breakdown_rows_page,
+        "interested_staff_breakdown_pagination": staff_breakdown_pagination,
         "interested_page_size": normalized_page_size,
         "interested_lead_summary": {
             "total_count": len(rows),
