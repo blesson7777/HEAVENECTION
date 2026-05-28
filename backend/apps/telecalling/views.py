@@ -347,7 +347,7 @@ def _fallback_dashboard_payload():
         },
         "chart_payload": {
             "callVolume": {"labels": [], "calls": [], "conversions": []},
-            "leadPipeline": {"labels": ["New", "Follow Up", "Scheduled Follow Up", "No Response", "Converted"], "values": [0, 0, 0, 0, 0]},
+            "leadPipeline": {"labels": ["New", "Interested", "Scheduled Follow Up", "No Response", "Converted"], "values": [0, 0, 0, 0, 0]},
             "activityBalance": {"labels": [], "activeHours": [], "callMinutes": []},
         },
         "live_staff": live_staff,
@@ -1776,7 +1776,7 @@ def leads_page(request):
             if summary["eligible_count"] == 0:
                 messages.error(
                     request,
-                    "Only New or Follow Up leads can be moved into a staff queue.",
+                    "Only New or Interested leads can be moved into a staff queue.",
                 )
                 return redirect("leads-page")
 
@@ -1983,7 +1983,7 @@ def followups_page(request):
             if summary["target_status"] == Lead.Status.INTERESTED:
                 messages.success(
                     request,
-                    f"{summary['lead_name']} moved to Follow Up under {summary['owner_name']}.",
+                    f"{summary['lead_name']} moved to Interested under {summary['owner_name']}.",
                 )
             else:
                 messages.success(
@@ -2310,7 +2310,7 @@ def recovery_leads_page(request):
             if summary["target_status"] == Lead.Status.INTERESTED:
                 messages.success(
                     request,
-                    f"{summary['lead_name']} moved to Follow Up under {summary['owner_name']}.",
+                    f"{summary['lead_name']} moved to Interested under {summary['owner_name']}.",
                 )
             else:
                 messages.success(
@@ -3411,6 +3411,7 @@ def lead_detail_api(request, lead_id):
     previous_name = lead.name
     previous_phone = lead.phone
     previous_notes = lead.notes
+    previous_loan_stage = lead.loan_stage
     previous_callback_window = lead.callback_window
     previous_callback_date = lead.callback_date
     previous_handover_status = lead.handover_status
@@ -3437,6 +3438,11 @@ def lead_detail_api(request, lead_id):
         change_map["status"] = {
             "from": dict(Lead.Status.choices).get(previous_status, previous_status or ""),
             "to": lead.get_status_display(),
+        }
+    if previous_loan_stage != lead.loan_stage:
+        change_map["loan_stage"] = {
+            "from": dict(Lead.LoanStage.choices).get(previous_loan_stage, previous_loan_stage or ""),
+            "to": dict(Lead.LoanStage.choices).get(lead.loan_stage, lead.loan_stage or lead.get_status_display()),
         }
     if previous_assigned_to_id != lead.assigned_to_id:
         change_map["assigned_to"] = {

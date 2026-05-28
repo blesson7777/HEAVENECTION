@@ -3707,7 +3707,13 @@ def _lead_route_status_meta(status):
             "tone": "warning",
             "icon": "hourglass-split",
         }
-    if normalized in {Lead.Status.INTERESTED, Lead.Status.CALL_BACK}:
+    if normalized == Lead.Status.INTERESTED:
+        return {
+            "label": "Interested",
+            "tone": "warning",
+            "icon": "hand-thumbs-up-fill",
+        }
+    if normalized in {Lead.Status.CALL_BACK}:
         return {
             "label": "Follow Up",
             "tone": "warning",
@@ -3726,6 +3732,39 @@ def _lead_route_status_meta(status):
     }
 
 
+def _lead_loan_stage_meta(lead):
+    stage = str(getattr(lead, "loan_stage", "") or "").strip()
+    lead_status = str(getattr(lead, "status", "") or "").strip()
+    if stage:
+        label = dict(Lead.LoanStage.choices).get(stage, stage.replace("_", " ").title())
+        tone = {
+            Lead.LoanStage.OFFICE_REVIEW: "warning",
+            Lead.LoanStage.DOCUMENTS_PENDING: "primary",
+            Lead.LoanStage.VERIFICATION: "primary",
+            Lead.LoanStage.APPROVAL: "info",
+            Lead.LoanStage.DISBURSEMENT: "success",
+            Lead.LoanStage.SUCCESSFUL: "success",
+            Lead.LoanStage.UNSUCCESSFUL: "danger",
+        }.get(stage, "muted")
+    elif lead_status == Lead.Status.INTERESTED:
+        label = "Office Review"
+        tone = "warning"
+    elif lead_status == Lead.Status.CONVERTED:
+        label = "Successful"
+        tone = "success"
+    elif lead_status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER, Lead.Status.EXPIRED_FOLLOWUP}:
+        label = "Unsuccessful"
+        tone = "danger"
+    else:
+        label = "Not set"
+        tone = "muted"
+    return {
+        "value": stage,
+        "label": label,
+        "tone": tone,
+    }
+
+
 def _lead_route_change_labels(metadata):
     metadata = metadata or {}
     changes = metadata.get("changes") or {}
@@ -3737,6 +3776,7 @@ def _lead_route_change_labels(metadata):
         ("name", "Name"),
         ("phone", "Phone"),
         ("status", "Status"),
+        ("loan_stage", "Loan stage"),
         ("assigned_to", "Owner"),
         ("callback_date", "Callback date"),
         ("callback_window", "Callback slot"),
@@ -7607,6 +7647,7 @@ def build_lead_management_payload(
     for lead in page_obj.object_list:
         moved_back_active = bool(lead.followup_moved_back_at and lead.status == Lead.Status.EXPIRED_FOLLOWUP)
         status_label = lead.get_status_display()
+        loan_stage_meta = _lead_loan_stage_meta(lead)
         status_tone = {
             Lead.Status.NEW: "new",
             Lead.Status.INTERESTED: "warning",
@@ -7627,6 +7668,9 @@ def build_lead_management_payload(
                 "status": lead.status,
                 "status_label": status_label,
                 "status_tone": status_tone,
+                "loan_stage": lead.loan_stage or "",
+                "loan_stage_label": loan_stage_meta["label"],
+                "loan_stage_tone": loan_stage_meta["tone"],
                 "callback_window": lead.callback_window,
                 "callback_window_label": lead.get_callback_window_display() if lead.callback_window else "",
                 "callback_date": lead.callback_date.isoformat() if lead.callback_date else "",
@@ -9013,9 +9057,13 @@ def recover_recovery_lead_to_owner(lead_id, *, target_status=Lead.Status.NEW):
         raise ValueError("No active previous staff owner found for this customer.")
 
     previous_status = lead.status
-    update_fields = ["assigned_to", "status", "callback_window", "callback_date", "updated_at"]
+    update_fields = ["assigned_to", "status", "loan_stage", "callback_window", "callback_date", "updated_at"]
     lead.assigned_to = owner
     lead.status = normalized_status
+    if normalized_status == Lead.Status.INTERESTED and not lead.loan_stage:
+        lead.loan_stage = Lead.LoanStage.OFFICE_REVIEW
+    elif normalized_status == Lead.Status.NEW:
+        lead.loan_stage = ""
     lead.callback_window = ""
     lead.callback_date = None
     if normalized_status == Lead.Status.NEW:
@@ -9043,7 +9091,7 @@ def recover_recovery_lead_to_owner(lead_id, *, target_status=Lead.Status.NEW):
         "lead_name": lead.name,
         "owner_name": owner.name,
         "target_status": normalized_status,
-        "target_status_label": "Follow Up" if normalized_status == Lead.Status.INTERESTED else "New",
+        "target_status_label": "Interested" if normalized_status == Lead.Status.INTERESTED else "New",
     }
 
 
@@ -9091,6 +9139,7 @@ def reallocate_expired_followup_to_owner(lead_id):
     update_fields = [
         "assigned_to",
         "status",
+        "loan_stage",
         "callback_window",
         "callback_date",
         "followup_moved_back_at",
@@ -9098,6 +9147,8 @@ def reallocate_expired_followup_to_owner(lead_id):
     ]
     moved_back_at = timezone.now()
     lead.status = Lead.Status.INTERESTED
+    if not lead.loan_stage:
+        lead.loan_stage = Lead.LoanStage.OFFICE_REVIEW
     lead.callback_window = ""
     lead.callback_date = None
     lead.followup_moved_back_at = moved_back_at
@@ -9300,6 +9351,7 @@ def build_lead_route_map_payload(lead):
     current_owner_name = current_owner.name if current_owner else "Unassigned"
     current_owner_phone = current_owner.phone if current_owner else ""
     status_meta = _lead_route_status_meta(lead.status)
+    loan_stage_meta = _lead_loan_stage_meta(lead)
     lead_created_stamp = lead.created_at or lead.updated_at or timezone.now()
     add_event(
         f"lead-created-{lead.id}",
@@ -9429,7 +9481,7 @@ def build_lead_route_map_payload(lead):
 
         if source == "recovery_restore":
             target_status = metadata.get("target_status") or Lead.Status.NEW
-            target_label = "New lead" if target_status == Lead.Status.NEW else "Follow Up"
+            target_label = "New lead" if target_status == Lead.Status.NEW else "Interested"
             add_event(
                 f"action-{action.id}",
                 stamp=stamp,
@@ -9505,6 +9557,9 @@ def build_lead_route_map_payload(lead):
             "status": lead.status,
             "status_label": lead.get_status_display(),
             "status_tone": status_meta["tone"],
+            "loan_stage": lead.loan_stage or "",
+            "loan_stage_label": loan_stage_meta["label"],
+            "loan_stage_tone": loan_stage_meta["tone"],
             "owner_name": current_owner_name,
             "owner_phone": current_owner_phone,
             "created_at": _format_datetime(lead.created_at),
@@ -9532,9 +9587,12 @@ def build_lead_route_map_payload(lead):
             "current_owner_phone": current_owner_phone,
             "route_state_label": "Success" if lead.status == Lead.Status.CONVERTED else (
                 "Closed" if lead.status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER} else (
-                    "Expired" if lead.status == Lead.Status.EXPIRED_FOLLOWUP else "Open"
+                    "Expired" if lead.status == Lead.Status.EXPIRED_FOLLOWUP else (
+                        "Office pipeline" if lead.status == Lead.Status.INTERESTED else "Open"
+                    )
                 )
             ),
+            "loan_stage_label": loan_stage_meta["label"],
         },
         "timeline_rows": events,
     }
@@ -10335,6 +10393,7 @@ def build_interested_lead_payload(
     )
     for detail in queryset.order_by("-updated_at", "-created_at"):
         lead_status = detail.lead.status
+        loan_stage_meta = _lead_loan_stage_meta(detail.lead)
         outcome_group = {
             Lead.Status.CONVERTED: "successful",
             Lead.Status.INTERESTED: "open",
@@ -10389,6 +10448,9 @@ def build_interested_lead_payload(
                 "lead_status": lead_status,
                 "lead_status_label": lead_status_label,
                 "lead_status_tone": status_tone,
+                "loan_stage": detail.lead.loan_stage or "",
+                "loan_stage_label": loan_stage_meta["label"],
+                "loan_stage_tone": loan_stage_meta["tone"],
                 "outcome_group": outcome_group,
                 "outcome_group_label": {
                     "open": "Interested",
@@ -10529,6 +10591,7 @@ def build_interested_lead_csv_response(*, query="", date_from="", date_to="", st
             "Staff",
             "Staff Phone",
             "Outcome",
+            "Loan Stage",
             "Result At",
             "Reward Amount",
             "Created At",
@@ -10547,6 +10610,7 @@ def build_interested_lead_csv_response(*, query="", date_from="", date_to="", st
                 row["staff_name"],
                 row["staff_phone"],
                 row["lead_status_label"],
+                row["loan_stage_label"],
                 row["result_at"],
                 row["reward_amount_label"] or "--",
                 row["created_at"],
@@ -10582,6 +10646,7 @@ def build_interested_lead_excel_response(*, query="", date_from="", date_to="", 
             "Staff",
             "Staff Phone",
             "Outcome",
+            "Loan Stage",
             "Result At",
             "Reward Amount",
             "Created At",
@@ -10600,6 +10665,7 @@ def build_interested_lead_excel_response(*, query="", date_from="", date_to="", 
                 row["staff_name"],
                 row["staff_phone"],
                 row["lead_status_label"],
+                row["loan_stage_label"],
                 row["result_at"],
                 row["reward_amount_label"] or "--",
                 row["created_at"],
@@ -11060,12 +11126,19 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
     call.callback_date = resolved_callback_date
     call.save(update_fields=update_fields)
     call.lead.status = lead_status
+    if lead_status == Lead.Status.INTERESTED and not call.lead.loan_stage:
+        call.lead.loan_stage = Lead.LoanStage.OFFICE_REVIEW
+    elif lead_status == Lead.Status.CONVERTED:
+        call.lead.loan_stage = Lead.LoanStage.SUCCESSFUL
+    elif lead_status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER}:
+        call.lead.loan_stage = Lead.LoanStage.UNSUCCESSFUL
     call.lead.callback_window = lead_callback_window
     call.lead.callback_date = lead_callback_date
     call.lead.last_contacted_at = call.end_time or now
     call.lead.save(
         update_fields=[
             "status",
+            "loan_stage",
             "callback_window",
             "callback_date",
             "last_contacted_at",

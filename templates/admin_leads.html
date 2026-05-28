@@ -217,7 +217,7 @@
             <span class="hc-status hc-status-muted">Unassigned {{ lead_summary.unassigned_count }}</span>
             <span class="hc-status hc-status-muted">Contacted {{ lead_summary.contacted_count }}</span>
             <span class="hc-status hc-status-muted">Not called {{ lead_summary.not_contacted_count }}</span>
-            <span class="hc-status hc-status-warning">Follow Up {{ lead_summary.follow_up_count }}</span>
+            <span class="hc-status hc-status-warning">Interested {{ lead_summary.follow_up_count }}</span>
             <span class="hc-status hc-status-warning">Call Back {{ lead_summary.callback_count }}</span>
             <span class="hc-status hc-status-success">Converted {{ lead_summary.converted_count }}</span>
             <span class="hc-status hc-status-danger">Rejected {{ lead_summary.rejected_count }}</span>
@@ -233,7 +233,7 @@
     <div class="hc-filter-row">
         <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
         <button type="button" class="hc-filter-chip" data-filter-status="new">New</button>
-        <button type="button" class="hc-filter-chip" data-filter-status="interested">Follow Up</button>
+        <button type="button" class="hc-filter-chip" data-filter-status="interested">Interested</button>
         <button type="button" class="hc-filter-chip" data-filter-status="call_back">Call Back</button>
         <button type="button" class="hc-filter-chip" data-filter-status="expired_followup">Expired</button>
         <button type="button" class="hc-filter-chip" data-filter-status="no_answer">No Response</button>
@@ -299,6 +299,7 @@
                                 data-name="{{ lead.name }}"
                                 data-phone="{{ lead.phone }}"
                                 data-status="{{ lead.status }}"
+                                data-loan-stage="{{ lead.loan_stage }}"
                                 data-callback-window="{{ lead.callback_window }}"
                                 data-callback-date="{{ lead.callback_date }}"
                                 data-assigned-to-id="{{ lead.assigned_to_id }}"
@@ -423,11 +424,22 @@
                             <label class="form-label fw-semibold" for="leadStatus">Status</label>
                             <select class="form-select" id="leadStatus">
                                 <option value="new">New</option>
-                                <option value="interested">Follow Up</option>
+                                <option value="interested">Interested</option>
                                 <option value="not_interested">Rejected</option>
                                 <option value="no_answer">No Response</option>
                                 <option value="call_back">Call Back</option>
                                 <option value="converted">Converted</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="leadLoanStage">Loan Stage</label>
+                            <select class="form-select" id="leadLoanStage">
+                                <option value="">Not set</option>
+                                <option value="office_review">Office Review</option>
+                                <option value="documents_pending">Documents Pending</option>
+                                <option value="verification">Verification</option>
+                                <option value="approval">Approval</option>
+                                <option value="disbursement">Disbursement</option>
                             </select>
                         </div>
                         <div class="col-md-6">

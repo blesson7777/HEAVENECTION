@@ -186,10 +186,10 @@ class StaffLeadRecoverySerializer(serializers.Serializer):
         if not has_detail_payload:
             raise serializers.ValidationError(
                 {
-                    "customer_name": "Fill interested customer details before saving as Follow Up.",
-                    "customer_phone": "Fill interested customer details before saving as Follow Up.",
-                    "product_enquired": "Fill interested customer details before saving as Follow Up.",
-                    "preferred_call_time": "Fill interested customer details before saving as Follow Up.",
+                    "customer_name": "Fill interested customer details before saving as Interested.",
+                    "customer_phone": "Fill interested customer details before saving as Interested.",
+                    "product_enquired": "Fill interested customer details before saving as Interested.",
+                    "preferred_call_time": "Fill interested customer details before saving as Interested.",
                 }
             )
 
@@ -1086,6 +1086,7 @@ class CompanyProfileUpdateSerializer(serializers.ModelSerializer):
 class LeadSerializer(serializers.ModelSerializer):
     assigned_to_name = serializers.CharField(source="assigned_to.name", read_only=True)
     status_label = serializers.CharField(source="get_status_display", read_only=True)
+    loan_stage_label = serializers.SerializerMethodField()
     handover_status_label = serializers.CharField(source="get_handover_status_display", read_only=True)
     callback_window_label = serializers.CharField(
         source="get_callback_window_display",
@@ -1102,6 +1103,8 @@ class LeadSerializer(serializers.ModelSerializer):
             "phone",
             "status",
             "status_label",
+            "loan_stage",
+            "loan_stage_label",
             "handover_status",
             "handover_status_label",
             "callback_window",
@@ -1121,6 +1124,17 @@ class LeadSerializer(serializers.ModelSerializer):
             return ""
         return obj.callback_date.strftime("%d %b %Y")
 
+    def get_loan_stage_label(self, obj):
+        if obj.loan_stage:
+            return dict(Lead.LoanStage.choices).get(obj.loan_stage, obj.loan_stage)
+        if obj.status == Lead.Status.INTERESTED:
+            return "Office Review"
+        if obj.status == Lead.Status.CONVERTED:
+            return "Successful"
+        if obj.status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER, Lead.Status.EXPIRED_FOLLOWUP}:
+            return "Unsuccessful"
+        return "Not set"
+
     def get_callback_schedule_label(self, obj):
         parts = []
         if obj.callback_date:
@@ -1136,6 +1150,7 @@ class CreateLeadSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    loan_stage = serializers.ChoiceField(choices=Lead.LoanStage.choices, required=False, allow_blank=True)
 
     class Meta:
         model = Lead
@@ -1144,6 +1159,7 @@ class CreateLeadSerializer(serializers.ModelSerializer):
             "name",
             "phone",
             "status",
+            "loan_stage",
             "handover_status",
             "callback_window",
             "callback_date",
@@ -1163,6 +1179,15 @@ class CreateLeadSerializer(serializers.ModelSerializer):
         else:
             attrs["callback_window"] = ""
             attrs["callback_date"] = None
+        loan_stage = (attrs.get("loan_stage") or "").strip()
+        if status == Lead.Status.INTERESTED and not loan_stage:
+            attrs["loan_stage"] = Lead.LoanStage.OFFICE_REVIEW
+        elif status == Lead.Status.CONVERTED and not loan_stage:
+            attrs["loan_stage"] = Lead.LoanStage.SUCCESSFUL
+        elif status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER} and not loan_stage:
+            attrs["loan_stage"] = Lead.LoanStage.UNSUCCESSFUL
+        else:
+            attrs["loan_stage"] = loan_stage
         return attrs
 
 
@@ -1172,6 +1197,7 @@ class UpdateLeadSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    loan_stage = serializers.ChoiceField(choices=Lead.LoanStage.choices, required=False, allow_blank=True)
 
     class Meta:
         model = Lead
@@ -1179,6 +1205,7 @@ class UpdateLeadSerializer(serializers.ModelSerializer):
             "name",
             "phone",
             "status",
+            "loan_stage",
             "handover_status",
             "callback_window",
             "callback_date",
@@ -1208,6 +1235,16 @@ class UpdateLeadSerializer(serializers.ModelSerializer):
         else:
             attrs["callback_window"] = ""
             attrs["callback_date"] = None
+        loan_stage = attrs.get("loan_stage") if "loan_stage" in attrs else getattr(instance, "loan_stage", "")
+        loan_stage = (loan_stage or "").strip()
+        if status == Lead.Status.INTERESTED and not loan_stage:
+            attrs["loan_stage"] = getattr(instance, "loan_stage", "") or Lead.LoanStage.OFFICE_REVIEW
+        elif status == Lead.Status.CONVERTED and not loan_stage:
+            attrs["loan_stage"] = Lead.LoanStage.SUCCESSFUL
+        elif status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER} and not loan_stage:
+            attrs["loan_stage"] = Lead.LoanStage.UNSUCCESSFUL
+        elif "loan_stage" in attrs:
+            attrs["loan_stage"] = loan_stage
         return attrs
 
     def update(self, instance, validated_data):

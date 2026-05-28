@@ -639,6 +639,7 @@
         const nameInput = document.getElementById("leadName");
         const phoneInput = document.getElementById("leadPhone");
         const statusInput = document.getElementById("leadStatus");
+        const loanStageInput = document.getElementById("leadLoanStage");
         const callbackWindowInput = document.getElementById("leadCallbackWindow");
         const callbackDateInput = document.getElementById("leadCallbackDate");
         const assignedToInput = document.getElementById("leadAssignedTo");
@@ -690,6 +691,9 @@
             form.reset();
             idInput.value = "";
             statusInput.value = "new";
+            if (loanStageInput) {
+                loanStageInput.value = "";
+            }
             callbackWindowInput.value = "";
             callbackDateInput.value = "";
             assignedToInput.value = "";
@@ -958,6 +962,9 @@
                 nameInput.value = button.dataset.name || "";
                 phoneInput.value = button.dataset.phone || "";
                 statusInput.value = button.dataset.status || "new";
+                if (loanStageInput) {
+                    loanStageInput.value = button.dataset.loanStage || "";
+                }
                 callbackWindowInput.value = button.dataset.callbackWindow || "";
                 callbackDateInput.value = button.dataset.callbackDate || "";
                 assignedToInput.value = button.dataset.assignedToId || "";
@@ -1006,6 +1013,7 @@
                 name: nameInput.value.trim(),
                 phone: phoneInput.value.trim(),
                 status: statusInput.value,
+                loan_stage: loanStageInput?.value || "",
                 callback_window: callbackWindowInput.value || "",
                 callback_date: callbackDateInput.value || null,
                 assigned_to: assignedToInput.value || null,
@@ -1459,12 +1467,14 @@
                 <div class="hc-route-map-shell">
                     <div class="hc-route-map-summary">
                         ${renderSummaryCard("Current status", summary.current_status_label || lead.status_label, summary.route_state_label || "Current outcome")}
+                        ${renderSummaryCard("Loan stage", lead.loan_stage_label || summary.loan_stage_label || "Not set", "Office progress")}
                         ${renderSummaryCard("Current owner", lead.owner_name || summary.current_owner_name, ownerLine)}
                         ${renderSummaryCard("Last touch", summary.last_touch_at, `Calls: ${summary.call_count || 0}`)}
                         ${renderSummaryCard("Journey span", lead.created_at, `Events: ${summary.event_count || 0}`)}
                     </div>
                     <div class="d-flex flex-wrap gap-2">
                         <span class="hc-status hc-status-${escapeHtml(statusTone)}">Status: ${escapeHtml(summary.current_status_label || lead.status_label || "--")}</span>
+                        <span class="hc-status hc-status-${escapeHtml(lead.loan_stage_tone || "muted")}">Stage: ${escapeHtml(lead.loan_stage_label || summary.loan_stage_label || "Not set")}</span>
                         <span class="hc-status hc-status-primary">Owner: ${escapeHtml(lead.owner_name || summary.current_owner_name || "Unassigned")}</span>
                         <span class="hc-status hc-status-muted">First call: ${escapeHtml(summary.first_call_at || "No call yet")}</span>
                         <span class="hc-status hc-status-muted">Last call: ${escapeHtml(summary.last_call_at || "No call yet")}</span>
@@ -1551,6 +1561,13 @@
         const recoverTitleNode = document.getElementById("interestedRecoverTitle");
         const recoverMessageNode = document.getElementById("interestedRecoverMessage");
         const recoverFeedback = document.getElementById("interestedRecoverFeedback");
+        const stageModalNode = document.getElementById("interestedStageModal");
+        const stageForm = document.getElementById("interestedStageForm");
+        const stageLeadIdInput = document.getElementById("interestedStageLeadId");
+        const stageSelectInput = document.getElementById("interestedStageSelect");
+        const stageTitleNode = document.getElementById("interestedStageTitle");
+        const stageFeedback = document.getElementById("interestedStageFeedback");
+        const stageSubmitButton = document.getElementById("interestedStageSubmit");
 
         const successModal = successModalNode
             ? bootstrap.Modal.getOrCreateInstance(successModalNode)
@@ -1561,8 +1578,12 @@
         const recoverModal = recoverModalNode
             ? bootstrap.Modal.getOrCreateInstance(recoverModalNode)
             : null;
+        const stageModal = stageModalNode
+            ? bootstrap.Modal.getOrCreateInstance(stageModalNode)
+            : null;
         let activeLeadId = "";
         let activeRecoverLeadId = "";
+        let activeStageLeadId = "";
 
         function showFeedback(node, message, isError) {
             if (!node) {
@@ -1653,6 +1674,24 @@
             });
         });
 
+        document.querySelectorAll(".js-interested-stage").forEach((button) => {
+            button.addEventListener("click", () => {
+                clearFeedback(stageFeedback);
+                activeStageLeadId = button.dataset.leadId || "";
+                const leadName = button.dataset.leadName || "this lead";
+                if (stageLeadIdInput) {
+                    stageLeadIdInput.value = activeStageLeadId;
+                }
+                if (stageSelectInput) {
+                    stageSelectInput.value = button.dataset.loanStage || "office_review";
+                }
+                if (stageTitleNode) {
+                    stageTitleNode.textContent = `Update Loan Stage - ${leadName}`;
+                }
+                stageModal?.show();
+            });
+        });
+
         if (recoverConfirmButton) {
             recoverConfirmButton.addEventListener("click", async () => {
                 if (!activeRecoverLeadId) {
@@ -1670,6 +1709,36 @@
                     showFeedback(recoverFeedback, error.message, true);
                 } finally {
                     recoverConfirmButton.disabled = false;
+                }
+            });
+        }
+
+        if (stageForm) {
+            stageForm.addEventListener("submit", async (event) => {
+                event.preventDefault();
+                clearFeedback(stageFeedback);
+                const leadId = stageLeadIdInput?.value || activeStageLeadId || "";
+                const loanStage = stageSelectInput?.value || "office_review";
+                if (!leadId) {
+                    showFeedback(stageFeedback, "Select a lead before saving.", true);
+                    return;
+                }
+                if (stageSubmitButton) {
+                    stageSubmitButton.disabled = true;
+                }
+                try {
+                    await requestJson(`${config.leadsUrl}${leadId}/`, {
+                        method: "PATCH",
+                        body: JSON.stringify({ loan_stage: loanStage }),
+                    });
+                    showFeedback(stageFeedback, "Loan stage updated successfully.", false);
+                    window.setTimeout(() => window.location.reload(), 500);
+                } catch (error) {
+                    showFeedback(stageFeedback, error.message, true);
+                } finally {
+                    if (stageSubmitButton) {
+                        stageSubmitButton.disabled = false;
+                    }
                 }
             });
         }

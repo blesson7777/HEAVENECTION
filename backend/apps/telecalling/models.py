@@ -177,12 +177,21 @@ class CompanyProfile(models.Model):
 class Lead(models.Model):
     class Status(models.TextChoices):
         NEW = "new", "New"
-        INTERESTED = "interested", "Follow Up"
+        INTERESTED = "interested", "Interested"
         EXPIRED_FOLLOWUP = "expired_followup", "Expired Follow Up"
         NOT_INTERESTED = "not_interested", "Rejected"
         NO_ANSWER = "no_answer", "No Response"
         CALL_BACK = "call_back", "Call Back"
         CONVERTED = "converted", "Converted"
+
+    class LoanStage(models.TextChoices):
+        OFFICE_REVIEW = "office_review", "Office Review"
+        DOCUMENTS_PENDING = "documents_pending", "Documents Pending"
+        VERIFICATION = "verification", "Verification"
+        APPROVAL = "approval", "Approval"
+        DISBURSEMENT = "disbursement", "Disbursement"
+        SUCCESSFUL = "successful", "Successful"
+        UNSUCCESSFUL = "unsuccessful", "Unsuccessful"
 
     class HandoverStatus(models.TextChoices):
         NOT_SENT = "not_sent", "Not Sent"
@@ -208,6 +217,7 @@ class Lead(models.Model):
         related_name="assigned_leads",
     )
     notes = models.TextField(blank=True)
+    loan_stage = models.CharField(max_length=40, choices=LoanStage.choices, blank=True, default="", db_index=True)
     handover_status = models.CharField(
         max_length=20,
         choices=HandoverStatus.choices,
