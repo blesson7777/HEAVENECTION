@@ -2241,7 +2241,7 @@ def expired_followups_page(request):
         active_page="expired-followups",
         page_title="Closed Follow-Ups",
         page_heading="Closed Follow-Ups",
-        page_subtitle="Review follow-up leads that were closed out, then move them back when needed.",
+        page_subtitle="Review closed follow-ups and reassign expired leads back to the live queue.",
         extra_context={
             **payload,
             "closed_followup_rows": list(page_obj.object_list),
