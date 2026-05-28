@@ -3486,6 +3486,16 @@ def lead_route_map_api(request, lead_id):
     return Response(payload)
 
 
+@api_view(["POST"])
+@permission_classes([IsAdminStaff])
+def lead_recover_api(request, lead_id):
+    try:
+        summary = recover_recovery_lead_to_owner(lead_id, target_status=Lead.Status.INTERESTED)
+    except ValueError as error:
+        return Response({"detail": str(error)}, status=400)
+    return Response(summary)
+
+
 @api_view(["GET", "POST"])
 @permission_classes([IsAdminStaff])
 def training_lessons_api(request):

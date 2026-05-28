@@ -1546,6 +1546,11 @@
         const unsuccessfulTitleNode = document.getElementById("interestedUnsuccessfulTitle");
         const unsuccessfulFeedback = document.getElementById("interestedUnsuccessfulFeedback");
         const unsuccessfulSubmitButton = document.getElementById("interestedUnsuccessfulSubmit");
+        const recoverModalNode = document.getElementById("interestedRecoverModal");
+        const recoverConfirmButton = document.getElementById("interestedRecoverConfirm");
+        const recoverTitleNode = document.getElementById("interestedRecoverTitle");
+        const recoverMessageNode = document.getElementById("interestedRecoverMessage");
+        const recoverFeedback = document.getElementById("interestedRecoverFeedback");
 
         const successModal = successModalNode
             ? bootstrap.Modal.getOrCreateInstance(successModalNode)
@@ -1553,7 +1558,11 @@
         const unsuccessfulModal = unsuccessfulModalNode
             ? bootstrap.Modal.getOrCreateInstance(unsuccessfulModalNode)
             : null;
+        const recoverModal = recoverModalNode
+            ? bootstrap.Modal.getOrCreateInstance(recoverModalNode)
+            : null;
         let activeLeadId = "";
+        let activeRecoverLeadId = "";
 
         function showFeedback(node, message, isError) {
             if (!node) {
@@ -1628,6 +1637,42 @@
                 unsuccessfulModal?.show();
             });
         });
+
+        document.querySelectorAll(".js-interested-recover").forEach((button) => {
+            button.addEventListener("click", () => {
+                clearFeedback(recoverFeedback);
+                activeRecoverLeadId = button.dataset.leadId || "";
+                const leadName = button.dataset.leadName || "this lead";
+                if (recoverTitleNode) {
+                    recoverTitleNode.textContent = `Bring Back - ${leadName}`;
+                }
+                if (recoverMessageNode) {
+                    recoverMessageNode.textContent = `Recover ${leadName} back to Follow Up under the previous owner?`;
+                }
+                recoverModal?.show();
+            });
+        });
+
+        if (recoverConfirmButton) {
+            recoverConfirmButton.addEventListener("click", async () => {
+                if (!activeRecoverLeadId) {
+                    return;
+                }
+                clearFeedback(recoverFeedback);
+                recoverConfirmButton.disabled = true;
+                try {
+                    await requestJson(`${config.leadsUrl}${activeRecoverLeadId}/recover/`, {
+                        method: "POST",
+                    });
+                    showFeedback(recoverFeedback, "Lead recovered back to Follow Up.", false);
+                    window.setTimeout(() => window.location.reload(), 500);
+                } catch (error) {
+                    showFeedback(recoverFeedback, error.message, true);
+                } finally {
+                    recoverConfirmButton.disabled = false;
+                }
+            });
+        }
 
         if (unsuccessfulForm) {
             unsuccessfulForm.addEventListener("submit", async (event) => {
