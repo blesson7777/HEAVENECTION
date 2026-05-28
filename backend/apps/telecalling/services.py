@@ -3385,7 +3385,7 @@ def build_staff_followup_sla_gate_status(staff, *, now=None, company_profile=Non
     crossed_sla_count = 0
     for lead in Lead.objects.select_related("assigned_to", "interested_detail__staff").filter(
         assigned_to=staff,
-        status__in=FOLLOW_UP_STATUSES,
+        status=Lead.Status.CALL_BACK,
     ):
         activity_anchor = _followup_activity_anchor(lead)
         if activity_anchor is None:
@@ -3407,7 +3407,7 @@ def build_staff_followup_sla_gate_status(staff, *, now=None, company_profile=Non
         start_time__range=(start, end),
         status__in=completed_followup_call_statuses,
         lead__assigned_to=staff,
-        lead__status__in=(Lead.Status.INTERESTED, Lead.Status.CALL_BACK, Lead.Status.EXPIRED_FOLLOWUP),
+        lead__status=Lead.Status.CALL_BACK,
     ).count()
 
     gate_enabled = bool(settings["sla_gate_enabled"])
@@ -10005,7 +10005,7 @@ def build_staff_followups_payload(staff):
         Lead.objects.select_related("assigned_to")
         .filter(
             assigned_to=staff,
-            status__in=(Lead.Status.INTERESTED, Lead.Status.CALL_BACK),
+            status=Lead.Status.CALL_BACK,
         )
         .order_by("callback_date", "callback_window", "-updated_at", "-last_contacted_at")
     )
