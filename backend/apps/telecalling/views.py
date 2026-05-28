@@ -2000,7 +2000,7 @@ def followups_page(request):
                 return redirect(reverse("expired-followups-page") + return_query)
             messages.success(
                 request,
-                f"{summary['lead_name']} moved back to the active queue under {summary['owner_name']}.",
+                f"{summary['lead_name']} recovered back to Interested under {summary['owner_name']}.",
             )
             return redirect(reverse("expired-followups-page") + return_query)
         if followup_action == "mark_rejected":

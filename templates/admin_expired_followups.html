@@ -45,7 +45,7 @@
     </div>
 
     <div class="alert alert-primary border-0 mb-4" role="alert">
-        These are the leads that have already moved out of the active follow-up queue. Review the last owner, check how long they have been idle, and put them back into the queue when needed.
+        These are the leads that have already moved out of the active follow-up queue. Review the last owner, check how long they have been idle, and recover them back to Interested when needed.
     </div>
 
     <div class="hc-search-box mb-3">
@@ -131,6 +131,26 @@
                     <td>{{ row.updated_at }}</td>
                     <td>
                         <div class="d-flex flex-wrap gap-2 mb-2">
+                            {% if row.is_expired_followup and row.assigned_to_id %}
+                            <form
+                                method="post"
+                                action="{% url 'followups-page' %}"
+                                class="m-0"
+                                data-confirm-title="Recover Expired Follow-Up"
+                                data-confirm-message="Recover {{ row.name }} back to Interested under {{ row.assigned_to }}?"
+                                data-confirm-ok="Recover"
+                                data-confirm-class="btn-warning"
+                            >
+                                {% csrf_token %}
+                                <input type="hidden" name="followup_action" value="reallocate_expired_followup">
+                                <input type="hidden" name="lead_id" value="{{ row.id }}">
+                                <input type="hidden" name="return_page" value="{{ expired_followup_pagination.page_number }}">
+                                <input type="hidden" name="return_page_size" value="{{ expired_followup_filters.page_size }}">
+                                <input type="hidden" name="return_sort_by" value="{{ expired_followup_filters.sort_by }}">
+                                <input type="hidden" name="return_sort_dir" value="{{ expired_followup_filters.sort_dir }}">
+                                <button type="submit" class="btn btn-sm btn-warning">Recover to Interested</button>
+                            </form>
+                            {% endif %}
                             <button
                                 type="button"
                                 class="btn btn-outline-dark btn-sm js-open-lead-route-map"
@@ -138,26 +158,7 @@
                                 data-lead-route-map-name="{{ row.name }}"
                             >Lead Journey</button>
                         </div>
-                        {% if row.is_expired_followup and row.assigned_to_id %}
-                        <form
-                            method="post"
-                            action="{% url 'followups-page' %}"
-                            class="m-0"
-                            data-confirm-title="Reallocate Expired Follow-Up"
-                            data-confirm-message="Bring {{ row.name }} back to Follow Up under {{ row.assigned_to }}?"
-                            data-confirm-ok="Reallocate"
-                            data-confirm-class="btn-warning"
-                        >
-                            {% csrf_token %}
-                            <input type="hidden" name="followup_action" value="reallocate_expired_followup">
-                            <input type="hidden" name="lead_id" value="{{ row.id }}">
-                            <input type="hidden" name="return_page" value="{{ expired_followup_pagination.page_number }}">
-                            <input type="hidden" name="return_page_size" value="{{ expired_followup_filters.page_size }}">
-                            <input type="hidden" name="return_sort_by" value="{{ expired_followup_filters.sort_by }}">
-                            <input type="hidden" name="return_sort_dir" value="{{ expired_followup_filters.sort_dir }}">
-                            <button type="submit" class="btn btn-sm btn-outline-warning">Move Back</button>
-                        </form>
-                        {% elif row.is_rejected_followup %}
+                        {% if row.is_rejected_followup %}
                         <a class="btn btn-sm btn-outline-primary" href="{% url 'recovery-leads-page' %}">Open Recovery</a>
                         {% else %}
                         <span class="small text-muted">No action available</span>
