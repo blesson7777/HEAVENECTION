@@ -206,6 +206,9 @@
                         </div>
                         {% endif %}
                         <div class="small text-muted mt-1">Last contact: {{ lead.last_contacted }}</div>
+                        {% if lead.followup_moved_back_present %}
+                        <div class="small text-muted mt-1">Moved back: {{ lead.followup_moved_back_at }}</div>
+                        {% endif %}
                     </td>
                     <td>
                         <span class="hc-status hc-status-primary mb-1">{{ lead.handover_status_label }}</span>

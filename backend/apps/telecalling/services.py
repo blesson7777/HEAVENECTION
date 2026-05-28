@@ -7924,6 +7924,9 @@ def build_followup_payload(*, paginate=False, page=1, page_size=25):
                 "followup_call_count": followup_call_count,
                 "followup_work_seconds": followup_work_seconds,
                 "followup_work_label": _format_duration(followup_work_seconds),
+                "followup_moved_back_at": _format_datetime(lead.followup_moved_back_at, fallback="Not moved back"),
+                "followup_moved_back_sort": lead.followup_moved_back_at.isoformat() if lead.followup_moved_back_at else "",
+                "followup_moved_back_present": bool(lead.followup_moved_back_at),
                 "recent_call_details": recent_call_details,
             }
         )
@@ -8265,6 +8268,7 @@ def build_followup_csv_response():
             "Assigned Staff Phone",
             "Notes",
             "Last Contacted",
+            "Moved Back At",
             "Updated At",
         ]
     )
@@ -8283,6 +8287,7 @@ def build_followup_csv_response():
                 row["assigned_to_phone"],
                 row["notes"],
                 row["last_contacted"],
+                row["followup_moved_back_at"],
                 row["updated_at"],
             ]
         )
@@ -8310,6 +8315,7 @@ def build_followup_excel_response():
             "Assigned Staff Phone",
             "Notes",
             "Last Contacted",
+            "Moved Back At",
             "Updated At",
         ]
     )
@@ -8328,6 +8334,7 @@ def build_followup_excel_response():
                 row["assigned_to_phone"],
                 row["notes"],
                 row["last_contacted"],
+                row["followup_moved_back_at"],
                 row["updated_at"],
             ]
         )
@@ -8890,11 +8897,14 @@ def reallocate_expired_followup_to_owner(lead_id):
         "status",
         "callback_window",
         "callback_date",
+        "followup_moved_back_at",
         "updated_at",
     ]
+    moved_back_at = timezone.now()
     lead.status = Lead.Status.INTERESTED
     lead.callback_window = ""
     lead.callback_date = None
+    lead.followup_moved_back_at = moved_back_at
     if owner is not None:
         lead.assigned_to = owner
     else:
