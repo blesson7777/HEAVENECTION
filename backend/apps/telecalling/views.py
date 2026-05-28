@@ -2091,7 +2091,11 @@ def followups_page(request):
         page_title="Follow-Up Queue",
         page_heading="Follow-Up Queue",
         page_subtitle="Keep the main follow-up queue focused on live work. Open the other queue pages for callbacks, recovery, and expired follow-ups.",
-        extra_context=build_followup_payload(),
+        extra_context=build_followup_payload(
+            paginate=True,
+            page=request.GET.get("page", 1),
+            page_size=request.GET.get("page_size", 25),
+        ),
     )
     return render(request, "admin_followups.html", context)
 

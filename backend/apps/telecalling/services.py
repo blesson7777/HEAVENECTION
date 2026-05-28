@@ -7669,7 +7669,7 @@ def build_lead_management_payload(
     }
 
 
-def build_followup_payload():
+def build_followup_payload(*, paginate=False, page=1, page_size=25):
     company_profile = get_company_profile()
     expiry_settings = _followup_expiry_settings(company_profile=company_profile)
     work_review_rules = _work_review_rules()
@@ -7680,6 +7680,16 @@ def build_followup_payload():
     )
     today = timezone.localdate()
     reference = timezone.now()
+    try:
+        normalized_page_size = int(page_size or 25)
+    except (TypeError, ValueError):
+        normalized_page_size = 25
+    normalized_page_size = max(10, min(normalized_page_size, 100))
+    try:
+        normalized_page = int(page or 1)
+    except (TypeError, ValueError):
+        normalized_page = 1
+    normalized_page = max(1, normalized_page)
     followups = list(
         _follow_up_queryset()
         .select_related("assigned_to", "interested_detail__staff")
@@ -7690,11 +7700,6 @@ def build_followup_payload():
         .filter(status=Lead.Status.NOT_INTERESTED)
         .order_by("-updated_at", "-last_contacted_at")[:200]
     )
-    closed_candidates = list(
-        Lead.objects.select_related("assigned_to", "interested_detail__staff")
-        .filter(status=Lead.Status.NO_ANSWER)
-        .order_by("-updated_at", "-last_contacted_at")[:200]
-    )
     expired_candidates = list(
         Lead.objects.select_related("assigned_to", "interested_detail__staff")
         .filter(status=Lead.Status.EXPIRED_FOLLOWUP)
@@ -7703,7 +7708,6 @@ def build_followup_payload():
 
     owner_lookup_ids = [lead.id for lead in followups]
     owner_lookup_ids.extend(lead.id for lead in rejected_candidates)
-    owner_lookup_ids.extend(lead.id for lead in closed_candidates)
     owner_lookup_ids.extend(lead.id for lead in expired_candidates)
     owner_lookup_ids = list(dict.fromkeys(owner_lookup_ids))
     call_rows_by_lead = defaultdict(list)
@@ -7950,80 +7954,7 @@ def build_followup_payload():
             status=Call.Status.INTERESTED,
         ).values_list("lead_id", flat=True)
     )
-    rejected_followup_rows = []
-    for lead in rejected_candidates:
-        if lead.id not in rejected_with_followup_history:
-            continue
-        owner_staff = _followup_owner(lead)
-        progress = _followup_no_response_progress(
-            lead,
-            preloaded_rows=call_rows_by_lead.get(lead.id, []),
-        )
-        rejected_followup_rows.append(
-            {
-                "id": str(lead.id),
-                "name": lead.name,
-                "phone": lead.phone,
-                "status": lead.status,
-                "status_label": lead.get_status_display(),
-                "assigned_to_id": str(owner_staff.id) if owner_staff else "",
-                "assigned_to": owner_staff.name if owner_staff else "Unassigned",
-                "assigned_to_phone": owner_staff.phone if owner_staff else "",
-                "notes": lead.notes,
-                "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
-                "updated_at": _format_datetime(lead.updated_at),
-                "updated_at_sort": lead.updated_at.isoformat() if lead.updated_at else "",
-                "followup_attempt_count": progress["attempt_count"],
-                "followup_attempt_unique_dates": progress["unique_date_count"],
-                "followup_attempt_unique_times": progress["unique_time_count"],
-                "recovery_owner_id": str(owner_staff.id) if owner_staff else "",
-                "recovery_owner_name": owner_staff.name if owner_staff else "",
-            }
-        )
-
-    rejected_followup_rows.sort(
-        key=lambda row: row.get("updated_at_sort", ""),
-        reverse=True,
-    )
-
-    closed_followup_rows = []
-    closed_candidate_ids = [lead.id for lead in closed_candidates]
-    closed_with_followup_history = set(
-        Call.objects.filter(
-            lead_id__in=closed_candidate_ids,
-            status=Call.Status.INTERESTED,
-        ).values_list("lead_id", flat=True)
-    )
-    for lead in closed_candidates:
-        owner_staff = _followup_owner(lead)
-        progress = _followup_no_response_progress(
-            lead,
-            preloaded_rows=call_rows_by_lead.get(lead.id, []),
-        )
-        if progress["attempt_count"] < FOLLOWUP_NO_RESPONSE_LIMIT or not progress["can_close"]:
-            continue
-        if lead.id not in closed_with_followup_history:
-            continue
-        closed_followup_rows.append(
-            {
-                "id": str(lead.id),
-                "name": lead.name,
-                "phone": lead.phone,
-                "status_label": lead.get_status_display(),
-                "handover_status_label": lead.get_handover_status_display(),
-                "schedule_state_label": "Closed after 3 follow-up tries",
-                "schedule_state_tone": "muted",
-                "callback_schedule_label": _format_callback_schedule_label(
-                    lead.callback_date,
-                    lead.callback_window,
-                )
-                or "No time set",
-                "assigned_to": owner_staff.name if owner_staff else "Unassigned",
-                "updated_at": _format_datetime(lead.updated_at),
-                "updated_at_sort": lead.updated_at.isoformat() if lead.updated_at else "",
-            }
-        )
-
+    rejected_followup_count = sum(1 for lead in rejected_candidates if lead.id in rejected_with_followup_history)
     expired_followup_rows = []
     for lead in expired_candidates:
         owner_staff = _followup_owner(lead)
@@ -8154,66 +8085,62 @@ def build_followup_payload():
         )
     )
 
+    followup_rows_display = followup_rows
+    followup_pagination = {
+        "page_number": 1,
+        "page_size": normalized_page_size,
+        "num_pages": 1,
+        "filtered_count": len(followup_rows),
+        "has_previous": False,
+        "has_next": False,
+        "previous_page_number": 1,
+        "next_page_number": 1,
+        "start_index": 1 if followup_rows else 0,
+        "end_index": len(followup_rows),
+        "page_numbers": [{"number": 1, "is_current": True}],
+        "base_querystring": f"?page_size={normalized_page_size}",
+    }
+    if paginate:
+        paginator = Paginator(followup_rows, normalized_page_size)
+        try:
+            page_obj = paginator.page(normalized_page)
+        except EmptyPage:
+            page_obj = paginator.page(paginator.num_pages or 1)
+        followup_rows_display = list(page_obj.object_list)
+        page_window = 2
+        start_page = max(1, page_obj.number - page_window)
+        end_page = min(paginator.num_pages or 1, page_obj.number + page_window)
+        followup_pagination = {
+            "page_number": page_obj.number,
+            "page_size": normalized_page_size,
+            "num_pages": paginator.num_pages or 1,
+            "filtered_count": len(followup_rows),
+            "has_previous": page_obj.has_previous(),
+            "has_next": page_obj.has_next(),
+            "previous_page_number": page_obj.previous_page_number() if page_obj.has_previous() else 1,
+            "next_page_number": page_obj.next_page_number() if page_obj.has_next() else (paginator.num_pages or 1),
+            "start_index": page_obj.start_index() if followup_rows else 0,
+            "end_index": page_obj.end_index() if followup_rows else 0,
+            "page_numbers": [
+                {
+                    "number": page_number,
+                    "is_current": page_number == page_obj.number,
+                }
+                for page_number in range(start_page, end_page + 1)
+            ],
+            "base_querystring": f"?page_size={normalized_page_size}",
+        }
+
     return {
-        "followup_rows": followup_rows,
-        "rejected_followup_rows": rejected_followup_rows,
+        "followup_rows": followup_rows_display,
         "expired_followup_rows": expired_followup_rows,
-        "followup_history_rows": [
-            {
-                "id": row["id"],
-                "name": row["name"],
-                "phone": row["phone"],
-                "status_label": row["status_label"],
-                "handover_status_label": row["handover_status_label"],
-                "schedule_state_label": row["schedule_state_label"],
-                "schedule_state_tone": row["schedule_state_tone"],
-                "callback_schedule_label": row["callback_schedule_label"] or "No time set",
-                "assigned_to": row["assigned_to"],
-                "updated_at": row["updated_at"],
-            }
-            for row in sorted(followup_rows, key=lambda row: row["updated_at_sort"], reverse=True)[:12]
-        ]
-        + [
-            {
-                "id": row["id"],
-                "name": row["name"],
-                "phone": row["phone"],
-                "status_label": row["status_label"],
-                "handover_status_label": row["handover_status_label"],
-                "schedule_state_label": row["schedule_state_label"],
-                "schedule_state_tone": row["schedule_state_tone"],
-                "callback_schedule_label": row["callback_schedule_label"],
-                "assigned_to": row["assigned_to"],
-                "updated_at": row["updated_at"],
-            }
-            for row in sorted(
-                closed_followup_rows,
-                key=lambda row: row["updated_at_sort"],
-                reverse=True,
-            )[:12]
-        ]
-        + [
-            {
-                "id": row["id"],
-                "name": row["name"],
-                "phone": row["phone"],
-                "status_label": row["status_label"],
-                "handover_status_label": "Expired after inactivity",
-                "schedule_state_label": f"{row['days_idle']} days without follow-up update",
-                "schedule_state_tone": "danger",
-                "callback_schedule_label": "Expired Follow Up",
-                "assigned_to": row["assigned_to"],
-                "updated_at": row["updated_at"],
-            }
-            for row in expired_followup_rows[:12]
-        ],
         "staff_options": [
             {"id": str(staff.id), "name": staff.name}
             for staff in _staff_queryset().filter(is_active=True)
         ],
         "followup_summary": {
             "total_followups": len(followup_rows),
-            "rejected_followup_count": len(rejected_followup_rows),
+            "rejected_followup_count": rejected_followup_count,
             "expired_followup_count": len(expired_followup_rows),
             "scheduled_count": sum(1 for row in followup_rows if row["is_scheduled"]),
             "unscheduled_count": sum(1 for row in followup_rows if row["is_unscheduled"]),
@@ -8246,6 +8173,14 @@ def build_followup_payload():
             ),
         },
         "followup_performance_rows": followup_performance_rows,
+        "followup_pagination": followup_pagination,
+        "followup_filter_options": {
+            "page_sizes": [
+                {"value": 25, "label": "25 per page"},
+                {"value": 50, "label": "50 per page"},
+                {"value": 100, "label": "100 per page"},
+            ],
+        },
     }
 
 def reassign_unassigned_followup_owners():
@@ -8333,7 +8268,7 @@ def build_followup_csv_response():
         ]
     )
 
-    for row in build_followup_payload()["followup_rows"]:
+    for row in build_followup_payload(paginate=False)["followup_rows"]:
         writer.writerow(
             [
                 row["id"],
@@ -8378,7 +8313,7 @@ def build_followup_excel_response():
         ]
     )
 
-    for row in build_followup_payload()["followup_rows"]:
+    for row in build_followup_payload(paginate=False)["followup_rows"]:
         worksheet.append(
             [
                 row["id"],

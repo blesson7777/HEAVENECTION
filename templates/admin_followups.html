@@ -126,6 +126,20 @@
         <input type="search" id="followupSearchInput" placeholder="Search follow-up lead, phone, schedule, note, or staff">
     </div>
 
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mt-3 mb-3">
+        <div class="text-muted small">
+            Showing {{ followup_pagination.start_index }} to {{ followup_pagination.end_index }} of {{ followup_pagination.filtered_count }} follow-up lead(s).
+        </div>
+        <form method="get" action="{% url 'followups-page' %}" class="d-flex align-items-center gap-2">
+            <label class="form-label fw-semibold mb-0" for="followupPageSize">Page size</label>
+            <select class="form-select form-select-sm" id="followupPageSize" name="page_size" onchange="this.form.submit()">
+                {% for option in followup_filter_options.page_sizes %}
+                <option value="{{ option.value }}"{% if followup_pagination.page_size == option.value %} selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+
     <div class="table-responsive">
         <table class="table hc-table align-middle mb-0">
             <thead>
@@ -235,6 +249,27 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+
+    <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mt-3">
+        <div class="text-muted small">
+            Page {{ followup_pagination.page_number }} of {{ followup_pagination.num_pages }}
+        </div>
+        <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
+            {% if followup_pagination.has_previous %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'followups-page' %}{{ followup_pagination.base_querystring }}&page={{ followup_pagination.previous_page_number }}">Previous</a>
+            {% endif %}
+            {% for page_item in followup_pagination.page_numbers %}
+            {% if page_item.is_current %}
+            <span class="btn btn-primary btn-sm disabled">{{ page_item.number }}</span>
+            {% else %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'followups-page' %}{{ followup_pagination.base_querystring }}&page={{ page_item.number }}">{{ page_item.number }}</a>
+            {% endif %}
+            {% endfor %}
+            {% if followup_pagination.has_next %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'followups-page' %}{{ followup_pagination.base_querystring }}&page={{ followup_pagination.next_page_number }}">Next</a>
+            {% endif %}
+        </div>
     </div>
 </section>
 
