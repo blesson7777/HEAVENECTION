@@ -4119,6 +4119,19 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
     justify-content: flex-end;
 }
 
+.hc-staff-quickbar {
+    padding: 1rem 1rem 0.9rem;
+    border: 1px solid #dde5f6;
+    border-radius: 22px;
+    background: linear-gradient(150deg, #ffffff 0%, #f7f9ff 100%);
+}
+
+.hc-staff-quickbar-note {
+    margin-top: 0.85rem;
+    color: #5f6f8f;
+    font-size: 0.92rem;
+}
+
 .hc-staff-command-shell {
     display: grid;
     gap: 1rem;
@@ -4342,6 +4355,10 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
     box-shadow: 0 24px 40px rgba(28, 41, 70, 0.12);
 }
 
+.hc-staff-roster-row {
+    overflow: visible;
+}
+
 .hc-staff-roster-row::after {
     content: "";
     position: absolute;
@@ -4453,6 +4470,12 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
     position: relative;
     z-index: 1;
     min-width: 0;
+}
+
+.hc-staff-action-menu {
+    justify-self: end;
+    position: relative;
+    z-index: 20;
 }
 
 .hc-staff-roster-cell-staff {
@@ -4718,6 +4741,48 @@ body.hc-live-monitoring-focus .hc-cc-shell.is-fullscreen {
 .hc-staff-actions-list .btn {
     min-width: 108px;
     justify-content: center;
+}
+
+.hc-staff-action-menu .dropdown-toggle {
+    min-width: 122px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+}
+
+.hc-staff-action-menu .dropdown-menu {
+    min-width: 220px;
+    padding: 0.45rem;
+    border-radius: 16px;
+    border-color: #dce3f4;
+    box-shadow: 0 18px 36px rgba(28, 41, 70, 0.12);
+}
+
+.hc-staff-action-menu .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    border-radius: 12px;
+    padding: 0.68rem 0.8rem;
+    font-weight: 700;
+    color: #33415f;
+}
+
+.hc-staff-action-menu .dropdown-item:hover,
+.hc-staff-action-menu .dropdown-item:focus {
+    background: rgba(77, 92, 144, 0.08);
+    color: #22315a;
+}
+
+.hc-staff-action-menu .dropdown-item.text-danger {
+    color: #cc4d57 !important;
+}
+
+.hc-staff-action-menu .dropdown-item.text-danger:hover,
+.hc-staff-action-menu .dropdown-item.text-danger:focus {
+    background: rgba(226, 88, 94, 0.08);
+    color: #b93c46 !important;
 }
 
 .hc-quality-card-compact {

@@ -3,7 +3,7 @@
 {% block page_actions %}
 <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#staffModal" id="openCreateStaffModal">
     <i class="bi bi-person-plus"></i>
-    <span>Add Staff</span>
+    <span>New Staff</span>
 </button>
 {% endblock %}
 
@@ -11,15 +11,11 @@
 <section class="hc-surface-card hc-staff-hero animate-on-scroll">
     <div class="hc-staff-hero-copy">
         <span class="mf-db2-kicker">Team Directory</span>
-        <h3>Manage staff accounts, daily activity, and lead ownership from one place.</h3>
-        <p class="mb-0">Review live availability, compare output, and jump into each staff profile for detailed management.</p>
+        <h3>Staff at a glance</h3>
+        <p class="mb-0">Search the team, filter the list, and open row actions from one menu.</p>
     </div>
     <div class="hc-staff-hero-meta">
         <span class="hc-sync-pill"><i class="bi bi-calendar2-week"></i> {{ today_label }}</span>
-        <div class="hc-staff-hero-note">
-            <i class="bi bi-shield-check"></i>
-            <span>Profile, rates, login access, and lead queue controls stay connected to the same live record.</span>
-        </div>
     </div>
 </section>
 
@@ -27,85 +23,51 @@
     <article class="hc-summary-card hc-staff-overview-card">
         <span class="mf-db2-kicker">Total Staff</span>
         <h3>{{ team_summary.total_staff }}</h3>
-        <p>{{ team_summary.active_accounts }} active accounts in the roster{% if team_summary.lead_intake_paused %} and {{ team_summary.lead_intake_paused }} paused from new leads{% endif %}.</p>
+        <p>{{ team_summary.active_accounts }} active{% if team_summary.lead_intake_paused %}, {{ team_summary.lead_intake_paused }} paused{% endif %}.</p>
     </article>
     <article class="hc-summary-card hc-staff-overview-card">
-        <span class="mf-db2-kicker">Live Now</span>
+        <span class="mf-db2-kicker">Online</span>
         <h3>{{ team_summary.online_now }}</h3>
-        <p>Currently online or on a customer call.</p>
+        <p>Online or on a call.</p>
     </article>
     <article class="hc-summary-card hc-staff-overview-card">
-        <span class="mf-db2-kicker">Need Attention</span>
+        <span class="mf-db2-kicker">Review</span>
         <h3>{{ team_summary.attention_needed }}</h3>
-        <p>Accounts currently away, offline, or otherwise requiring review.</p>
+        <p>Needs a quick look.</p>
     </article>
     <article class="hc-summary-card hc-staff-overview-card">
-        <span class="mf-db2-kicker">Queue Assigned</span>
+        <span class="mf-db2-kicker">Assigned</span>
         <h3>{{ team_summary.total_assigned }}</h3>
-        <p>{{ team_summary.total_calls_today }} calls today and {{ team_summary.total_converted_today }} conversions.</p>
+        <p>{{ team_summary.total_calls_today }} calls and {{ team_summary.total_converted_today }} conversions today.</p>
     </article>
 </section>
 
 <section class="hc-surface-card animate-on-scroll">
     <div class="mf-db2-panel-head mb-3">
         <div>
-            <span class="mf-db2-kicker">Roster Board</span>
-            <h5>Operational listing with direct account controls</h5>
+            <span class="mf-db2-kicker">Roster</span>
+            <h5>Use the list to search and act fast</h5>
         </div>
         <span class="hc-sync-pill"><i class="bi bi-people-fill"></i> {{ team_summary.online_now }} live now</span>
     </div>
 
-    <div class="hc-staff-command-shell">
+    <div class="hc-staff-quickbar">
         <div class="hc-staff-toolbar">
             <div class="hc-search-box mb-0">
                 <i class="bi bi-search"></i>
-                <input type="search" id="staffSearchInput" placeholder="Search by name, phone, rate, or status">
+                <input type="search" id="staffSearchInput" placeholder="Search name, phone, rate, or status">
             </div>
             <div class="hc-filter-row hc-staff-filter-row">
-                <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All Staff</button>
-                <button type="button" class="hc-filter-chip" data-filter-status="online">Live Now</button>
-                <button type="button" class="hc-filter-chip" data-filter-status="attention">Need Attention</button>
-                <button type="button" class="hc-filter-chip" data-filter-status="paused">Paused Leads</button>
+                <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
+                <button type="button" class="hc-filter-chip" data-filter-status="online">Online</button>
+                <button type="button" class="hc-filter-chip" data-filter-status="attention">Review</button>
+                <button type="button" class="hc-filter-chip" data-filter-status="paused">Paused</button>
                 <button type="button" class="hc-filter-chip" data-filter-status="offline">Offline</button>
                 <button type="button" class="hc-filter-chip" data-filter-status="inactive">Inactive</button>
             </div>
         </div>
 
-        <div class="hc-staff-command-grid hc-staff-command-grid-listing">
-            <article class="hc-staff-command-card hc-staff-command-card-primary">
-                <div class="hc-staff-command-visual" aria-hidden="true">
-                    <span class="hc-staff-command-orbit hc-staff-command-orbit-a"></span>
-                    <span class="hc-staff-command-orbit hc-staff-command-orbit-b"></span>
-                    <span class="hc-staff-command-core"><i class="bi bi-sliders2"></i></span>
-                </div>
-                <div class="hc-staff-command-copy">
-                    <span class="mf-db2-kicker">Control Deck</span>
-                    <strong>Use the listing for quick actions first, then open the profile only when deeper review is needed.</strong>
-                    <p class="mb-0">Activate, deactivate, edit, or remove accounts without losing sight of today’s activity and review signals.</p>
-                </div>
-            </article>
-
-            <article class="hc-staff-command-card">
-                <span class="mf-db2-kicker">Quick Read</span>
-                <div class="hc-staff-command-statline">
-                    <strong>{{ team_summary.total_calls_today }}</strong>
-                    <span>Calls today</span>
-                </div>
-                <div class="hc-staff-command-meter">
-                    <span style="width:{% if team_summary.total_staff %}{% widthratio team_summary.online_now team_summary.total_staff 100 %}{% else %}0{% endif %}%"></span>
-                </div>
-                <small>{{ team_summary.total_converted_today }} conversions and {{ team_summary.total_assigned }} active leads currently distributed.</small>
-            </article>
-
-            <article class="hc-staff-command-card">
-                <span class="mf-db2-kicker">Quick Controls</span>
-                <div class="hc-staff-legend-stack">
-                    <span><i class="bi bi-circle-fill hc-tone-dot is-live"></i> Green motion means ready for active work.</span>
-                    <span><i class="bi bi-circle-fill hc-tone-dot is-attention"></i> Yellow means review or action is needed.</span>
-                    <span><i class="bi bi-circle-fill hc-tone-dot is-offline"></i> Gray means offline or disabled.</span>
-                </div>
-            </article>
-        </div>
+        <div class="hc-staff-quickbar-note">Use Actions for row controls.</div>
     </div>
 
     <div class="hc-staff-list-scroll">
@@ -115,7 +77,7 @@
             <div>Today</div>
             <div>Quality</div>
             <div>Queue & Pay</div>
-            <div class="text-end">Controls</div>
+            <div class="text-end">Actions</div>
         </div>
 
         <div id="staffTableBody" class="hc-staff-roster-list">
@@ -133,7 +95,7 @@
                     <div class="hc-staff-persona-copy">
                         <strong>{{ staff.name }}</strong>
                         <span>{{ staff.phone }}</span>
-                        <small>{{ staff.compensation_type_label }} payout</small>
+                        <small>{{ staff.compensation_type_label }}</small>
                     </div>
                 </div>
             </div>
@@ -145,7 +107,7 @@
                             {{ staff.online_label }}{% if not staff.is_active %} / Inactive{% endif %}
                         </span>
                         {% if staff.is_active and not staff.receives_new_leads %}
-                        <span class="hc-status hc-status-warning">Lead intake paused</span>
+                        <span class="hc-status hc-status-warning">Paused</span>
                         {% endif %}
                         <div class="hc-staff-signal hc-staff-signal-{{ staff.status_tone }}" aria-hidden="true">
                             <span></span><span></span><span></span>
@@ -154,13 +116,13 @@
                     <small>{{ staff.last_seen }}</small>
                     <span class="hc-staff-presence-note">
                         {% if not staff.is_active %}
-                        Account disabled
+                        Inactive
                         {% elif not staff.receives_new_leads %}
-                        New leads are paused, but the staff account stays active.
+                        Paused.
                         {% elif staff.is_available %}
-                        Available for active work
+                        Ready
                         {% else %}
-                        Session state: {{ staff.session_state|title }}
+                        {{ staff.session_state|title }}
                         {% endif %}
                     </span>
                 </div>
@@ -208,63 +170,72 @@
                 <div class="hc-staff-ops-column">
                     <div class="hc-staff-queue-card hc-staff-queue-card-fancy">
                         <strong>{{ staff.assigned_leads }}</strong>
-                        <span>Active leads assigned</span>
+                        <span>Leads</span>
                     </div>
                     <div class="hc-staff-rate-stack hc-staff-rate-stack-fancy">
                         <div><strong>{{ staff.hourly_rate }}</strong> <span>/ hour</span></div>
                         <div><strong>{{ staff.call_rate }}</strong> <span>/ call</span></div>
-                        <small>{{ staff.bonus_per_conversion }} converted reward</small>
+                        <small>{{ staff.bonus_per_conversion }} conversion bonus</small>
                     </div>
                 </div>
             </div>
 
             <div class="hc-staff-roster-cell">
-                <div class="hc-staff-actions hc-staff-actions-list">
-                    <a href="{% url 'staff-profile-page' staff.id %}" class="btn btn-dark btn-sm js-open-staff-profile">
-                        <i class="bi bi-person-vcard"></i>
-                        <span>Profile</span>
-                    </a>
+                <div class="dropdown hc-staff-action-menu">
                     <button
                         type="button"
-                        class="btn btn-outline-primary btn-sm js-edit-staff"
-                        data-staff-id="{{ staff.id }}"
-                        data-name="{{ staff.name }}"
-                        data-phone="{{ staff.phone }}"
-                        data-hourly-rate="{{ staff.hourly_rate|cut:'Rs. '|cut:',' }}"
-                        data-call-rate="{{ staff.call_rate|cut:'Rs. '|cut:',' }}"
-                        data-bonus="{{ staff.bonus_per_conversion|cut:'Rs. '|cut:',' }}"
-                        data-is-active="{% if staff.is_active %}true{% else %}false{% endif %}"
-                        data-receives-new-leads="{% if staff.receives_new_leads %}true{% else %}false{% endif %}"
+                        class="btn btn-dark btn-sm dropdown-toggle"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
                     >
-                        <i class="bi bi-pencil-square"></i>
-                        <span>Edit</span>
+                        <i class="bi bi-three-dots-vertical"></i>
+                        <span>Actions</span>
                     </button>
-                    <button
-                        type="button"
-                        class="btn btn-sm {% if staff.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %} js-toggle-staff-active"
-                        data-staff-id="{{ staff.id }}"
-                        data-name="{{ staff.name }}"
-                        data-is-active="{% if staff.is_active %}true{% else %}false{% endif %}"
-                    >
-                        <i class="bi {% if staff.is_active %}bi-pause-circle{% else %}bi-play-circle{% endif %}"></i>
-                        <span>{% if staff.is_active %}Deactivate{% else %}Activate{% endif %}</span>
-                    </button>
-                    {% if staff.is_active %}
-                    <button
-                        type="button"
-                        class="btn btn-sm {% if staff.receives_new_leads %}btn-outline-secondary{% else %}btn-outline-success{% endif %} js-toggle-staff-leads"
-                        data-staff-id="{{ staff.id }}"
-                        data-name="{{ staff.name }}"
-                        data-receives-new-leads="{% if staff.receives_new_leads %}true{% else %}false{% endif %}"
-                    >
-                        <i class="bi {% if staff.receives_new_leads %}bi-pause-circle{% else %}bi-play-circle{% endif %}"></i>
-                        <span>{% if staff.receives_new_leads %}Pause Leads{% else %}Resume Leads{% endif %}</span>
-                    </button>
-                    {% endif %}
-                    <button type="button" class="btn btn-outline-danger btn-sm js-delete-staff" data-staff-id="{{ staff.id }}" data-name="{{ staff.name }}">
-                        <i class="bi bi-trash3"></i>
-                        <span>Delete</span>
-                    </button>
+                    <div class="dropdown-menu dropdown-menu-end shadow-sm">
+                        <a href="{% url 'staff-profile-page' staff.id %}" class="dropdown-item js-open-staff-profile">
+                            <i class="bi bi-person-vcard me-2"></i> Profile
+                        </a>
+                        <button
+                            type="button"
+                            class="dropdown-item js-edit-staff"
+                            data-staff-id="{{ staff.id }}"
+                            data-name="{{ staff.name }}"
+                            data-phone="{{ staff.phone }}"
+                            data-hourly-rate="{{ staff.hourly_rate|cut:'Rs. '|cut:',' }}"
+                            data-call-rate="{{ staff.call_rate|cut:'Rs. '|cut:',' }}"
+                            data-bonus="{{ staff.bonus_per_conversion|cut:'Rs. '|cut:',' }}"
+                            data-is-active="{% if staff.is_active %}true{% else %}false{% endif %}"
+                            data-receives-new-leads="{% if staff.receives_new_leads %}true{% else %}false{% endif %}"
+                        >
+                            <i class="bi bi-pencil-square me-2"></i> Edit
+                        </button>
+                        <button
+                            type="button"
+                            class="dropdown-item js-toggle-staff-active"
+                            data-staff-id="{{ staff.id }}"
+                            data-name="{{ staff.name }}"
+                            data-is-active="{% if staff.is_active %}true{% else %}false{% endif %}"
+                        >
+                            <i class="bi {% if staff.is_active %}bi-pause-circle{% else %}bi-play-circle{% endif %} me-2"></i>
+                            {% if staff.is_active %}Deactivate{% else %}Activate{% endif %}
+                        </button>
+                        {% if staff.is_active %}
+                        <button
+                            type="button"
+                            class="dropdown-item js-toggle-staff-leads"
+                            data-staff-id="{{ staff.id }}"
+                            data-name="{{ staff.name }}"
+                            data-receives-new-leads="{% if staff.receives_new_leads %}true{% else %}false{% endif %}"
+                        >
+                            <i class="bi {% if staff.receives_new_leads %}bi-pause-circle{% else %}bi-play-circle{% endif %} me-2"></i>
+                            {% if staff.receives_new_leads %}Pause Leads{% else %}Resume Leads{% endif %}
+                        </button>
+                        {% endif %}
+                        <div class="dropdown-divider"></div>
+                        <button type="button" class="dropdown-item text-danger js-delete-staff" data-staff-id="{{ staff.id }}" data-name="{{ staff.name }}">
+                            <i class="bi bi-trash3 me-2"></i> Delete
+                        </button>
+                    </div>
                 </div>
             </div>
             </article>
@@ -272,7 +243,7 @@
             <article class="hc-staff-empty-card" data-filter-item data-status="all">
                 <i class="bi bi-people"></i>
                 <strong>No staff accounts available.</strong>
-                <span>Add the first staff member to start building the roster board.</span>
+                <span>Add the first staff member to start the roster.</span>
             </article>
             {% endfor %}
         </div>
@@ -325,7 +296,7 @@
                 <div class="form-check mt-2">
                     <input class="form-check-input" type="checkbox" id="staffReceivesNewLeads" checked>
                     <label class="form-check-label" for="staffReceivesNewLeads">Receive new leads</label>
-                    <div class="form-text">Uncheck this to pause fresh lead assignment while keeping the staff account active.</div>
+                    <div class="form-text">Pause new leads without disabling the account.</div>
                 </div>
                     <div id="staffFormFeedback" class="hc-form-feedback d-none mt-3"></div>
                     <div class="d-flex justify-content-end gap-2 mt-4">
