@@ -52,6 +52,13 @@
         </div>
         <div class="col-xl-3 col-md-6">
             <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Unsuccessful</span>
+                <h3 class="mb-1">{{ interested_lead_summary.unsuccessful_count }}</h3>
+                <p class="mb-0 text-muted">Interested leads that closed without success.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
                 <span class="mf-db2-kicker">Rejected</span>
                 <h3 class="mb-1">{{ interested_lead_summary.rejected_count }}</h3>
                 <p class="mb-0 text-muted">Interested leads that later declined.</p>
@@ -66,9 +73,16 @@
         </div>
         <div class="col-xl-3 col-md-6">
             <div class="hc-summary-card h-100">
+                <span class="mf-db2-kicker">Expired</span>
+                <h3 class="mb-1">{{ interested_lead_summary.expired_followup_count }}</h3>
+                <p class="mb-0 text-muted">Interested leads that later expired.</p>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="hc-summary-card h-100">
                 <span class="mf-db2-kicker">Still Open</span>
                 <h3 class="mb-1">{{ interested_lead_summary.open_count }}</h3>
-                <p class="mb-0 text-muted">{{ interested_lead_summary.staff_count }} staff are holding these outcomes.</p>
+                <p class="mb-0 text-muted">{{ interested_lead_summary.staff_count }} staff are holding these leads.</p>
             </div>
         </div>
     </div>
@@ -102,10 +116,9 @@
             <label class="form-label fw-semibold" for="interestedTrackerOutcome">Outcome</label>
             <select class="form-select" id="interestedTrackerOutcome" name="outcome">
                 <option value="all"{% if interested_filter_outcome == "all" %} selected{% endif %}>All Outcomes</option>
-                <option value="open"{% if interested_filter_outcome == "open" %} selected{% endif %}>Still Open</option>
-                <option value="converted"{% if interested_filter_outcome == "converted" %} selected{% endif %}>Converted</option>
-                <option value="rejected"{% if interested_filter_outcome == "rejected" %} selected{% endif %}>Rejected</option>
-                <option value="no_response"{% if interested_filter_outcome == "no_response" %} selected{% endif %}>No Response</option>
+                <option value="open"{% if interested_filter_outcome == "open" %} selected{% endif %}>Interested only</option>
+                <option value="successful"{% if interested_filter_outcome == "successful" %} selected{% endif %}>Successful only</option>
+                <option value="unsuccessful"{% if interested_filter_outcome == "unsuccessful" %} selected{% endif %}>Unsuccessful only</option>
             </select>
         </div>
         <div class="col-xl-1 col-md-6 d-grid">
@@ -158,7 +171,14 @@
         </div>
     </div>
 
-    <div class="table-responsive">
+    <div class="hc-surface-card border mb-4">
+        <div class="mf-db2-panel-head mb-3">
+            <div>
+                <span class="mf-db2-kicker">Interested Leads</span>
+                <h6 class="mb-0">These are still open and interested</h6>
+            </div>
+        </div>
+        <div class="table-responsive">
         <table class="table hc-table align-middle mb-0">
             <thead>
                 <tr>
@@ -226,6 +246,163 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+    </div>
+
+    <div class="hc-surface-card border mb-4">
+        <div class="mf-db2-panel-head mb-3">
+            <div>
+                <span class="mf-db2-kicker">Successful Leads</span>
+                <h6 class="mb-0">Interested leads that converted</h6>
+            </div>
+        </div>
+        <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Product</th>
+                    <th>Preferred Call Time</th>
+                    <th>Notes</th>
+                    <th>Staff</th>
+                    <th>Outcome</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in interested_success_rows %}
+                <tr>
+                    <td>
+                        <strong>{{ row.customer_name }}</strong>
+                        <div class="small text-muted">{{ row.customer_phone }}</div>
+                        <div class="small text-muted">Tracked from {{ row.created_at }}</div>
+                    </td>
+                    <td>{{ row.product_enquired }}</td>
+                    <td>{{ row.preferred_call_time|default:"Not set" }}</td>
+                    <td>{{ row.enquiry_notes|default:"No notes" }}</td>
+                    <td>
+                        <strong>{{ row.staff_name }}</strong>
+                        <div class="small text-muted">{{ row.staff_phone }}</div>
+                    </td>
+                    <td>
+                        <span class="hc-status hc-status-{{ row.lead_status_tone }}">{{ row.lead_status_label }}</span>
+                    </td>
+                    <td>
+                        <div>{{ row.updated_at }}</div>
+                        <div class="small text-muted">Lead {{ row.lead_id }}</div>
+                    </td>
+                    <td>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button
+                                type="button"
+                                class="btn btn-outline-dark btn-sm js-open-lead-route-map"
+                                data-lead-route-map-id="{{ row.lead_id }}"
+                                data-lead-route-map-name="{{ row.customer_name }}"
+                            >Lead Journey</button>
+                            <button
+                                type="button"
+                                class="btn btn-outline-success btn-sm js-interested-success"
+                                data-lead-id="{{ row.lead_id }}"
+                                data-lead-name="{{ row.customer_name }}"
+                                {% if row.is_converted %}disabled{% endif %}
+                            >
+                                {% if row.is_converted %}Successful{% else %}Mark Successful{% endif %}
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-outline-secondary btn-sm js-interested-unsuccessful"
+                                data-lead-id="{{ row.lead_id }}"
+                                data-lead-name="{{ row.customer_name }}"
+                                data-current-status="{{ row.lead_status }}"
+                            >Mark Unsuccessful</button>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="8" class="text-center py-4">No successful leads match the current filter.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    </div>
+
+    <div class="hc-surface-card border mb-4">
+        <div class="mf-db2-panel-head mb-3">
+            <div>
+                <span class="mf-db2-kicker">Unsuccessful Leads</span>
+                <h6 class="mb-0">Rejected, no response, and expired follow-ups</h6>
+            </div>
+        </div>
+        <div class="table-responsive">
+        <table class="table hc-table align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Product</th>
+                    <th>Preferred Call Time</th>
+                    <th>Notes</th>
+                    <th>Staff</th>
+                    <th>Outcome</th>
+                    <th>Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in interested_unsuccessful_rows %}
+                <tr>
+                    <td>
+                        <strong>{{ row.customer_name }}</strong>
+                        <div class="small text-muted">{{ row.customer_phone }}</div>
+                        <div class="small text-muted">Tracked from {{ row.created_at }}</div>
+                    </td>
+                    <td>{{ row.product_enquired }}</td>
+                    <td>{{ row.preferred_call_time|default:"Not set" }}</td>
+                    <td>{{ row.enquiry_notes|default:"No notes" }}</td>
+                    <td>
+                        <strong>{{ row.staff_name }}</strong>
+                        <div class="small text-muted">{{ row.staff_phone }}</div>
+                    </td>
+                    <td>
+                        <span class="hc-status hc-status-{{ row.lead_status_tone }}">{{ row.lead_status_label }}</span>
+                    </td>
+                    <td>
+                        <div>{{ row.updated_at }}</div>
+                        <div class="small text-muted">Lead {{ row.lead_id }}</div>
+                    </td>
+                    <td>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button
+                                type="button"
+                                class="btn btn-outline-dark btn-sm js-open-lead-route-map"
+                                data-lead-route-map-id="{{ row.lead_id }}"
+                                data-lead-route-map-name="{{ row.customer_name }}"
+                            >Lead Journey</button>
+                            <button
+                                type="button"
+                                class="btn btn-outline-success btn-sm js-interested-success"
+                                data-lead-id="{{ row.lead_id }}"
+                                data-lead-name="{{ row.customer_name }}"
+                                {% if row.is_converted %}disabled{% endif %}
+                            >
+                                {% if row.is_converted %}Successful{% else %}Mark Successful{% endif %}
+                            </button>
+                            <button
+                                type="button"
+                                class="btn btn-outline-secondary btn-sm js-interested-unsuccessful"
+                                data-lead-id="{{ row.lead_id }}"
+                                data-lead-name="{{ row.customer_name }}"
+                                data-current-status="{{ row.lead_status }}"
+                            >Mark Unsuccessful</button>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="8" class="text-center py-4">No unsuccessful leads match the current filter.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     </div>
 </section>
 

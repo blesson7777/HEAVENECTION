@@ -2148,7 +2148,7 @@ def interested_leads_page(request):
         active_page="interested-leads",
         page_title="Interested Leads",
         page_heading="Interested Leads",
-        page_subtitle="Track interested outcomes, review staff follow-up quality, and mark each lead as successful or unsuccessful.",
+        page_subtitle="Track interested leads with separate open, successful, and unsuccessful lists.",
         extra_context=build_interested_lead_payload(
             query=search_query,
             date_from=date_from,

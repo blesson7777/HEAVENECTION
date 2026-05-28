@@ -10172,7 +10172,11 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
     trimmed_query = (query or "").strip()
     normalized_staff_id = (staff_id or "").strip()
     normalized_outcome = (outcome or "all").strip().lower() or "all"
-    if normalized_outcome not in {"all", "converted", "rejected", "no_response", "open"}:
+    if normalized_outcome in {"converted"}:
+        normalized_outcome = "successful"
+    elif normalized_outcome in {"rejected", "no_response", "expired_followup"}:
+        normalized_outcome = "unsuccessful"
+    if normalized_outcome not in {"all", "successful", "unsuccessful", "open"}:
         normalized_outcome = "all"
 
     from_value = (date_from or "").strip()
@@ -10206,12 +10210,10 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
         queryset = queryset.filter(created_at__date__gte=parsed_from)
     if parsed_to:
         queryset = queryset.filter(created_at__date__lte=parsed_to)
-    if normalized_outcome == "converted":
+    if normalized_outcome == "successful":
         queryset = queryset.filter(lead__status=Lead.Status.CONVERTED)
-    elif normalized_outcome == "rejected":
-        queryset = queryset.filter(lead__status=Lead.Status.NOT_INTERESTED)
-    elif normalized_outcome == "no_response":
-        queryset = queryset.filter(lead__status=Lead.Status.NO_ANSWER)
+    elif normalized_outcome == "unsuccessful":
+        queryset = queryset.filter(lead__status__in=[Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER, Lead.Status.EXPIRED_FOLLOWUP])
     elif normalized_outcome == "open":
         queryset = queryset.filter(lead__status=Lead.Status.INTERESTED)
 
@@ -10229,11 +10231,19 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
     )
     for detail in queryset.order_by("-updated_at", "-created_at"):
         lead_status = detail.lead.status
+        outcome_group = {
+            Lead.Status.CONVERTED: "successful",
+            Lead.Status.INTERESTED: "open",
+            Lead.Status.NOT_INTERESTED: "unsuccessful",
+            Lead.Status.NO_ANSWER: "unsuccessful",
+            Lead.Status.EXPIRED_FOLLOWUP: "unsuccessful",
+        }.get(lead_status, "other")
         status_tone = {
             Lead.Status.CONVERTED: "success",
             Lead.Status.INTERESTED: "warning",
             Lead.Status.NOT_INTERESTED: "danger",
             Lead.Status.NO_ANSWER: "primary",
+            Lead.Status.EXPIRED_FOLLOWUP: "danger",
             Lead.Status.NEW: "muted",
         }.get(lead_status, "muted")
         outcome_key = {
@@ -10241,6 +10251,7 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
             Lead.Status.NOT_INTERESTED: "rejected",
             Lead.Status.NO_ANSWER: "no_response",
             Lead.Status.INTERESTED: "open",
+            Lead.Status.EXPIRED_FOLLOWUP: "expired_followup",
         }.get(lead_status, "other")
         rows.append(
             {
@@ -10259,6 +10270,17 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
                 "lead_status": lead_status,
                 "lead_status_label": detail.lead.get_status_display(),
                 "lead_status_tone": status_tone,
+                "outcome_group": outcome_group,
+                "outcome_group_label": {
+                    "open": "Interested",
+                    "successful": "Successful",
+                    "unsuccessful": "Unsuccessful",
+                }.get(outcome_group, "Other"),
+                "outcome_group_tone": {
+                    "open": "warning",
+                    "successful": "success",
+                    "unsuccessful": "danger",
+                }.get(outcome_group, "muted"),
                 "is_converted": lead_status == Lead.Status.CONVERTED,
                 "outcome_key": outcome_key,
             }
@@ -10276,6 +10298,10 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
         elif lead_status == Lead.Status.INTERESTED:
             breakdown["open_count"] += 1
 
+    interested_open_rows = [row for row in rows if row["outcome_group"] == "open"]
+    interested_success_rows = [row for row in rows if row["outcome_group"] == "successful"]
+    interested_unsuccessful_rows = [row for row in rows if row["outcome_group"] == "unsuccessful"]
+
     staff_breakdown_rows = sorted(
         staff_breakdown.values(),
         key=lambda row: (
@@ -10291,7 +10317,10 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
     ]
 
     return {
-        "interested_lead_rows": rows,
+        "interested_all_rows": rows,
+        "interested_lead_rows": interested_open_rows,
+        "interested_success_rows": interested_success_rows,
+        "interested_unsuccessful_rows": interested_unsuccessful_rows,
         "interested_lead_summary": {
             "total_count": len(rows),
             "today_count": sum(
@@ -10301,10 +10330,12 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
             ),
             "with_notes_count": sum(1 for row in rows if row["enquiry_notes"]),
             "scheduled_count": sum(1 for row in rows if row["preferred_call_time"]),
-            "converted_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.CONVERTED),
+            "converted_count": len(interested_success_rows),
             "rejected_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.NOT_INTERESTED),
             "no_response_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.NO_ANSWER),
-            "open_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.INTERESTED),
+            "expired_followup_count": sum(1 for row in rows if row["lead_status"] == Lead.Status.EXPIRED_FOLLOWUP),
+            "open_count": len(interested_open_rows),
+            "unsuccessful_count": len(interested_unsuccessful_rows),
             "staff_count": len(staff_breakdown_rows),
         },
         "interested_staff_breakdown_rows": staff_breakdown_rows,
@@ -10325,6 +10356,7 @@ def build_interested_lead_csv_response(*, query="", date_from="", date_to="", st
         staff_id=staff_id,
         outcome=outcome,
     )
+    export_rows = list(payload.get("interested_all_rows", []))
     response = io.StringIO()
     writer = csv.writer(response)
     writer.writerow(
@@ -10342,7 +10374,7 @@ def build_interested_lead_csv_response(*, query="", date_from="", date_to="", st
             "Updated At",
         ]
     )
-    for row in payload["interested_lead_rows"]:
+    for row in export_rows:
         writer.writerow(
             [
                 row["lead_id"],
@@ -10372,6 +10404,7 @@ def build_interested_lead_excel_response(*, query="", date_from="", date_to="", 
         staff_id=staff_id,
         outcome=outcome,
     )
+    export_rows = list(payload.get("interested_all_rows", []))
     workbook = Workbook()
     worksheet = workbook.active
     worksheet.title = "Interested Outcomes"
@@ -10390,7 +10423,7 @@ def build_interested_lead_excel_response(*, query="", date_from="", date_to="", 
             "Updated At",
         ]
     )
-    for row in payload["interested_lead_rows"]:
+    for row in export_rows:
         worksheet.append(
             [
                 row["lead_id"],
