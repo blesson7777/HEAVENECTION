@@ -52,6 +52,7 @@ class Staff(AbstractBaseUser, PermissionsMixin):
     email = models.EmailField(blank=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.STAFF)
     is_active = models.BooleanField(default=True, db_index=True)
+    receives_new_leads = models.BooleanField(default=True, db_index=True)
     is_staff = models.BooleanField(default=False)
     compensation_type = models.CharField(
         max_length=20,

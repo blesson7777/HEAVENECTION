@@ -445,6 +445,7 @@
         const callRateInput = document.getElementById("staffCallRate");
         const bonusInput = document.getElementById("staffBonus");
         const isActiveInput = document.getElementById("staffIsActive");
+        const receivesNewLeadsInput = document.getElementById("staffReceivesNewLeads");
         const feedback = document.getElementById("staffFormFeedback");
         const submitButton = document.getElementById("staffSubmitButton");
 
@@ -467,6 +468,7 @@
             callRateInput.value = "3";
             bonusInput.value = "500";
             isActiveInput.checked = true;
+            receivesNewLeadsInput.checked = true;
             titleNode.textContent = "Add Staff Member";
             passwordInput.required = true;
             clearFeedback();
@@ -488,6 +490,7 @@
                 callRateInput.value = button.dataset.callRate || "3";
                 bonusInput.value = button.dataset.bonus || "500";
                 isActiveInput.checked = button.dataset.isActive === "true";
+                receivesNewLeadsInput.checked = button.dataset.receivesNewLeads !== "false";
                 titleNode.textContent = "Edit Staff Member";
                 modal.show();
             });
@@ -567,6 +570,7 @@
                 call_rate: callRateInput.value || "3",
                 bonus_per_conversion: bonusInput.value || "500",
                 is_active: isActiveInput.checked,
+                receives_new_leads: receivesNewLeadsInput.checked,
             };
             if (passwordInput.value.trim()) {
                 payload.password = passwordInput.value.trim();

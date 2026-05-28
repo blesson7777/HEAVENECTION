@@ -4597,6 +4597,10 @@ def _normalize_active_queue_assignments(*, target_staff=None, prioritized_lead_i
             release_ids.append(lead.id)
             continue
 
+        if not assigned_staff.receives_new_leads:
+            kept_counts[assigned_staff.id] += 1
+            continue
+
         if lead.id not in allocatable_queue_ids:
             release_ids.append(lead.id)
             continue
@@ -4625,7 +4629,7 @@ def auto_allocate_leads(*, target_staff=None, prioritized_lead_ids=None):
         target_staff=target_staff,
         prioritized_lead_ids=prioritized_lead_ids,
     )
-    staff_queryset = _staff_queryset().filter(is_active=True)
+    staff_queryset = _staff_queryset().filter(is_active=True, receives_new_leads=True)
     if target_staff is not None:
         staff_queryset = staff_queryset.filter(id=target_staff.id)
 
@@ -4709,7 +4713,11 @@ def auto_allocate_leads(*, target_staff=None, prioritized_lead_ids=None):
 
 
 def assign_imported_leads_to_staff(*, imported_lead_ids, selected_staff):
-    selected_staff = [staff for staff in selected_staff if staff and staff.is_active and staff.role == Staff.Role.STAFF]
+    selected_staff = [
+        staff
+        for staff in selected_staff
+        if staff and staff.is_active and staff.receives_new_leads and staff.role == Staff.Role.STAFF
+    ]
     if not imported_lead_ids or not selected_staff:
         return {
             "assigned_count": 0,
@@ -4760,7 +4768,13 @@ def assign_imported_leads_to_staff(*, imported_lead_ids, selected_staff):
 
 
 def assign_selected_leads_to_staff_queue(*, selected_lead_ids, target_staff):
-    if not selected_lead_ids or not target_staff or not target_staff.is_active or target_staff.role != Staff.Role.STAFF:
+    if (
+        not selected_lead_ids
+        or not target_staff
+        or not target_staff.is_active
+        or not target_staff.receives_new_leads
+        or target_staff.role != Staff.Role.STAFF
+    ):
         return {
             "selected_count": 0,
             "eligible_count": 0,
@@ -5900,7 +5914,11 @@ def build_team_management_payload(*, quality_range_start=None, quality_range_end
         status_tone = "muted"
         if staff.is_active:
             active_accounts += 1
-            if online_label in {"Online", "On Call"}:
+            if not staff.receives_new_leads:
+                attention_needed += 1
+                status_filter = "paused"
+                status_tone = "warning"
+            elif online_label in {"Online", "On Call"}:
                 online_now += 1
                 status_filter = "online"
                 status_tone = "success"
@@ -5922,6 +5940,7 @@ def build_team_management_payload(*, quality_range_start=None, quality_range_end
                 "name": staff.name,
                 "phone": staff.phone,
                 "is_active": staff.is_active,
+                "receives_new_leads": staff.receives_new_leads,
                 "compensation_type": staff.compensation_type,
                 "compensation_type_label": staff.get_compensation_type_display(),
                 "hourly_rate": _format_currency(staff.hourly_rate),
@@ -5934,6 +5953,8 @@ def build_team_management_payload(*, quality_range_start=None, quality_range_end
                 "online_label": online_label,
                 "status_filter": status_filter,
                 "status_tone": status_tone,
+                "lead_intake_label": "Lead intake paused" if staff.is_active and not staff.receives_new_leads else "Receiving new leads",
+                "lead_intake_tone": "warning" if staff.is_active and not staff.receives_new_leads else "success",
                 "session_state": session.last_known_state if session else "stopped",
                 "active_hours_today": _format_hours(active_totals.get(staff.id, 0)),
                 "active_seconds_today": active_totals.get(staff.id, 0),
@@ -5977,6 +5998,7 @@ def build_team_management_payload(*, quality_range_start=None, quality_range_end
         "team_summary": {
             "total_staff": len(team_rows),
             "active_accounts": active_accounts,
+            "lead_intake_paused": sum(1 for row in team_rows if row.get("is_active") and not row.get("receives_new_leads")),
             "online_now": online_now,
             "attention_needed": attention_needed,
             "total_assigned": total_assigned,
@@ -7286,7 +7308,7 @@ def build_lead_management_payload(
     queue_limit = get_lead_queue_limit()
     staff_options = [
         {"id": str(staff.id), "name": staff.name}
-        for staff in _staff_queryset().filter(is_active=True)
+        for staff in _staff_queryset().filter(is_active=True, receives_new_leads=True)
     ]
 
     valid_statuses = {choice for choice, _label in Lead.Status.choices}
@@ -8631,7 +8653,7 @@ def build_recovery_lead_payload():
     owner_map = _recovery_owner_staff_map(recovery_leads)
     staff_options = [
         {"id": str(staff.id), "name": staff.name}
-        for staff in _staff_queryset().filter(is_active=True)
+        for staff in _staff_queryset().filter(is_active=True, receives_new_leads=True)
     ]
 
     recovery_rows = []
@@ -9671,7 +9693,7 @@ def build_interested_lead_payload(*, query="", date_from="", date_to="", staff_i
     )
     staff_options = [
         {"id": str(staff.id), "name": staff.name}
-        for staff in Staff.objects.filter(role=Staff.Role.STAFF, is_active=True).order_by("name")
+        for staff in Staff.objects.filter(role=Staff.Role.STAFF, is_active=True, receives_new_leads=True).order_by("name")
     ]
 
     return {

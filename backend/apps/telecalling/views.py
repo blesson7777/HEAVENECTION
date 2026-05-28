@@ -266,6 +266,7 @@ def _fallback_basic_staff_rows():
                 "phone": staff.phone,
                 "email": staff.email or "",
                 "is_active": staff.is_active,
+                "receives_new_leads": staff.receives_new_leads,
                 "compensation_type": staff.compensation_type,
                 "compensation_type_label": staff.get_compensation_type_display(),
                 "hourly_rate": f"Rs. {float(staff.hourly_rate or 0):,.2f}",
@@ -276,8 +277,10 @@ def _fallback_basic_staff_rows():
                 "call_rate": f"Rs. {float(staff.call_rate or 0):,.2f}",
                 "bonus_per_conversion": f"Rs. {float(staff.bonus_per_conversion or 0):,.2f}",
                 "online_label": "Offline",
-                "status_filter": "offline" if staff.is_active else "inactive",
-                "status_tone": "muted",
+                "status_filter": "paused" if staff.is_active and not staff.receives_new_leads else ("offline" if staff.is_active else "inactive"),
+                "lead_intake_label": "Lead intake paused" if staff.is_active and not staff.receives_new_leads else "Receiving new leads",
+                "lead_intake_tone": "warning" if staff.is_active and not staff.receives_new_leads else "success",
+                "status_tone": "warning" if staff.is_active and not staff.receives_new_leads else "muted",
                 "session_state": "stopped",
                 "active_hours_today": "0s",
                 "active_seconds_today": 0,
@@ -355,6 +358,7 @@ def _fallback_team_payload():
         "team_summary": {
             "total_staff": len(team_rows),
             "active_accounts": sum(1 for row in team_rows if row["is_active"]),
+            "lead_intake_paused": sum(1 for row in team_rows if row["is_active"] and not row.get("receives_new_leads")),
             "online_now": 0,
             "attention_needed": sum(1 for row in team_rows if row["is_active"]),
             "total_assigned": sum(row["assigned_leads"] for row in team_rows),
@@ -616,7 +620,7 @@ def _apply_staff_post_save_actions(staff, was_active):
         end_staff_session(staff, close_reason="admin_disabled")
         released_count = release_staff_queue(staff)
         auto_allocate_leads()
-    elif staff.is_active:
+    elif staff.is_active and staff.receives_new_leads:
         auto_allocate_leads(target_staff=staff)
     return released_count
 
@@ -1124,6 +1128,7 @@ def staff_profile_page(request, staff_id):
         "remove_aadhar_photo": False,
         "remove_passbook_photo": False,
         "is_active": staff.is_active,
+        "receives_new_leads": staff.receives_new_leads,
     }
     staff_errors = {}
 
@@ -1137,7 +1142,13 @@ def staff_profile_page(request, staff_id):
                 staff = serializer.save()
                 released_count = _apply_staff_post_save_actions(staff, was_active)
                 if staff.is_active:
-                    messages.success(request, f"{staff.name} is now enabled and can receive leads again.")
+                    if staff.receives_new_leads:
+                        messages.success(request, f"{staff.name} is now enabled and can receive leads again.")
+                    else:
+                        messages.success(
+                            request,
+                            f"{staff.name} is now enabled, but new lead intake is still paused.",
+                        )
                 else:
                     messages.success(
                         request,
@@ -1173,6 +1184,7 @@ def staff_profile_page(request, staff_id):
             return redirect("staff-profile-page", staff_id=staff.id)
         else:
             password_value = request.POST.get("password", "")
+            was_receiving_new_leads = staff.receives_new_leads
             staff_form_data = {
                 "name": request.POST.get("name", "").strip(),
                 "phone": request.POST.get("phone", "").strip(),
@@ -1189,6 +1201,7 @@ def staff_profile_page(request, staff_id):
                 "remove_aadhar_photo": request.POST.get("remove_aadhar_photo") == "on",
                 "remove_passbook_photo": request.POST.get("remove_passbook_photo") == "on",
                 "is_active": request.POST.get("is_active") == "on",
+                "receives_new_leads": request.POST.get("receives_new_leads") == "on",
             }
             staff_data = {
                 "name": staff_form_data["name"],
@@ -1205,6 +1218,7 @@ def staff_profile_page(request, staff_id):
                 "remove_aadhar_photo": staff_form_data["remove_aadhar_photo"],
                 "remove_passbook_photo": staff_form_data["remove_passbook_photo"],
                 "is_active": staff_form_data["is_active"],
+                "receives_new_leads": staff_form_data["receives_new_leads"],
             }
             if password_value.strip():
                 staff_data["password"] = password_value.strip()
@@ -1222,6 +1236,16 @@ def staff_profile_page(request, staff_id):
                     messages.success(
                         request,
                         f"Staff profile updated. {staff.name} was disabled and {released_count} active leads were unassigned.",
+                    )
+                elif staff.is_active and was_receiving_new_leads and not staff.receives_new_leads:
+                    messages.success(
+                        request,
+                        f"{staff.name}'s profile updated and new lead intake is now paused.",
+                    )
+                elif staff.is_active and not was_receiving_new_leads and staff.receives_new_leads:
+                    messages.success(
+                        request,
+                        f"{staff.name}'s profile updated and new lead intake is now enabled.",
                     )
                 else:
                     messages.success(request, f"{staff.name}'s profile updated successfully.")

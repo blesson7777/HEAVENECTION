@@ -310,6 +310,7 @@ class StaffSerializer(serializers.ModelSerializer):
             "phone",
             "role",
             "is_active",
+            "receives_new_leads",
             "compensation_type",
             "compensation_type_label",
             "hourly_rate",
@@ -349,6 +350,7 @@ class StaffProfileSerializer(serializers.ModelSerializer):
             "role",
             "role_label",
             "is_active",
+            "receives_new_leads",
             "bank_account_name",
             "bank_name",
             "bank_account_number",
@@ -610,6 +612,7 @@ class CreateStaffSerializer(serializers.Serializer):
     )
     referred_by_id = serializers.UUIDField(required=False, allow_null=True)
     is_active = serializers.BooleanField(required=False, default=True)
+    receives_new_leads = serializers.BooleanField(required=False, default=True)
 
     def validate_phone(self, value):
         phone = value.strip()
@@ -673,6 +676,7 @@ class UpdateStaffSerializer(serializers.Serializer):
     passbook_photo = serializers.FileField(required=False, allow_null=True)
     remove_passbook_photo = serializers.BooleanField(required=False, default=False, write_only=True)
     is_active = serializers.BooleanField(required=False)
+    receives_new_leads = serializers.BooleanField(required=False)
 
     def validate_phone(self, value):
         phone = value.strip()
