@@ -622,7 +622,7 @@ class ApiClient {
     if (response.statusCode >= 400) {
       final payload = _tryDecodeMap(response.body);
       final code = payload?['code']?.toString();
-      final message = _errorMessageFromPayload(payload);
+      final message = _errorMessageFromResponse(response, payload);
       throw ApiException(message, statusCode: response.statusCode, code: code);
     }
 
@@ -689,7 +689,7 @@ class ApiClient {
     if (response.statusCode >= 400) {
       final payload = _tryDecodeMap(response.body);
       final code = payload?['code']?.toString();
-      final message = _errorMessageFromPayload(payload);
+      final message = _errorMessageFromResponse(response, payload);
       throw ApiException(message, statusCode: response.statusCode, code: code);
     }
 
@@ -725,6 +725,31 @@ class ApiClient {
       }
     }
     return 'Request failed.';
+  }
+
+  String _errorMessageFromResponse(
+    http.Response response,
+    Map<String, dynamic>? payload,
+  ) {
+    final payloadMessage = _errorMessageFromPayload(payload);
+    if (payloadMessage != 'Request failed.') {
+      return payloadMessage;
+    }
+
+    final body = response.body.trim();
+    if (body.isEmpty) {
+      return 'Request failed (${response.statusCode}).';
+    }
+
+    final compactBody = body.replaceAll(RegExp(r'\s+'), ' ');
+    if (compactBody.startsWith('<!DOCTYPE html') || compactBody.startsWith('<html')) {
+      return 'Server error (${response.statusCode}).';
+    }
+
+    if (compactBody.length <= 180) {
+      return 'Server error (${response.statusCode}): $compactBody';
+    }
+    return 'Server error (${response.statusCode}): ${compactBody.substring(0, 180)}...';
   }
 
   String _flattenErrorValue(Object? value) {
