@@ -8644,12 +8644,112 @@ def _recovery_owner_staff_map(recovery_leads):
     return owner_map
 
 
-def build_recovery_lead_payload():
-    recovery_leads = list(
-        _recovery_lead_queryset()
-        .select_related("assigned_to")
-        .order_by("readd_count", "updated_at", "last_contacted_at", "created_at", "id")
-    )
+def build_recovery_lead_payload(
+    *,
+    query="",
+    status="all",
+    assignment="all",
+    sort_by="updated_at",
+    sort_dir="desc",
+    page=1,
+    page_size=25,
+    readd_min="",
+    readd_max="",
+):
+    trimmed_query = " ".join(str(query or "").strip().lower().split())
+    normalized_status = str(status or "all").strip()
+    normalized_assignment = str(assignment or "all").strip()
+    normalized_sort_by = str(sort_by or "updated_at").strip()
+    normalized_sort_dir = "asc" if str(sort_dir or "desc").strip().lower() == "asc" else "desc"
+    try:
+        normalized_page = max(1, int(page or 1))
+    except (TypeError, ValueError):
+        normalized_page = 1
+    try:
+        normalized_page_size = int(page_size or 25)
+    except (TypeError, ValueError):
+        normalized_page_size = 25
+    normalized_page_size = max(10, min(normalized_page_size, 100))
+    try:
+        normalized_readd_min = int(readd_min) if str(readd_min).strip() != "" else None
+    except (TypeError, ValueError):
+        normalized_readd_min = None
+    try:
+        normalized_readd_max = int(readd_max) if str(readd_max).strip() != "" else None
+    except (TypeError, ValueError):
+        normalized_readd_max = None
+
+    recovery_queryset = _recovery_lead_queryset().select_related("assigned_to")
+    if trimmed_query:
+        normalized_phone = re.sub(r"\D+", "", trimmed_query)
+        query_filters = (
+            Q(name__icontains=trimmed_query)
+            | Q(phone__icontains=trimmed_query)
+            | Q(notes__icontains=trimmed_query)
+            | Q(assigned_to__name__icontains=trimmed_query)
+        )
+        if normalized_phone and normalized_phone != trimmed_query:
+            query_filters |= Q(phone__icontains=normalized_phone)
+        recovery_queryset = recovery_queryset.filter(query_filters)
+
+    if normalized_status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER}:
+        recovery_queryset = recovery_queryset.filter(status=normalized_status)
+
+    if normalized_assignment == "assigned":
+        recovery_queryset = recovery_queryset.filter(assigned_to__isnull=False)
+    elif normalized_assignment == "unassigned":
+        recovery_queryset = recovery_queryset.filter(assigned_to__isnull=True)
+
+    if normalized_readd_min is not None:
+        recovery_queryset = recovery_queryset.filter(readd_count__gte=normalized_readd_min)
+    if normalized_readd_max is not None:
+        recovery_queryset = recovery_queryset.filter(readd_count__lte=normalized_readd_max)
+
+    valid_sort_fields = {"updated_at", "created_at", "last_contacted_at", "readd_count", "name", "phone", "status", "assigned_to"}
+    if normalized_sort_by not in valid_sort_fields:
+        normalized_sort_by = "updated_at"
+    sort_prefix = "" if normalized_sort_dir == "asc" else "-"
+    if normalized_sort_by == "assigned_to":
+        recovery_queryset = recovery_queryset.order_by(
+            f"{sort_prefix}assigned_to__name",
+            f"{sort_prefix}updated_at",
+            f"{sort_prefix}created_at",
+            "id",
+        )
+    elif normalized_sort_by in {"name", "phone", "status", "readd_count"}:
+        recovery_queryset = recovery_queryset.order_by(
+            f"{sort_prefix}{normalized_sort_by}",
+            f"{sort_prefix}updated_at",
+            f"{sort_prefix}created_at",
+            "id",
+        )
+    elif normalized_sort_by == "last_contacted_at":
+        recovery_queryset = recovery_queryset.order_by(
+            f"{sort_prefix}last_contacted_at",
+            f"{sort_prefix}updated_at",
+            f"{sort_prefix}created_at",
+            "id",
+        )
+    elif normalized_sort_by == "created_at":
+        recovery_queryset = recovery_queryset.order_by(
+            f"{sort_prefix}created_at",
+            f"{sort_prefix}updated_at",
+            "id",
+        )
+    else:
+        recovery_queryset = recovery_queryset.order_by(
+            f"{sort_prefix}updated_at",
+            f"{sort_prefix}created_at",
+            "id",
+        )
+
+    paginator = Paginator(recovery_queryset, normalized_page_size)
+    try:
+        page_obj = paginator.page(normalized_page)
+    except EmptyPage:
+        page_obj = paginator.page(paginator.num_pages or 1)
+
+    recovery_leads = list(page_obj.object_list)
     owner_map = _recovery_owner_staff_map(recovery_leads)
     staff_options = [
         {"id": str(staff.id), "name": staff.name}
@@ -8680,16 +8780,97 @@ def build_recovery_lead_payload():
             }
         )
 
-    rejected_count = sum(1 for row in recovery_rows if row["status"] == Lead.Status.NOT_INTERESTED)
-    no_response_count = sum(1 for row in recovery_rows if row["status"] == Lead.Status.NO_ANSWER)
+    total_recovery_count = _recovery_lead_queryset().count()
+    filtered_count = recovery_queryset.count()
+    rejected_count = recovery_queryset.filter(status=Lead.Status.NOT_INTERESTED).count()
+    no_response_count = recovery_queryset.filter(status=Lead.Status.NO_ANSWER).count()
     oldest_row = recovery_rows[0] if recovery_rows else None
     total_readds = sum(row.get("readd_count", 0) for row in recovery_rows)
     max_readd = max((row.get("readd_count", 0) for row in recovery_rows), default=0)
+    page_window = 2
+    start_page = max(1, page_obj.number - page_window)
+    end_page = min(paginator.num_pages or 1, page_obj.number + page_window)
+    page_numbers = [
+        {
+            "number": page_number,
+            "is_current": page_number == page_obj.number,
+        }
+        for page_number in range(start_page, end_page + 1)
+    ]
+    base_query_params = [
+        ("q", trimmed_query),
+        ("status", normalized_status if normalized_status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER} else "all"),
+        ("assignment", normalized_assignment),
+        ("sort_by", normalized_sort_by),
+        ("sort_dir", normalized_sort_dir),
+        ("page_size", str(normalized_page_size)),
+        ("readd_min", str(normalized_readd_min) if normalized_readd_min is not None else ""),
+        ("readd_max", str(normalized_readd_max) if normalized_readd_max is not None else ""),
+    ]
+    base_query_params = [(key, value) for key, value in base_query_params if value not in ("", None)]
+    base_querystring = f"?{urlencode(base_query_params)}" if base_query_params else ""
     return {
         "recovery_rows": recovery_rows,
         "staff_options": staff_options,
+        "recovery_filters": {
+            "query": trimmed_query,
+            "status": normalized_status,
+            "assignment": normalized_assignment,
+            "sort_by": normalized_sort_by,
+            "sort_dir": normalized_sort_dir,
+            "page_size": normalized_page_size,
+            "readd_min": readd_min,
+            "readd_max": readd_max,
+        },
+        "recovery_filter_options": {
+            "statuses": [
+                {"value": "all", "label": "All statuses"},
+                {"value": Lead.Status.NOT_INTERESTED, "label": "Rejected only"},
+                {"value": Lead.Status.NO_ANSWER, "label": "No response only"},
+            ],
+            "assignments": [
+                {"value": "all", "label": "All ownership"},
+                {"value": "assigned", "label": "Only assigned"},
+                {"value": "unassigned", "label": "Only unassigned"},
+            ],
+            "sort_fields": [
+                {"value": "updated_at", "label": "Marked time"},
+                {"value": "created_at", "label": "Created time"},
+                {"value": "last_contacted_at", "label": "Last contact time"},
+                {"value": "readd_count", "label": "Re-add count"},
+                {"value": "name", "label": "Lead name"},
+                {"value": "phone", "label": "Phone number"},
+                {"value": "status", "label": "Status"},
+                {"value": "assigned_to", "label": "Assigned staff"},
+            ],
+            "sort_directions": [
+                {"value": "desc", "label": "Newest / highest first"},
+                {"value": "asc", "label": "Oldest / lowest first"},
+            ],
+            "page_sizes": [
+                {"value": 25, "label": "25 per page"},
+                {"value": 50, "label": "50 per page"},
+                {"value": 100, "label": "100 per page"},
+            ],
+        },
+        "recovery_pagination": {
+            "current_page": page_obj.number,
+            "total_pages": paginator.num_pages,
+            "has_previous": page_obj.has_previous(),
+            "has_next": page_obj.has_next(),
+            "previous_page_number": page_obj.previous_page_number() if page_obj.has_previous() else None,
+            "next_page_number": page_obj.next_page_number() if page_obj.has_next() else None,
+            "page_numbers": [
+                {"number": item["number"], "is_current": item["is_current"]}
+                for item in page_numbers
+            ],
+            "base_querystring": base_querystring,
+            "start_index": page_obj.start_index(),
+            "end_index": page_obj.end_index(),
+        },
         "recovery_summary": {
-            "total_count": len(recovery_rows),
+            "total_count": total_recovery_count,
+            "filtered_count": filtered_count,
             "rejected_count": rejected_count,
             "no_response_count": no_response_count,
             "total_readd_count": total_readds,

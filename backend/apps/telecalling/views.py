@@ -2261,8 +2261,18 @@ def recovery_leads_page(request):
         active_page="recovery",
         page_title="Rejected & No Response",
         page_heading="Rejected & No Response",
-        page_subtitle="Review closed leads oldest first and move the oldest rows back into the active queue when needed.",
-        extra_context=build_recovery_lead_payload(),
+        page_subtitle="Review closed leads with clear filters, clean paging, and quick recovery actions.",
+        extra_context=build_recovery_lead_payload(
+            query=request.GET.get("q", ""),
+            status=request.GET.get("status", "all"),
+            assignment=request.GET.get("assignment", "all"),
+            sort_by=request.GET.get("sort_by", "updated_at"),
+            sort_dir=request.GET.get("sort_dir", "desc"),
+            page=request.GET.get("page", 1),
+            page_size=request.GET.get("page_size", 25),
+            readd_min=request.GET.get("readd_min", ""),
+            readd_max=request.GET.get("readd_max", ""),
+        ),
     )
     return render(request, "admin_recovery_leads.html", context)
 

@@ -1448,6 +1448,11 @@
     margin-top: 0.25rem;
 }
 
+.hc-sticky-panel {
+    position: sticky;
+    top: 1rem;
+}
+
 .hc-card-scroll-table {
     overflow-y: auto;
 }

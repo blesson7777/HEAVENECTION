@@ -13,6 +13,7 @@
         const deleteButton = document.getElementById("recoveryDeleteSelected");
         const deleteButtonTop = document.getElementById("recoveryDeleteSelectedTop");
         const bulkDeleteForm = document.getElementById("recoveryBulkDeleteForm");
+        const bulkDeleteInputs = document.getElementById("recoveryBulkDeleteInputs");
 
         if (!selectAll || !checkboxes.length || !deleteButton || !deleteButtonTop || !bulkDeleteForm) {
             return;
@@ -21,13 +22,9 @@
         function updateDeleteState() {
             const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
             deleteButton.disabled = selectedCount === 0;
-            deleteButton.textContent = selectedCount
-                ? `Delete Marked (${selectedCount})`
-                : "Delete Marked";
+            deleteButton.textContent = selectedCount ? `Delete Marked (${selectedCount})` : "Delete Marked";
             deleteButtonTop.disabled = selectedCount === 0;
-            deleteButtonTop.textContent = selectedCount
-                ? `Delete Marked (${selectedCount})`
-                : "Delete Marked";
+            deleteButtonTop.textContent = selectedCount ? `Delete Marked (${selectedCount})` : "Delete Marked";
             bulkDeleteForm.dataset.confirmMessage = selectedCount
                 ? `Delete ${selectedCount} selected recovery lead(s)? This cannot be undone.`
                 : "Delete the selected recovery leads? This cannot be undone.";
@@ -50,6 +47,19 @@
             const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
             if (selectedCount === 0) {
                 event.preventDefault();
+                return;
+            }
+            if (bulkDeleteInputs) {
+                bulkDeleteInputs.innerHTML = "";
+                checkboxes
+                    .filter((checkbox) => checkbox.checked)
+                    .forEach((checkbox) => {
+                        const input = document.createElement("input");
+                        input.type = "hidden";
+                        input.name = "selected_recovery_ids";
+                        input.value = checkbox.value;
+                        bulkDeleteInputs.appendChild(input);
+                    });
             }
         });
 
@@ -59,256 +69,374 @@
 {% endblock %}
 
 {% block admin_content %}
-<section class="hc-surface-card animate-on-scroll">
-    <div class="mf-db2-panel-head mb-3">
+<section class="hc-surface-card animate-on-scroll mb-4">
+    <div class="d-flex flex-column flex-xl-row align-items-xl-end justify-content-between gap-3">
         <div>
             <span class="mf-db2-kicker">Recovery Queue</span>
-            <h5>Rejected and no response leads</h5>
+            <h3 class="mb-2">Rejected and No Response</h3>
+            <p class="mb-0 text-muted">
+                Use the filters to narrow the list, sort the rows your way, and bring leads back when they are ready.
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <span class="hc-status hc-status-muted">Total {{ recovery_summary.total_count }}</span>
+            <span class="hc-status hc-status-danger">Rejected {{ recovery_summary.rejected_count }}</span>
+            <span class="hc-status hc-status-primary">No Response {{ recovery_summary.no_response_count }}</span>
+            <span class="hc-status hc-status-warning">Shown {{ recovery_summary.filtered_count }}</span>
         </div>
     </div>
+</section>
 
-    <div class="row g-3 mb-4">
-        <div class="col-xl-3 col-md-6">
-            <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Total</span>
-                <h3 class="mb-1">{{ recovery_summary.total_count }}</h3>
-                <p class="mb-0 text-muted">Rejected and no response leads waiting in the recovery list.</p>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Rejected</span>
-                <h3 class="mb-1">{{ recovery_summary.rejected_count }}</h3>
-                <p class="mb-0 text-muted">Leads marked rejected by staff.</p>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">No Response</span>
-                <h3 class="mb-1">{{ recovery_summary.no_response_count }}</h3>
-                <p class="mb-0 text-muted">Leads that did not answer or did not continue.</p>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Re-Add Count</span>
-                <h3 class="mb-1">{{ recovery_summary.total_readd_count }}</h3>
-                <p class="mb-0 text-muted">Total times leads have been re-added. Max per lead: {{ recovery_summary.max_readd_count }}.</p>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="hc-summary-card h-100">
-                <span class="mf-db2-kicker">Oldest</span>
-                <h3 class="mb-1">{{ recovery_summary.oldest_lead_name }}</h3>
-                <p class="mb-0 text-muted">{{ recovery_summary.oldest_lead_updated_at }}</p>
-            </div>
-        </div>
-    </div>
-
-    <div class="row g-4 mb-4">
-        <div class="col-12">
-            <div class="hc-summary-card">
-                <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-3">
+<section class="row g-4 animate-on-scroll">
+    <div class="col-12 col-xl-4">
+        <div class="hc-sticky-panel h-100">
+            <div class="hc-surface-card mb-4">
+                <div class="mf-db2-panel-head mb-3">
                     <div>
-                        <span class="mf-db2-kicker">Recovery Actions</span>
-                        <h5 class="mb-1">Re-add or delete recovery leads</h5>
-                        <p class="text-muted mb-0">Use the same filters for re-adding or deleting the oldest recovery leads.</p>
+                        <span class="mf-db2-kicker">Quick Snapshot</span>
+                        <h5 class="mb-0">A fast read on this list</h5>
                     </div>
                 </div>
-                <form method="post" action="{% url 'recovery-leads-page' %}" id="recoveryReaddForm" class="row g-3 align-items-end" data-confirm-title="Re-add Recovery Leads" data-confirm-message="Re-add the oldest matching recovery leads back to the active queue?" data-confirm-ok="Re-add" data-confirm-class="btn-primary">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="hc-summary-card h-100">
+                            <span class="mf-db2-kicker">Shown</span>
+                            <h3 class="mb-1">{{ recovery_summary.filtered_count }}</h3>
+                            <p class="mb-0 text-muted">Rows matching your filters.</p>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="hc-summary-card h-100">
+                            <span class="mf-db2-kicker">Re-Adds</span>
+                            <h3 class="mb-1">{{ recovery_summary.total_readd_count }}</h3>
+                            <p class="mb-0 text-muted">All re-adds in view.</p>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="hc-summary-card h-100">
+                            <span class="mf-db2-kicker">Highest Re-Add</span>
+                            <h3 class="mb-1">{{ recovery_summary.max_readd_count }}</h3>
+                            <p class="mb-0 text-muted">Most times any lead was re-added.</p>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="hc-summary-card h-100">
+                            <span class="mf-db2-kicker">Next To Review</span>
+                            <h3 class="mb-1">{{ recovery_summary.oldest_lead_name }}</h3>
+                            <p class="mb-0 text-muted">{{ recovery_summary.oldest_lead_updated_at }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hc-surface-card mb-4">
+                <div class="mf-db2-panel-head mb-3">
+                    <div>
+                        <span class="mf-db2-kicker">Action Deck</span>
+                        <h5 class="mb-0">Work on the oldest matching leads</h5>
+                    </div>
+                </div>
+
+                <form
+                    method="post"
+                    action="{% url 'recovery-leads-page' %}"
+                    class="row g-3"
+                    data-confirm-title="Re-add Recovery Leads"
+                    data-confirm-message="Re-add the oldest matching recovery leads back to the active queue?"
+                    data-confirm-ok="Re-add"
+                    data-confirm-class="btn-primary"
+                >
                     {% csrf_token %}
                     <input type="hidden" name="recovery_action" value="reactivate_oldest">
-                    <div class="col-lg-3 col-md-6">
-                        <label class="form-label fw-semibold" for="readdCount">Re-add oldest count</label>
-                        <input
-                            type="number"
-                            min="1"
-                            class="form-control"
-                            id="readdCount"
-                            name="readd_count"
-                            value="{{ recovery_summary.queue_limit }}"
-                            required
-                        >
+                    <div class="col-6">
+                        <label class="form-label fw-semibold" for="readdCount">Count</label>
+                        <input type="number" min="1" class="form-control" id="readdCount" name="readd_count" value="{{ recovery_summary.queue_limit }}" required>
                     </div>
-                    <div class="col-lg-3 col-md-6">
-                        <label class="form-label fw-semibold" for="maxReaddCount">Max re-add count</label>
-                        <input
-                            type="number"
-                            min="0"
-                            class="form-control"
-                            id="maxReaddCount"
-                            name="max_readd_count"
-                            placeholder="0 = never re-added"
-                        >
-                    </div>
-                    <div class="col-lg-3 col-md-6">
-                        <label class="form-label fw-semibold" for="readdScope">Lead type</label>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold" for="readdScope">Type</label>
                         <select class="form-select" id="readdScope" name="readd_scope">
                             <option value="no_response">No Response only</option>
                         </select>
                     </div>
-                    <div class="col-lg-3 col-md-6 d-flex">
-                        <button type="submit" class="btn btn-primary w-100">Re-Add Oldest Leads</button>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold" for="maxReaddCount">Max re-add count</label>
+                        <input type="number" min="0" class="form-control" id="maxReaddCount" name="max_readd_count" placeholder="0 = never re-added">
                     </div>
                     <div class="col-12">
                         <div class="alert alert-light border mb-0">
-                            Re-adds only no-response leads and returns them to the active queue. Rejected leads stay closed and cannot be re-added again. Set max re-add count to 0 to pick only leads never re-added.
+                            Re-adds only no-response leads. Rejected leads stay closed.
                         </div>
                     </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary w-100">Re-Add Oldest Leads</button>
+                    </div>
                 </form>
+
                 <hr class="my-4">
-                <form method="post" action="{% url 'recovery-leads-page' %}" id="recoveryDeleteFilteredForm" class="row g-3 align-items-end" data-confirm-title="Delete Recovery Leads" data-confirm-message="Delete the oldest matching recovery leads? This cannot be undone." data-confirm-ok="Delete" data-confirm-class="btn-danger">
+
+                <form
+                    method="post"
+                    action="{% url 'recovery-leads-page' %}"
+                    class="row g-3"
+                    data-confirm-title="Delete Recovery Leads"
+                    data-confirm-message="Delete the oldest matching recovery leads? This cannot be undone."
+                    data-confirm-ok="Delete"
+                    data-confirm-class="btn-danger"
+                >
                     {% csrf_token %}
                     <input type="hidden" name="recovery_action" value="delete_filtered">
-                    <div class="col-lg-3 col-md-6">
-                        <label class="form-label fw-semibold" for="deleteCount">Delete oldest count</label>
-                        <input
-                            type="number"
-                            min="1"
-                            class="form-control"
-                            id="deleteCount"
-                            name="delete_count"
-                            value="1"
-                            required
-                        >
+                    <div class="col-6">
+                        <label class="form-label fw-semibold" for="deleteCount">Count</label>
+                        <input type="number" min="1" class="form-control" id="deleteCount" name="delete_count" value="1" required>
                     </div>
-                    <div class="col-lg-3 col-md-6">
-                        <label class="form-label fw-semibold" for="deleteMaxReaddCount">Max re-add count</label>
-                        <input
-                            type="number"
-                            min="0"
-                            class="form-control"
-                            id="deleteMaxReaddCount"
-                            name="delete_max_readd_count"
-                            placeholder="0 = never re-added"
-                        >
-                    </div>
-                    <div class="col-lg-3 col-md-6">
-                        <label class="form-label fw-semibold" for="deleteScope">Lead type</label>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold" for="deleteScope">Type</label>
                         <select class="form-select" id="deleteScope" name="delete_scope">
                             <option value="all">Rejected and No Response</option>
                             <option value="rejected">Rejected only</option>
                             <option value="no_response">No Response only</option>
                         </select>
                     </div>
-                    <div class="col-lg-3 col-md-6 d-flex">
-                        <button type="submit" class="btn btn-outline-danger w-100">Delete Oldest Leads</button>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold" for="deleteMaxReaddCount">Max re-add count</label>
+                        <input type="number" min="0" class="form-control" id="deleteMaxReaddCount" name="delete_max_readd_count" placeholder="0 = never re-added">
                     </div>
                     <div class="col-12">
                         <div class="alert alert-light border mb-0">
-                            Deletes the oldest leads that match the selected re-add count and status.
+                            Deletes the oldest leads that match the chosen type and re-add limit.
                         </div>
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-outline-danger w-100">Delete Oldest Leads</button>
                     </div>
                 </form>
             </div>
-        </div>
-    </div>
 
-    <div class="hc-filter-row">
-        <button type="button" class="hc-filter-chip is-active" data-filter-status="all">All</button>
-        <button type="button" class="hc-filter-chip" data-filter-status="not_interested">Rejected</button>
-        <button type="button" class="hc-filter-chip" data-filter-status="no_answer">No Response</button>
-    </div>
-
-    <div class="hc-search-box">
-        <i class="bi bi-search"></i>
-        <input type="search" id="recoverySearchInput" placeholder="Search lead, phone, note, or staff">
-    </div>
-
-    <div class="table-responsive">
-        <div class="d-flex justify-content-end mb-3">
-            <button type="submit" form="recoveryBulkDeleteForm" class="btn btn-outline-danger" id="recoveryDeleteSelectedTop" disabled>Delete Marked</button>
-        </div>
-        <form method="post" action="{% url 'recovery-leads-page' %}" id="recoveryBulkDeleteForm" data-confirm-title="Delete Selected Leads" data-confirm-message="Delete the selected recovery leads? This cannot be undone." data-confirm-ok="Delete" data-confirm-class="btn-danger">
-            {% csrf_token %}
-            <input type="hidden" name="recovery_action" value="delete_selected">
-            <table class="table hc-table align-middle mb-0">
-            <thead>
-                <tr>
-                    <th class="text-center">
-                        <input type="checkbox" id="recoverySelectAll">
-                    </th>
-                    <th>Lead</th>
-                    <th>Phone</th>
-                    <th>Status</th>
-                    <th>Assigned To</th>
-                    <th>Last Contact</th>
-                    <th>Re-Added</th>
-                    <th>Marked On</th>
-                    <th>Created</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="recoveryTableBody">
-                {% for lead in recovery_rows %}
-                <tr data-status="{{ lead.status }}">
-                    <td class="text-center">
-                        <input type="checkbox" class="js-recovery-select" name="selected_recovery_ids" value="{{ lead.id }}">
-                    </td>
-                    <td>
-                        <strong>{{ lead.name }}</strong>
-                        <div class="text-muted small">{{ lead.notes|default:"No notes" }}</div>
-                    </td>
-                    <td>{{ lead.phone }}</td>
-                    <td>
-                        <span class="hc-status hc-status-{% if lead.status == 'not_interested' %}muted{% else %}warning{% endif %}">
-                            {{ lead.status_label }}
-                        </span>
-                    </td>
-                    <td>
-                        <div>{{ lead.assigned_to }}</div>
-                        {% if lead.assigned_to == "Unassigned" and lead.recovery_owner_name %}
-                        <div class="small text-muted">Suggested owner: {{ lead.recovery_owner_name }}</div>
-                        {% endif %}
-                    </td>
-                    <td>{{ lead.last_contacted }}</td>
-                    <td>{{ lead.readd_count }}</td>
-                    <td>{{ lead.updated_at }}</td>
-                    <td>{{ lead.created_at }}</td>
-                    <td>
-                        <div class="d-flex flex-wrap gap-2">
-                            <button
-                                type="button"
-                                class="btn btn-outline-primary btn-sm js-edit-lead"
-                                data-lead-id="{{ lead.id }}"
-                                data-name="{{ lead.name }}"
-                                data-phone="{{ lead.phone }}"
-                                data-status="{{ lead.status }}"
-                                data-callback-window="{{ lead.callback_window }}"
-                                data-callback-date="{{ lead.callback_date }}"
-                                data-assigned-to-id="{{ lead.assigned_to_id }}"
-                                data-notes="{{ lead.notes }}"
-                            >Edit</button>
-                            {% if lead.recovery_owner_id %}
-                            <form method="post" data-confirm-title="Reassign Lead" data-confirm-message="Reassign this lead to {{ lead.recovery_owner_name }} as a new lead?" data-confirm-ok="Reassign" data-confirm-class="btn-primary">
-                                {% csrf_token %}
-                                <input type="hidden" name="recovery_action" value="recover_single">
-                                <input type="hidden" name="lead_id" value="{{ lead.id }}">
-                                <input type="hidden" name="recover_mode" value="reassign_same_staff">
-                                <button type="submit" class="btn btn-sm btn-outline-success">Reassign Same Staff</button>
-                            </form>
-                            <form method="post" data-confirm-title="Move To Follow Up" data-confirm-message="Move this lead to Follow Up under {{ lead.recovery_owner_name }}?" data-confirm-ok="Move" data-confirm-class="btn-warning">
-                                {% csrf_token %}
-                                <input type="hidden" name="recovery_action" value="recover_single">
-                                <input type="hidden" name="lead_id" value="{{ lead.id }}">
-                                <input type="hidden" name="recover_mode" value="mark_interested_same_staff">
-                                <button type="submit" class="btn btn-sm btn-outline-warning">Mark Follow Up Same Staff</button>
-                            </form>
-                            {% else %}
-                            <span class="small text-muted">No previous staff owner found</span>
-                            {% endif %}
-                        </div>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr><td colspan="10" class="text-center py-4">No rejected or no response leads are waiting in the recovery queue.</td></tr>
-                {% endfor %}
-            </tbody>
-            </table>
-            <div class="d-flex justify-content-end mt-3">
-                <button type="submit" class="btn btn-outline-danger" id="recoveryDeleteSelected" disabled>Delete Marked</button>
+            <div class="hc-surface-card">
+                <div class="mf-db2-panel-head mb-3">
+                    <div>
+                        <span class="mf-db2-kicker">Helpful Note</span>
+                        <h5 class="mb-0">What this page is for</h5>
+                    </div>
+                </div>
+                <p class="text-muted mb-0">
+                    Use the filters to focus on one kind of lead, then use the table actions to recover, edit, or remove the rows you want.
+                </p>
             </div>
-        </form>
+        </div>
+    </div>
+
+    <div class="col-12 col-xl-8">
+        <div class="hc-surface-card mb-4">
+            <div class="mf-db2-panel-head mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Find Leads</span>
+                    <h5 class="mb-0">Search, sort, and refine the list</h5>
+                </div>
+                <span class="hc-sync-pill"><i class="bi bi-list-ul"></i> {{ recovery_pagination.start_index }} - {{ recovery_pagination.end_index }} of {{ recovery_summary.filtered_count }}</span>
+            </div>
+
+            <form method="get" action="{% url 'recovery-leads-page' %}" class="row g-3">
+                <div class="col-12 col-lg-5">
+                    <label class="form-label fw-semibold" for="recoverySearchInput">Search</label>
+                    <div class="hc-search-box mb-0">
+                        <i class="bi bi-search"></i>
+                        <input type="search" id="recoverySearchInput" name="q" value="{{ recovery_filters.query }}" placeholder="Search lead, phone, note, or staff">
+                    </div>
+                </div>
+                <div class="col-6 col-lg-2">
+                    <label class="form-label fw-semibold" for="recoveryStatusFilter">Status</label>
+                    <select class="form-select" id="recoveryStatusFilter" name="status">
+                        {% for option in recovery_filter_options.statuses %}
+                        <option value="{{ option.value }}"{% if recovery_filters.status == option.value %} selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-lg-2">
+                    <label class="form-label fw-semibold" for="recoveryAssignmentFilter">Owner</label>
+                    <select class="form-select" id="recoveryAssignmentFilter" name="assignment">
+                        {% for option in recovery_filter_options.assignments %}
+                        <option value="{{ option.value }}"{% if recovery_filters.assignment == option.value %} selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-lg-2">
+                    <label class="form-label fw-semibold" for="recoverySortField">Sort by</label>
+                    <select class="form-select" id="recoverySortField" name="sort_by">
+                        {% for option in recovery_filter_options.sort_fields %}
+                        <option value="{{ option.value }}"{% if recovery_filters.sort_by == option.value %} selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-lg-1">
+                    <label class="form-label fw-semibold" for="recoverySortDir">Order</label>
+                    <select class="form-select" id="recoverySortDir" name="sort_dir">
+                        {% for option in recovery_filter_options.sort_directions %}
+                        <option value="{{ option.value }}"{% if recovery_filters.sort_dir == option.value %} selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-lg-2">
+                    <label class="form-label fw-semibold" for="recoveryPageSize">Page size</label>
+                    <select class="form-select" id="recoveryPageSize" name="page_size">
+                        {% for option in recovery_filter_options.page_sizes %}
+                        <option value="{{ option.value }}"{% if recovery_filters.page_size == option.value %} selected{% endif %}>{{ option.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-6 col-lg-2">
+                    <label class="form-label fw-semibold" for="readdMin">Min re-adds</label>
+                    <input type="number" min="0" class="form-control" id="readdMin" name="readd_min" value="{{ recovery_filters.readd_min }}">
+                </div>
+                <div class="col-6 col-lg-2">
+                    <label class="form-label fw-semibold" for="readdMax">Max re-adds</label>
+                    <input type="number" min="0" class="form-control" id="readdMax" name="readd_max" value="{{ recovery_filters.readd_max }}">
+                </div>
+                <div class="col-12 col-lg-4 d-flex align-items-end gap-2">
+                    <button type="submit" class="btn btn-primary">Apply</button>
+                    <a href="{% url 'recovery-leads-page' %}" class="btn btn-outline-secondary">Reset</a>
+                </div>
+            </form>
+        </div>
+
+        <div class="hc-surface-card">
+            <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-3">
+                <div>
+                    <span class="mf-db2-kicker">Lead List</span>
+                    <h5 class="mb-1">Rows that match your filters</h5>
+                    <p class="text-muted mb-0">
+                        Showing {{ recovery_pagination.start_index }} to {{ recovery_pagination.end_index }} of {{ recovery_summary.filtered_count }} leads.
+                    </p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" form="recoveryBulkDeleteForm" class="btn btn-outline-danger" id="recoveryDeleteSelectedTop" disabled>Delete Marked</button>
+                </div>
+            </div>
+
+            <form method="post" action="{% url 'recovery-leads-page' %}" id="recoveryBulkDeleteForm" class="d-none" data-confirm-title="Delete Selected Leads" data-confirm-message="Delete the selected recovery leads? This cannot be undone." data-confirm-ok="Delete" data-confirm-class="btn-danger">
+                {% csrf_token %}
+                <input type="hidden" name="recovery_action" value="delete_selected">
+                <div id="recoveryBulkDeleteInputs"></div>
+            </form>
+
+            <div class="table-responsive">
+                <table class="table hc-table align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th class="text-center">
+                                    <input type="checkbox" id="recoverySelectAll">
+                                </th>
+                                <th>Lead</th>
+                                <th>Status</th>
+                                <th>Owner</th>
+                                <th>Last Contact</th>
+                                <th>Re-Added</th>
+                                <th>Marked On</th>
+                                <th>Created</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recoveryTableBody">
+                            {% for lead in recovery_rows %}
+                            <tr data-status="{{ lead.status }}">
+                                <td class="text-center">
+                                    <input type="checkbox" class="js-recovery-select" name="selected_recovery_ids" value="{{ lead.id }}">
+                                </td>
+                                <td>
+                                    <strong>{{ lead.name }}</strong>
+                                    <div class="text-muted small">{{ lead.phone }}</div>
+                                    <div class="text-muted small">{{ lead.notes|default:"No notes yet" }}</div>
+                                </td>
+                                <td>
+                                    <span class="hc-status hc-status-{% if lead.status == 'not_interested' %}muted{% else %}warning{% endif %}">
+                                        {{ lead.status_label }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div>{{ lead.assigned_to }}</div>
+                                    {% if lead.assigned_to == "Unassigned" and lead.recovery_owner_name %}
+                                    <div class="small text-muted">Suggested owner: {{ lead.recovery_owner_name }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>{{ lead.last_contacted }}</td>
+                                <td><span class="hc-status hc-status-muted">{{ lead.readd_count }}</span></td>
+                                <td>{{ lead.updated_at }}</td>
+                                <td>{{ lead.created_at }}</td>
+                                <td>
+                                    <div class="d-flex flex-wrap justify-content-end gap-2">
+                                        <button
+                                            type="button"
+                                            class="btn btn-outline-primary btn-sm js-edit-lead"
+                                            data-lead-id="{{ lead.id }}"
+                                            data-name="{{ lead.name }}"
+                                            data-phone="{{ lead.phone }}"
+                                            data-status="{{ lead.status }}"
+                                            data-callback-window="{{ lead.callback_window }}"
+                                            data-callback-date="{{ lead.callback_date }}"
+                                            data-assigned-to-id="{{ lead.assigned_to_id }}"
+                                            data-notes="{{ lead.notes }}"
+                                        >Edit</button>
+                                        {% if lead.recovery_owner_id %}
+                                        <form method="post" data-confirm-title="Reassign Lead" data-confirm-message="Reassign this lead to {{ lead.recovery_owner_name }} as a new lead?" data-confirm-ok="Reassign" data-confirm-class="btn-primary">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="recovery_action" value="recover_single">
+                                            <input type="hidden" name="lead_id" value="{{ lead.id }}">
+                                            <input type="hidden" name="recover_mode" value="reassign_same_staff">
+                                            <button type="submit" class="btn btn-sm btn-outline-success">Reassign</button>
+                                        </form>
+                                        <form method="post" data-confirm-title="Move To Follow Up" data-confirm-message="Move this lead to Follow Up under {{ lead.recovery_owner_name }}?" data-confirm-ok="Move" data-confirm-class="btn-warning">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="recovery_action" value="recover_single">
+                                            <input type="hidden" name="lead_id" value="{{ lead.id }}">
+                                            <input type="hidden" name="recover_mode" value="mark_interested_same_staff">
+                                            <button type="submit" class="btn btn-sm btn-outline-warning">Mark Follow Up</button>
+                                        </form>
+                                        {% else %}
+                                        <span class="small text-muted align-self-center">No previous staff owner found</span>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="9" class="text-center py-5">
+                                    <div class="py-4">
+                                        <h5 class="mb-2">No leads found</h5>
+                                        <p class="text-muted mb-0">Try changing the search, sort, or filter controls above.</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mt-3">
+                    <div class="text-muted small">
+                        Page {{ recovery_pagination.current_page }} of {{ recovery_pagination.total_pages }}
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
+                        {% if recovery_pagination.has_previous %}
+                        <a class="btn btn-outline-primary btn-sm" href="{% url 'recovery-leads-page' %}{{ recovery_pagination.base_querystring }}&page={{ recovery_pagination.previous_page_number }}">Previous</a>
+                        {% endif %}
+                        {% for page_item in recovery_pagination.page_numbers %}
+                        {% if page_item.is_current %}
+                        <span class="btn btn-primary btn-sm disabled">{{ page_item.number }}</span>
+                        {% else %}
+                        <a class="btn btn-outline-primary btn-sm" href="{% url 'recovery-leads-page' %}{{ recovery_pagination.base_querystring }}&page={{ page_item.number }}">{{ page_item.number }}</a>
+                        {% endif %}
+                        {% endfor %}
+                        {% if recovery_pagination.has_next %}
+                        <a class="btn btn-outline-primary btn-sm" href="{% url 'recovery-leads-page' %}{{ recovery_pagination.base_querystring }}&page={{ recovery_pagination.next_page_number }}">Next</a>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end mt-3">
+                    <button type="submit" class="btn btn-outline-danger" id="recoveryDeleteSelected" disabled>Delete Marked</button>
+                </div>
+            </div>
+        </div>
     </div>
 </section>
 
@@ -366,7 +494,7 @@
                                 <option value="{{ staff.id }}">{{ staff.name }}</option>
                                 {% endfor %}
                             </select>
-                            <div class="form-text">Leave blank to place this lead into the automatic assignment queue.</div>
+                            <div class="form-text">Leave blank to keep the lead unassigned.</div>
                         </div>
                         <div class="col-12">
                             <label class="form-label fw-semibold" for="leadNotes">Notes</label>
