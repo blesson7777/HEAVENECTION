@@ -91,7 +91,6 @@ STAFF_CALL_QUEUE_STATUSES = (
     Lead.Status.NEW,
 )
 FOLLOW_UP_STATUSES = (
-    Lead.Status.INTERESTED,
     Lead.Status.CALL_BACK,
 )
 RECOVERY_LEAD_STATUSES = (
@@ -3642,10 +3641,6 @@ def _is_followup_highlighted(lead, *, now=None):
 
 
 def _normalize_followup_status(status):
-    if status == Lead.Status.CALL_BACK:
-        return Lead.Status.INTERESTED
-    if status == Call.Status.CALL_BACK:
-        return Call.Status.INTERESTED
     return status
 
 
@@ -8030,6 +8025,7 @@ def build_followup_payload(*, paginate=False, page=1, page_size=25):
     for lead in followups:
         owner_staff = _followup_owner(lead)
         lead_call_rows = call_rows_by_lead.get(lead.id, [])
+        queue_status = Lead.Status.CALL_BACK if lead.followup_moved_back_at else lead.status
         is_scheduled = _is_scheduled_followup(lead)
         is_due_today = bool(lead.callback_date and lead.callback_date == today)
         is_due_now = _is_callback_due(lead.callback_date, lead.callback_window, now=reference)
@@ -9035,8 +9031,8 @@ def build_recovery_lead_payload(
 
 def recover_recovery_lead_to_owner(lead_id, *, target_status=Lead.Status.NEW):
     normalized_status = str(target_status or "").strip()
-    if normalized_status not in {Lead.Status.NEW, Lead.Status.INTERESTED}:
-        raise ValueError("Recovery target must be New or Interested.")
+    if normalized_status not in {Lead.Status.NEW, Lead.Status.INTERESTED, Lead.Status.CALL_BACK}:
+        raise ValueError("Recovery target must be New, Interested, or Call Back.")
 
     try:
         parsed_id = uuid.UUID(str(lead_id))
@@ -9091,7 +9087,7 @@ def recover_recovery_lead_to_owner(lead_id, *, target_status=Lead.Status.NEW):
         "lead_name": lead.name,
         "owner_name": owner.name,
         "target_status": normalized_status,
-        "target_status_label": "Interested" if normalized_status == Lead.Status.INTERESTED else "New",
+        "target_status_label": dict(Lead.Status.choices).get(normalized_status, normalized_status),
     }
 
 
@@ -9146,9 +9142,8 @@ def reallocate_expired_followup_to_owner(lead_id):
         "updated_at",
     ]
     moved_back_at = timezone.now()
-    lead.status = Lead.Status.INTERESTED
-    if not lead.loan_stage:
-        lead.loan_stage = Lead.LoanStage.OFFICE_REVIEW
+    lead.status = Lead.Status.CALL_BACK
+    lead.loan_stage = ""
     lead.callback_window = ""
     lead.callback_date = None
     lead.followup_moved_back_at = moved_back_at
@@ -10146,8 +10141,9 @@ def build_staff_followups_payload(staff):
                 "id": str(lead.id),
                 "name": lead.name,
                 "phone": lead.phone,
-                "status": Lead.Status.INTERESTED,
-                "status_label": "Follow Up",
+                "status": queue_status,
+                "status_label": dict(Lead.Status.choices).get(queue_status, lead.get_status_display()),
+                "status_tone": "warning" if queue_status == Lead.Status.CALL_BACK else "muted",
                 "callback_window": lead.callback_window,
                 "callback_window_label": lead.get_callback_window_display() if lead.callback_window else "",
                 "callback_date": lead.callback_date.isoformat() if lead.callback_date else "",
@@ -10780,12 +10776,16 @@ def recover_staff_customer_lead(
     if session:
         _touch_session_interaction(session, now, metadata={"source": "customer_recovery"})
 
-    resolved_callback_window = callback_window if status == Lead.Status.INTERESTED else ""
-    resolved_callback_date = callback_date if status == Lead.Status.INTERESTED else None
+    resolved_callback_window = callback_window if status in {Lead.Status.INTERESTED, Lead.Status.CALL_BACK} else ""
+    resolved_callback_date = callback_date if status in {Lead.Status.INTERESTED, Lead.Status.CALL_BACK} else None
     previous_owner = lead.assigned_to.name if lead.assigned_to and lead.assigned_to_id != staff.id else ""
 
     lead.assigned_to = staff
     lead.status = status
+    if status == Lead.Status.INTERESTED and not lead.loan_stage:
+        lead.loan_stage = Lead.LoanStage.OFFICE_REVIEW
+    elif status in {Lead.Status.NEW, Lead.Status.CALL_BACK}:
+        lead.loan_stage = ""
     lead.callback_window = resolved_callback_window
     lead.callback_date = resolved_callback_date
     lead.last_contacted_at = now
@@ -10793,6 +10793,7 @@ def recover_staff_customer_lead(
         update_fields=[
             "assigned_to",
             "status",
+            "loan_stage",
             "callback_window",
             "callback_date",
             "last_contacted_at",
@@ -11098,8 +11099,8 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
     if session:
         _touch_session_interaction(session, now, metadata={"source": "call_status"})
 
-    resolved_callback_window = callback_window if status == Call.Status.INTERESTED else ""
-    resolved_callback_date = callback_date if status == Call.Status.INTERESTED else None
+    resolved_callback_window = callback_window if status == Call.Status.CALL_BACK else ""
+    resolved_callback_date = callback_date if status == Call.Status.CALL_BACK else None
     lead_status = status
     lead_callback_window = resolved_callback_window
     lead_callback_date = resolved_callback_date
@@ -11113,7 +11114,7 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
         if followup_progress["can_close"]:
             lead_status = Lead.Status.NO_ANSWER
         else:
-            lead_status = Lead.Status.INTERESTED
+            lead_status = Lead.Status.CALL_BACK
             lead_callback_window = call.lead.callback_window
             lead_callback_date = call.lead.callback_date
     update_fields = ["status", "callback_window", "callback_date", "updated_at"]
@@ -11138,6 +11139,8 @@ def update_staff_call_status(call, status, callback_window="", callback_date=Non
     call.lead.status = lead_status
     if lead_status == Lead.Status.INTERESTED and not call.lead.loan_stage:
         call.lead.loan_stage = Lead.LoanStage.OFFICE_REVIEW
+    elif lead_status == Lead.Status.CALL_BACK:
+        call.lead.loan_stage = ""
     elif lead_status == Lead.Status.CONVERTED:
         call.lead.loan_stage = Lead.LoanStage.SUCCESSFUL
     elif lead_status in {Lead.Status.NOT_INTERESTED, Lead.Status.NO_ANSWER}:

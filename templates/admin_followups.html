@@ -95,14 +95,14 @@
     </div>
 
     <div class="alert alert-primary border-0 mb-4" role="alert">
-        This queue shows every lead marked as <strong>Follow Up</strong> by staff. Scheduled leads stay highlighted here until the staff makes the next follow-up call. Use the separate <strong>Rejected / No Response</strong> and <strong>Closed Follow-Ups</strong> pages for the other queues.
+        This queue shows live <strong>Call Back</strong> work assigned by staff. Scheduled leads stay highlighted here until the staff makes the next follow-up call. Use the separate <strong>Rejected / No Response</strong> and <strong>Closed Follow-Ups</strong> pages for the other queues.
         {% if followup_expiry_settings.enabled %}
         Any follow-up with no staff update for <strong>{{ followup_expiry_settings.expiry_days }} day{% if followup_expiry_settings.expiry_days != 1 %}s{% endif %}</strong> is moved to <strong>Closed Follow-Up</strong>.
         {% else %}
         Auto-expiry is currently <strong>disabled</strong>.
         {% endif %}
         {% if followup_expiry_settings.uncalled_alert_enabled %}
-        A follow-up should get the first call within <strong>{{ followup_expiry_settings.uncalled_alert_hours }} hour{% if followup_expiry_settings.uncalled_alert_hours != 1 %}s{% endif %}</strong> after being marked Follow Up.
+        A follow-up should get the first call within <strong>{{ followup_expiry_settings.uncalled_alert_hours }} hour{% if followup_expiry_settings.uncalled_alert_hours != 1 %}s{% endif %}</strong> after being marked Call Back.
         {% endif %}
         Staff warning starts when a lead has no follow-up activity for <strong>{{ followup_expiry_settings.warning_days }} day{% if followup_expiry_settings.warning_days != 1 %}s{% endif %}</strong>.
         {% if followup_expiry_settings.sla_gate_enabled %}
@@ -173,7 +173,7 @@
                         <div class="small text-muted mt-1">{{ lead.next_step_label }}</div>
                     </td>
                     <td>
-                        <span class="hc-status hc-status-success mb-1">{{ lead.status_label }}</span>
+                        <span class="hc-status hc-status-{{ lead.status_tone|default:'warning' }} mb-1">{{ lead.status_label }}</span>
                         <div class="mt-1">{{ lead.assigned_to }}</div>
                         {% if lead.assigned_to_phone %}
                         <div class="small text-muted">{{ lead.assigned_to_phone }}</div>
@@ -373,7 +373,7 @@
                             value="{{ followup_expiry_settings.expiry_days }}"
                             required
                         >
-                        <div class="form-text">Follow-ups without updates older than this limit move to Expired Follow Up.</div>
+                        <div class="form-text">Call-backs without updates older than this limit move to Expired Follow Up.</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold" for="followupStaffWarningDays">Warn staff after pending (days)</label>
@@ -426,7 +426,7 @@
                     <hr class="my-3">
                     <div class="mb-3">
                         <h6 class="mb-2">No-Call SLA Rule</h6>
-                        <p class="text-muted small mb-0">Track leads that were marked Follow Up but did not get a next follow-up call in time.</p>
+                        <p class="text-muted small mb-0">Track leads that were marked Call Back but did not get a next follow-up call in time.</p>
                     </div>
                     <div class="form-check form-switch mb-3">
                         <input
@@ -612,11 +612,10 @@
                             <label class="form-label fw-semibold" for="leadStatus">Status</label>
                             <select class="form-select" id="leadStatus">
                                 <option value="new">New</option>
-                                <option value="interested">Follow Up</option>
+                                <option value="call_back">Call Back</option>
                                 <option value="not_interested">Rejected</option>
                                 <option value="no_answer">No Response</option>
                                 <option value="expired_followup">Expired Follow Up</option>
-                                <option value="call_back">Call Back</option>
                                 <option value="converted">Converted</option>
                             </select>
                         </div>
