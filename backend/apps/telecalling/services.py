@@ -3265,7 +3265,9 @@ def _is_active_queue_status(status):
 
 
 def _follow_up_queryset():
-    return Lead.objects.filter(status__in=FOLLOW_UP_STATUSES)
+    return Lead.objects.filter(
+        Q(status__in=FOLLOW_UP_STATUSES) | Q(followup_moved_back_at__isnull=False)
+    )
 
 
 def _followup_expiry_settings(*, company_profile=None):
@@ -3321,17 +3323,19 @@ def expire_stale_followups(*, now=None, expiry_days=None, enabled=None, company_
             "expiry_days": resolved_expiry_days,
         }
 
-    cutoff = now - timedelta(days=resolved_expiry_days)
+    cutoff = timezone.localtime(now - timedelta(days=resolved_expiry_days))
     stale_followups = list(
-        Lead.objects.select_related("assigned_to", "interested_detail__staff").filter(status__in=FOLLOW_UP_STATUSES).filter(
-            Q(last_contacted_at__lt=cutoff)
-            | Q(last_contacted_at__isnull=True, updated_at__lt=cutoff)
-        )
+        Lead.objects.select_related("assigned_to", "interested_detail__staff").filter(status__in=FOLLOW_UP_STATUSES)
     )
     expired_count = 0
     for lead in stale_followups:
+        stale_anchor = _followup_activity_anchor(lead)
+        if stale_anchor is None:
+            continue
+        stale_anchor = timezone.localtime(stale_anchor)
+        if stale_anchor >= cutoff:
+            continue
         actor_staff = lead.assigned_to or (getattr(getattr(lead, "interested_detail", None), "staff", None))
-        stale_anchor = lead.last_contacted_at or lead.updated_at or now
         lead.status = Lead.Status.EXPIRED_FOLLOWUP
         lead.callback_window = ""
         lead.callback_date = None
@@ -3352,7 +3356,7 @@ def expire_stale_followups(*, now=None, expiry_days=None, enabled=None, company_
                     "source": "followup_expiry",
                     "status": Lead.Status.EXPIRED_FOLLOWUP,
                     "expiry_days": resolved_expiry_days,
-                    "idle_days": max(0, (now - stale_anchor).days),
+                    "idle_days": max(0, (timezone.localdate(now) - timezone.localdate(stale_anchor)).days),
                 },
             )
         expired_count += 1
@@ -3377,15 +3381,17 @@ def build_staff_followup_sla_gate_status(staff, *, now=None, company_profile=Non
     settings = _followup_expiry_settings(company_profile=profile)
     reference = now or timezone.now()
     warning_days = max(1, int(settings["warning_days"] or FOLLOWUP_STAFF_WARNING_DAYS))
-    cutoff = reference - timedelta(days=warning_days)
-    crossed_sla_queryset = Lead.objects.filter(
+    cutoff = timezone.localtime(reference - timedelta(days=warning_days))
+    crossed_sla_count = 0
+    for lead in Lead.objects.select_related("assigned_to", "interested_detail__staff").filter(
         assigned_to=staff,
         status__in=FOLLOW_UP_STATUSES,
-    ).filter(
-        Q(last_contacted_at__lt=cutoff)
-        | Q(last_contacted_at__isnull=True, updated_at__lt=cutoff)
-    )
-    crossed_sla_count = crossed_sla_queryset.count()
+    ):
+        activity_anchor = _followup_activity_anchor(lead)
+        if activity_anchor is None:
+            continue
+        if timezone.localtime(activity_anchor) < cutoff:
+            crossed_sla_count += 1
 
     _today, start, end = _today_range(reference)
     completed_followup_call_statuses = {
@@ -3655,6 +3661,19 @@ def _call_activity_stamp(call_row):
     if not call_row:
         return None
     return call_row.get("end_time") or call_row.get("start_time") or call_row.get("created_at")
+
+
+def _followup_activity_anchor(lead):
+    stamps = [
+        getattr(lead, "followup_moved_back_at", None),
+        getattr(lead, "last_contacted_at", None),
+        getattr(lead, "updated_at", None),
+        getattr(lead, "created_at", None),
+    ]
+    normalized_stamps = [timezone.localtime(stamp) for stamp in stamps if stamp]
+    if not normalized_stamps:
+        return None
+    return max(normalized_stamps)
 
 
 def _lead_route_status_meta(status):
@@ -7581,13 +7600,28 @@ def build_lead_management_payload(
 
     lead_rows = []
     for lead in page_obj.object_list:
+        moved_back_active = bool(lead.followup_moved_back_at and lead.status == Lead.Status.EXPIRED_FOLLOWUP)
+        status_label = lead.get_status_display()
+        status_tone = {
+            Lead.Status.NEW: "new",
+            Lead.Status.INTERESTED: "warning",
+            Lead.Status.CALL_BACK: "warning",
+            Lead.Status.EXPIRED_FOLLOWUP: "danger",
+            Lead.Status.NOT_INTERESTED: "muted",
+            Lead.Status.NO_ANSWER: "primary",
+            Lead.Status.CONVERTED: "primary",
+        }.get(lead.status, "muted")
+        if moved_back_active:
+            status_label = "Follow Up"
+            status_tone = "warning"
         lead_rows.append(
             {
                 "id": str(lead.id),
                 "name": lead.name,
                 "phone": lead.phone,
                 "status": lead.status,
-                "status_label": lead.get_status_display(),
+                "status_label": status_label,
+                "status_tone": status_tone,
                 "callback_window": lead.callback_window,
                 "callback_window_label": lead.get_callback_window_display() if lead.callback_window else "",
                 "callback_date": lead.callback_date.isoformat() if lead.callback_date else "",
@@ -7602,6 +7636,8 @@ def build_lead_management_payload(
                 "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
                 "updated_at": _format_datetime(lead.updated_at),
                 "created_at": _format_datetime(lead.created_at),
+                "followup_moved_back_at": _format_datetime(lead.followup_moved_back_at, fallback="Not moved back yet"),
+                "followup_moved_back_present": bool(lead.followup_moved_back_at),
                 "readd_count": lead.readd_count,
                 "has_notes": bool(lead.notes.strip()),
                 "is_unassigned": lead.assigned_to_id is None,
@@ -7873,7 +7909,7 @@ def build_followup_payload(*, paginate=False, page=1, page_size=25):
 
         anchor_at = latest_mark_stamp
         if anchor_at is None:
-            fallback_anchor = lead.last_contacted_at or lead.updated_at or lead.created_at
+            fallback_anchor = _followup_activity_anchor(lead)
             anchor_at = timezone.localtime(fallback_anchor) if fallback_anchor else timezone.localtime(reference)
 
         has_followup_call_after_mark = False
@@ -7907,6 +7943,40 @@ def build_followup_payload(*, paginate=False, page=1, page_size=25):
             "state_tone": state_tone,
         }
 
+    def _build_closed_followup_row(lead, *, row_type):
+        owner_staff = _followup_owner(lead)
+        activity_anchor = _followup_activity_anchor(lead) or timezone.localtime(reference)
+        days_idle = max(
+            0,
+            (timezone.localdate(reference) - timezone.localdate(activity_anchor)).days,
+        )
+        row_type_label = "Expired" if row_type == "expired" else "Rejected"
+        row_type_tone = "danger" if row_type == "expired" else "secondary"
+        return {
+            "id": str(lead.id),
+            "name": lead.name,
+            "phone": lead.phone,
+            "status": lead.status,
+            "status_label": lead.get_status_display(),
+            "status_tone": "danger" if row_type == "expired" else "muted",
+            "row_type": row_type,
+            "row_type_label": row_type_label,
+            "row_type_tone": row_type_tone,
+            "is_expired_followup": row_type == "expired",
+            "is_rejected_followup": row_type == "rejected",
+            "assigned_to_id": str(owner_staff.id) if owner_staff else "",
+            "assigned_to": owner_staff.name if owner_staff else "Unassigned",
+            "assigned_to_phone": owner_staff.phone if owner_staff else "",
+            "notes": lead.notes,
+            "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
+            "last_contacted_sort": lead.last_contacted_at.isoformat() if lead.last_contacted_at else "",
+            "followup_moved_back_at": _format_datetime(lead.followup_moved_back_at, fallback="Not moved back yet"),
+            "followup_moved_back_sort": lead.followup_moved_back_at.isoformat() if lead.followup_moved_back_at else "",
+            "updated_at": _format_datetime(lead.updated_at),
+            "updated_at_sort": lead.updated_at.isoformat() if lead.updated_at else "",
+            "days_idle": days_idle,
+        }
+
     followup_rows = []
     for lead in followups:
         owner_staff = _followup_owner(lead)
@@ -7918,7 +7988,7 @@ def build_followup_payload(*, paginate=False, page=1, page_size=25):
         is_unscheduled = not is_scheduled
         followup_progress = _followup_no_response_progress(lead, preloaded_rows=lead_call_rows)
         mark_tracking = _followup_mark_tracking(lead, lead_call_rows)
-        activity_anchor = lead.last_contacted_at or lead.updated_at or lead.created_at
+        activity_anchor = _followup_activity_anchor(lead) or timezone.localtime(reference)
         days_since_update = max(
             0,
             (timezone.localdate(reference) - timezone.localdate(activity_anchor)).days,
@@ -8057,32 +8127,19 @@ def build_followup_payload(*, paginate=False, page=1, page_size=25):
     rejected_followup_count = sum(1 for lead in rejected_candidates if lead.id in rejected_with_followup_history)
     expired_followup_rows = []
     for lead in expired_candidates:
-        owner_staff = _followup_owner(lead)
-        activity_anchor = lead.last_contacted_at or lead.updated_at or lead.created_at
-        days_idle = max(
-            0,
-            (timezone.localdate(reference) - timezone.localdate(activity_anchor)).days,
-        )
-        expired_followup_rows.append(
-            {
-                "id": str(lead.id),
-                "name": lead.name,
-                "phone": lead.phone,
-                "status": lead.status,
-                "status_label": lead.get_status_display(),
-                "assigned_to_id": str(owner_staff.id) if owner_staff else "",
-                "assigned_to": owner_staff.name if owner_staff else "Unassigned",
-                "assigned_to_phone": owner_staff.phone if owner_staff else "",
-                "notes": lead.notes,
-                "last_contacted": _format_datetime(lead.last_contacted_at, fallback="Not called yet"),
-                "last_contacted_sort": lead.last_contacted_at.isoformat() if lead.last_contacted_at else "",
-                "followup_moved_back_at": _format_datetime(lead.followup_moved_back_at, fallback="Not moved back yet"),
-                "followup_moved_back_sort": lead.followup_moved_back_at.isoformat() if lead.followup_moved_back_at else "",
-                "updated_at": _format_datetime(lead.updated_at),
-                "updated_at_sort": lead.updated_at.isoformat() if lead.updated_at else "",
-                "days_idle": days_idle,
-            }
-        )
+        expired_followup_rows.append(_build_closed_followup_row(lead, row_type="expired"))
+
+    rejected_followup_rows = []
+    for lead in rejected_candidates:
+        if lead.id not in rejected_with_followup_history:
+            continue
+        rejected_followup_rows.append(_build_closed_followup_row(lead, row_type="rejected"))
+
+    closed_followup_rows = expired_followup_rows + rejected_followup_rows
+    closed_followup_rows.sort(
+        key=lambda row: row.get("updated_at_sort", ""),
+        reverse=True,
+    )
 
     expired_followup_rows.sort(
         key=lambda row: row.get("updated_at_sort", ""),
@@ -8237,6 +8294,8 @@ def build_followup_payload(*, paginate=False, page=1, page_size=25):
     return {
         "followup_rows": followup_rows_display,
         "expired_followup_rows": expired_followup_rows,
+        "rejected_followup_rows": rejected_followup_rows,
+        "closed_followup_rows": closed_followup_rows,
         "staff_options": [
             {"id": str(staff.id), "name": staff.name}
             for staff in _staff_queryset().filter(is_active=True)
@@ -8245,6 +8304,7 @@ def build_followup_payload(*, paginate=False, page=1, page_size=25):
             "total_followups": len(followup_rows),
             "rejected_followup_count": rejected_followup_count,
             "expired_followup_count": len(expired_followup_rows),
+            "closed_followup_count": len(closed_followup_rows),
             "scheduled_count": sum(1 for row in followup_rows if row["is_scheduled"]),
             "unscheduled_count": sum(1 for row in followup_rows if row["is_unscheduled"]),
             "due_now_count": sum(1 for row in followup_rows if row["is_due_now"]),
@@ -9982,7 +10042,7 @@ def build_staff_followups_payload(staff):
         no_answer_attempt_count = followup_progress["attempt_count"]
         is_scheduled_followup = _is_scheduled_followup(lead)
         is_due_now = _is_followup_highlighted(lead, now=now) if is_scheduled_followup else False
-        activity_anchor = lead.last_contacted_at or lead.updated_at or lead.created_at
+        activity_anchor = _followup_activity_anchor(lead) or timezone.localtime(now)
         days_since_update = max(
             0,
             (timezone.localdate(now) - timezone.localdate(activity_anchor)).days,

@@ -2181,7 +2181,7 @@ def expired_followups_page(request):
         return redirect("web-login")
 
     payload = build_followup_payload()
-    expired_rows = list(payload.get("expired_followup_rows", []))
+    closed_rows = list(payload.get("closed_followup_rows", payload.get("expired_followup_rows", [])))
     try:
         normalized_page_size = int(request.GET.get("page_size", 25) or 25)
     except (TypeError, ValueError):
@@ -2196,19 +2196,19 @@ def expired_followups_page(request):
 
     reverse_sort = normalized_sort_dir == "desc"
     if normalized_sort_by == "days_idle":
-        expired_rows.sort(key=lambda row: int(row.get("days_idle") or 0), reverse=reverse_sort)
+        closed_rows.sort(key=lambda row: int(row.get("days_idle") or 0), reverse=reverse_sort)
     elif normalized_sort_by == "name":
-        expired_rows.sort(key=lambda row: str(row.get("name") or "").lower(), reverse=reverse_sort)
+        closed_rows.sort(key=lambda row: str(row.get("name") or "").lower(), reverse=reverse_sort)
     elif normalized_sort_by == "phone":
-        expired_rows.sort(key=lambda row: str(row.get("phone") or ""), reverse=reverse_sort)
+        closed_rows.sort(key=lambda row: str(row.get("phone") or ""), reverse=reverse_sort)
     elif normalized_sort_by == "assigned_to":
-        expired_rows.sort(key=lambda row: str(row.get("assigned_to") or "").lower(), reverse=reverse_sort)
+        closed_rows.sort(key=lambda row: str(row.get("assigned_to") or "").lower(), reverse=reverse_sort)
     elif normalized_sort_by == "last_contacted":
-        expired_rows.sort(key=lambda row: str(row.get("last_contacted_sort") or ""), reverse=reverse_sort)
+        closed_rows.sort(key=lambda row: str(row.get("last_contacted_sort") or ""), reverse=reverse_sort)
     else:
-        expired_rows.sort(key=lambda row: str(row.get("updated_at_sort") or ""), reverse=reverse_sort)
+        closed_rows.sort(key=lambda row: str(row.get("updated_at_sort") or ""), reverse=reverse_sort)
 
-    paginator = Paginator(expired_rows, normalized_page_size)
+    paginator = Paginator(closed_rows, normalized_page_size)
     try:
         page_obj = paginator.page(request.GET.get("page", 1) or 1)
     except EmptyPage:
@@ -2228,11 +2228,12 @@ def expired_followups_page(request):
         request,
         current_user,
         active_page="expired-followups",
-        page_title="Expired Follow-Ups",
-        page_heading="Expired Follow-Ups",
-        page_subtitle="Review follow-up leads that aged out, then move them back to the active queue when needed.",
+        page_title="Closed Follow-Ups",
+        page_heading="Closed Follow-Ups",
+        page_subtitle="Review follow-up leads that were closed out, then move them back when needed.",
         extra_context={
             **payload,
+            "closed_followup_rows": list(page_obj.object_list),
             "expired_followup_rows": list(page_obj.object_list),
             "expired_followup_filters": {
                 "page_size": normalized_page_size,

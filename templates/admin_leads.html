@@ -259,7 +259,7 @@
             </thead>
             <tbody id="leadTableBody">
                 {% for lead in lead_rows %}
-                <tr data-status="{{ lead.status }}">
+                <tr data-status="{% if lead.followup_moved_back_present and lead.status == 'expired_followup' %}interested{% else %}{{ lead.status }}{% endif %}">
                     <td class="lead-select-column d-none">
                         <input type="checkbox" class="form-check-input js-lead-select-checkbox" value="{{ lead.id }}">
                     </td>
@@ -269,7 +269,10 @@
                     </td>
                     <td>{{ lead.phone }}</td>
                     <td>
-                        <span class="hc-status hc-status-{% if lead.status == 'new' %}new{% elif lead.status == 'call_back' or lead.status == 'interested' %}warning{% elif lead.status == 'expired_followup' %}danger{% elif lead.status == 'converted' %}primary{% else %}muted{% endif %}">{{ lead.status_label }}</span>
+                        <span class="hc-status hc-status-{{ lead.status_tone }}">{{ lead.status_label }}</span>
+                        {% if lead.followup_moved_back_present %}
+                        <div class="small text-muted mt-1">Moved back: {{ lead.followup_moved_back_at }}</div>
+                        {% endif %}
                         {% if lead.callback_schedule_label %}
                         <div class="small text-muted mt-1">{{ lead.callback_schedule_label }}</div>
                         {% endif %}
