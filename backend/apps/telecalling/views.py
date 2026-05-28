@@ -1991,12 +1991,12 @@ def followups_page(request):
                 summary = reallocate_expired_followup_to_owner(lead_id)
             except ValueError as error:
                 messages.error(request, str(error))
-                return redirect("followups-page")
+                return redirect("expired-followups-page")
             messages.success(
                 request,
-                f"{summary['lead_name']} moved back to Follow Up under {summary['owner_name']}.",
+                f"{summary['lead_name']} moved back to the active queue under {summary['owner_name']}.",
             )
-            return redirect("followups-page")
+            return redirect("expired-followups-page")
         if followup_action == "mark_rejected":
             lead_id = (request.POST.get("lead_id") or "").strip()
             if not lead_id:
