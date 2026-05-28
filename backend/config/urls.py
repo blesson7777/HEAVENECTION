@@ -29,6 +29,7 @@ urlpatterns = [
     path("followups/", views.followups_page, name="followups-page"),
     path("interested-leads/", views.interested_leads_page, name="interested-leads-page"),
     path("callbacks/", views.callbacks_page, name="callbacks-page"),
+    path("expired-followups/", views.expired_followups_page, name="expired-followups-page"),
     path("recovery-leads/", views.recovery_leads_page, name="recovery-leads-page"),
     path("learning/", views.learning_page, name="learning-page"),
     path("work-review/", views.work_review_page, name="work-review-page"),

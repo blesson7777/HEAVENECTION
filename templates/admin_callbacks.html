@@ -2,6 +2,9 @@
 
 {% block page_actions %}
 <a href="{% url 'leads-page' %}" class="btn btn-outline-primary btn-sm">Lead Desk</a>
+<a href="{% url 'followups-page' %}" class="btn btn-outline-primary btn-sm">Follow-Up Queue</a>
+<a href="{% url 'expired-followups-page' %}" class="btn btn-outline-primary btn-sm">Expired Follow-Ups</a>
+<a href="{% url 'recovery-leads-page' %}" class="btn btn-outline-primary btn-sm">Rejected / No Response</a>
 <a href="{% url 'callbacks-page' %}?download=csv" class="btn btn-outline-primary btn-sm">Download CSV</a>
 <a href="{% url 'callbacks-page' %}?download=xlsx" class="btn btn-outline-primary btn-sm">Download Excel</a>
 {% endblock %}

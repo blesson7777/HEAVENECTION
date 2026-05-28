@@ -265,6 +265,7 @@
             { inputId: "leadSearchInput", tableBodyId: "leadTableBody" },
             { inputId: "followupSearchInput", tableBodyId: "followupTableBody" },
             { inputId: "callbackSearchInput", tableBodyId: "callbackTableBody" },
+            { inputId: "expiredFollowupSearchInput", tableBodyId: "expiredFollowupTableBody" },
             { inputId: "recoverySearchInput", tableBodyId: "recoveryTableBody" },
             { inputId: "callSearchInput", tableBodyId: "callTableBody" },
             { inputId: "staffSearchInput", tableBodyId: "staffTableBody" },

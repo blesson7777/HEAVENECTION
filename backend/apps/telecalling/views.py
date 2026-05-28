@@ -2090,7 +2090,7 @@ def followups_page(request):
         active_page="followups",
         page_title="Follow-Up Queue",
         page_heading="Follow-Up Queue",
-        page_subtitle="Track scheduled and unscheduled follow-ups, unanswered tries, and client handover from one queue.",
+        page_subtitle="Keep the main follow-up queue focused on live work. Open the other queue pages for callbacks, recovery, and expired follow-ups.",
         extra_context=build_followup_payload(),
     )
     return render(request, "admin_followups.html", context)
@@ -2152,7 +2152,52 @@ def interested_leads_page(request):
 
 @require_GET
 def callbacks_page(request):
-    return redirect("followups-page")
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    if request.GET.get("download") == "csv":
+        csv_content = build_callback_csv_response()
+        response = HttpResponse(csv_content, content_type="text/csv")
+        response["Content-Disposition"] = 'attachment; filename="heavenection-callbacks.csv"'
+        return response
+    if request.GET.get("download") == "xlsx":
+        excel_content = build_callback_excel_response()
+        response = HttpResponse(
+            excel_content,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = 'attachment; filename="heavenection-callbacks.xlsx"'
+        return response
+
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="callbacks",
+        page_title="Call Back Desk",
+        page_heading="Call Back Desk",
+        page_subtitle="Use this page for leads that need a scheduled call back slot and a clear next contact window.",
+        extra_context=build_callback_payload(),
+    )
+    return render(request, "admin_callbacks.html", context)
+
+
+@require_GET
+def expired_followups_page(request):
+    current_user = _get_admin_user_or_redirect(request)
+    if not current_user:
+        return redirect("web-login")
+
+    context = _admin_web_context(
+        request,
+        current_user,
+        active_page="expired-followups",
+        page_title="Expired Follow-Ups",
+        page_heading="Expired Follow-Ups",
+        page_subtitle="Review follow-up leads that aged out, then move them back to the active queue when needed.",
+        extra_context=build_followup_payload(),
+    )
+    return render(request, "admin_expired_followups.html", context)
 
 
 @require_http_methods(["GET", "POST"])
