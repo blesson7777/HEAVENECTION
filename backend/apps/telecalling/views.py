@@ -2000,7 +2000,7 @@ def followups_page(request):
                 return redirect(reverse("expired-followups-page") + return_query)
             messages.success(
                 request,
-                f"{summary['lead_name']} recovered back to Interested under {summary['owner_name']}.",
+                f"{summary['lead_name']} moved back to the active queue under {summary['owner_name']}.",
             )
             return redirect(reverse("expired-followups-page") + return_query)
         if followup_action == "mark_rejected":
@@ -2262,13 +2262,13 @@ def expired_followups_page(request):
             "expired_followup_pagination": {
                 "page_number": page_obj.number,
                 "num_pages": paginator.num_pages or 1,
-                "filtered_count": len(expired_rows),
+                "filtered_count": len(closed_rows),
                 "has_previous": page_obj.has_previous(),
                 "has_next": page_obj.has_next(),
                 "previous_page_number": page_obj.previous_page_number() if page_obj.has_previous() else 1,
                 "next_page_number": page_obj.next_page_number() if page_obj.has_next() else (paginator.num_pages or 1),
-                "start_index": page_obj.start_index() if expired_rows else 0,
-                "end_index": page_obj.end_index() if expired_rows else 0,
+                "start_index": page_obj.start_index() if closed_rows else 0,
+                "end_index": page_obj.end_index() if closed_rows else 0,
                 "page_numbers": [
                     {"number": page_number, "is_current": page_number == page_obj.number}
                     for page_number in range(start_page, end_page + 1)
