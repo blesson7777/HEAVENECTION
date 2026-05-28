@@ -8883,28 +8883,31 @@ def reallocate_expired_followup_to_owner(lead_id):
         and owner.is_active
     ):
         owner = _recovery_owner_staff_map([lead]).get(lead.id)
-    if owner is None:
-        raise ValueError("No active staff owner found for this expired follow-up lead.")
 
-    lead.assigned_to = owner
+    update_fields = [
+        "assigned_to",
+        "status",
+        "callback_window",
+        "callback_date",
+        "updated_at",
+    ]
     lead.status = Lead.Status.INTERESTED
     lead.callback_window = ""
     lead.callback_date = None
-    lead.save(
-        update_fields=[
-            "assigned_to",
-            "status",
-            "callback_window",
-            "callback_date",
-            "updated_at",
-        ]
-    )
-    auto_allocate_leads(target_staff=owner, prioritized_lead_ids=[lead.id])
+    if owner is not None:
+        lead.assigned_to = owner
+    else:
+        lead.assigned_to = None
+    lead.save(update_fields=update_fields)
+    if owner is not None:
+        auto_allocate_leads(target_staff=owner, prioritized_lead_ids=[lead.id])
+    else:
+        auto_allocate_leads(prioritized_lead_ids=[lead.id])
 
     return {
         "lead_id": str(lead.id),
         "lead_name": lead.name,
-        "owner_name": owner.name,
+        "owner_name": owner.name if owner else "Auto allocated",
     }
 
 
