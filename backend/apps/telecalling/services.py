@@ -1750,6 +1750,27 @@ def _snapshot_with_paid_total(snapshot, paid_total):
     return updated_snapshot
 
 
+def _apply_advance_credit_to_closed_snapshot(snapshot, credit_amount):
+    credit_amount = _money(credit_amount)
+    if credit_amount <= Decimal("0.00"):
+        return dict(snapshot), Decimal("0.00")
+
+    current_paid_total = _money(snapshot.get("paid_total") or Decimal("0.00"))
+    current_balance = _money(snapshot.get("balance") or Decimal("0.00"))
+    applied_credit = min(credit_amount, current_balance)
+    if applied_credit <= Decimal("0.00"):
+        return dict(snapshot), Decimal("0.00")
+
+    updated_snapshot = _snapshot_with_paid_total(
+        snapshot,
+        current_paid_total + applied_credit,
+    )
+    updated_snapshot["advance_credit_applied"] = applied_credit
+    updated_snapshot["advance_credit_applied_label"] = _format_currency(applied_credit)
+    updated_snapshot["advance_credit_applied_raw"] = f"{_money(applied_credit):.2f}"
+    return updated_snapshot, applied_credit
+
+
 def _salary_schedule_label(staff):
     if staff.compensation_type == Staff.CompensationType.WEEKLY:
         return f"Every {staff.get_weekly_payout_day_display()}"
@@ -2353,6 +2374,10 @@ def build_staff_salary_details_payload(staff):
         period_end=previous_month_end,
         payout_cycle=Salary.PayoutCycle.MONTHLY,
     )
+    previous_month_snapshot, previous_month_advance_credit = _apply_advance_credit_to_closed_snapshot(
+        previous_month_snapshot,
+        current_snapshot["paid_total"],
+    )
 
     if staff.compensation_type == Staff.CompensationType.WEEKLY:
         pattern_title = "Recent weekly earnings"
@@ -2399,6 +2424,7 @@ def build_staff_salary_details_payload(staff):
             previous_month_snapshot,
             subtitle="Review the full earning and payment position from the last completed month.",
         ),
+        "previous_month_advance_credit": _format_currency(previous_month_advance_credit),
         "pattern": {
             "title": pattern_title,
             "subtitle": pattern_subtitle,
@@ -6927,6 +6953,21 @@ def build_salary_page_payload():
                 payout_cycle=_running_payout_cycle_for_staff(staff),
             ),
         )
+        due_snapshot, due_advance_credit = _apply_advance_credit_to_closed_snapshot(
+            due_snapshot,
+            running_snapshot["paid_total"],
+        )
+        previous_month_start, previous_month_end = _previous_month_range(today)
+        previous_month_snapshot = _salary_period_snapshot(
+            staff,
+            period_start=previous_month_start,
+            period_end=previous_month_end,
+            payout_cycle=Salary.PayoutCycle.MONTHLY,
+        )
+        previous_month_snapshot, previous_month_advance_credit = _apply_advance_credit_to_closed_snapshot(
+            previous_month_snapshot,
+            running_snapshot["paid_total"],
+        )
         advance_available = running_snapshot["balance"]
         same_period_as_due = (
             due_snapshot["period_start"] == running_snapshot["period_start"]
@@ -6980,6 +7021,7 @@ def build_salary_page_payload():
                 "due_base_pay": due_snapshot["base_pay_label"],
                 "due_call_earnings": due_snapshot["call_earnings_label"],
                 "due_bonus_earnings": due_snapshot["bonus_earnings_label"],
+                "due_advance_credit": _format_currency(due_advance_credit),
                 "running_payout_cycle": running_snapshot["payout_cycle"],
                 "running_period_start": running_snapshot["period_start"].isoformat(),
                 "running_period_end": running_snapshot["period_end"].isoformat(),
@@ -6987,6 +7029,7 @@ def build_salary_page_payload():
                 "running_hours_label": running_snapshot["hours_label"],
                 "running_earned_total": running_snapshot["earned_total_label"],
                 "running_paid_total": running_snapshot["paid_total_label"],
+                "previous_month_advance_credit": _format_currency(previous_month_advance_credit),
                 "advance_available_raw": f"{_money(advance_available):.2f}",
                 "advance_available": _format_currency(advance_available),
                 "credited_total": _format_currency(paid_totals_by_staff.get(staff.id, Decimal("0.00"))),
@@ -7088,12 +7131,20 @@ def build_salary_detail_payload(staff):
             payout_cycle=_running_payout_cycle_for_staff(staff),
         ),
     )
+    due_snapshot, due_advance_credit = _apply_advance_credit_to_closed_snapshot(
+        due_snapshot,
+        running_snapshot["paid_total"],
+    )
     previous_month_start, previous_month_end = _previous_month_range(today)
     previous_month_snapshot = _salary_period_snapshot(
         staff,
         period_start=previous_month_start,
         period_end=previous_month_end,
         payout_cycle=Salary.PayoutCycle.MONTHLY,
+    )
+    previous_month_snapshot, previous_month_advance_credit = _apply_advance_credit_to_closed_snapshot(
+        previous_month_snapshot,
+        running_snapshot["paid_total"],
     )
     salary_history = build_staff_salary_history_rows(staff, limit=40)
     total_paid = (
@@ -7131,6 +7182,7 @@ def build_salary_detail_payload(staff):
             "due_salary": due_snapshot["balance_label"],
             "current_earned": running_snapshot["earned_total_label"],
             "advance_available": _format_currency(advance_available),
+            "due_advance_credit": _format_currency(due_advance_credit),
             "total_paid": _format_currency(total_paid),
             "last_paid_at": _format_datetime(latest_transaction.paid_at) if latest_transaction else "--",
             "last_paid_amount": _format_currency(latest_transaction.amount) if latest_transaction else _format_currency(0),
@@ -7153,6 +7205,7 @@ def build_salary_detail_payload(staff):
             "is_payable": show_previous_due_card,
             "is_closed_period": due_period_closed,
             "cycle_label": Salary.PayoutCycle(due_snapshot["payout_cycle"]).label,
+            "advance_credit_applied": _format_currency(due_advance_credit),
         },
         "running_snapshot": {
             **running_snapshot,
@@ -7168,6 +7221,7 @@ def build_salary_detail_payload(staff):
             "period_start_value": previous_month_snapshot["period_start"].isoformat(),
             "period_end_value": previous_month_snapshot["period_end"].isoformat(),
             "cycle_label": Salary.PayoutCycle(previous_month_snapshot["payout_cycle"]).label,
+            "advance_credit_applied": _format_currency(previous_month_advance_credit),
         },
         "company_flags": {
             "referral_enabled": company_profile.referral_program_enabled,
