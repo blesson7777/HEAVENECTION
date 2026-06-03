@@ -3878,6 +3878,12 @@
             if (liveStaffNode) {
                 liveStaffNode.textContent = summary.online_now ?? 0;
             }
+            if (totalStaffNode) {
+                totalStaffNode.textContent = summary.total_staff ?? 0;
+            }
+            if (pausedIntakeNode) {
+                pausedIntakeNode.textContent = summary.lead_intake_paused ?? 0;
+            }
             if (activeHoursNode) {
                 activeHoursNode.textContent = summary.active_hours_label || "0m";
             }
@@ -5219,6 +5225,7 @@
         const apiUrl = root.dataset.apiUrl || window.heavenectionAdmin?.liveMonitoringUrl || "";
         const profileUrlTemplate = root.dataset.profileUrlTemplate || "";
         const overviewBody = document.getElementById("performanceMonitoringOverviewBody");
+        const detailedBody = document.getElementById("performanceMonitoringDetailedBody");
         const followupBody = document.getElementById("performanceMonitoringFollowupBody");
         const qualityBody = document.getElementById("performanceMonitoringQualityBody");
         const attentionBody = document.getElementById("performanceMonitoringAttentionBody");
@@ -5232,10 +5239,16 @@
         const nextRefreshNode = document.getElementById("performanceMonitoringNextRefresh");
         const liveStaffNode = document.getElementById("performanceMonitoringLiveStaff");
         const activeHoursNode = document.getElementById("performanceMonitoringActiveHours");
+        const totalStaffNode = document.getElementById("performanceMonitoringTotalStaff");
+        const pausedIntakeNode = document.getElementById("performanceMonitoringLeadIntakePaused");
         const followupRateNode = document.getElementById("performanceMonitoringFollowupRate");
         const followupMetaNode = document.getElementById("performanceMonitoringFollowupMeta");
         const reviewPressureNode = document.getElementById("performanceMonitoringReviewPressure");
         const convertedNode = document.getElementById("performanceMonitoringConverted");
+        const detailTitleNode = document.getElementById("performanceMonitoringDetailTitle");
+        const detailSubtitleNode = document.getElementById("performanceMonitoringDetailSubtitle");
+        const detailGridNode = document.getElementById("performanceMonitoringDetailGrid");
+        const detailRailNode = document.getElementById("performanceMonitoringDetailRail");
 
         const refreshMs = 8000;
         let refreshTimer = null;
@@ -5243,8 +5256,13 @@
         let nextRefreshAt = null;
         let refreshInFlight = false;
         let activeSheet = "overview";
+        let selectedStaffId = "";
         let latestPayload = readJsonScript("heavenectionPerformanceMonitoringPayload") || {};
-        let latestRows = Array.isArray(latestPayload?.staff_rows) ? latestPayload.staff_rows : [];
+        let latestRows = Array.isArray(latestPayload?.performance_rows)
+            ? latestPayload.performance_rows
+            : Array.isArray(latestPayload?.staff_rows)
+                ? latestPayload.staff_rows
+                : [];
 
         function asNumber(value) {
             const parsed = Number(value || 0);
@@ -5281,6 +5299,24 @@
                 return "#";
             }
             return profileUrlTemplate.replace("00000000-0000-0000-0000-000000000000", staffId);
+        }
+
+        function followupStats(row) {
+            const total = asNumber(row?.followup_total ?? row?.callback_total);
+            const missed = asNumber(row?.missed_callbacks);
+            const completed = Math.max(total - missed, 0);
+            const rate = total > 0 ? Math.max(0, Math.min(100, Math.round((completed / total) * 100))) : null;
+            return {
+                total,
+                missed,
+                completed,
+                rate,
+                rateLabel: rate === null ? "--" : `${rate}%`,
+            };
+        }
+
+        function selectedRow() {
+            return latestRows.find((row) => String(row?.id || "") === String(selectedStaffId || ""));
         }
 
         function clearScheduledRefresh() {
@@ -5401,6 +5437,102 @@
             });
         }
 
+        function updateSelectedStaffId(nextId, { renderOnly = false } = {}) {
+            const candidate = String(nextId || "").trim();
+            const fallback = latestRows.length ? String(latestRows[0]?.id || "").trim() : "";
+            const resolved = candidate && latestRows.some((row) => String(row?.id || "") === candidate)
+                ? candidate
+                : fallback;
+            if (!resolved) {
+                selectedStaffId = "";
+                renderDetailPanel(null);
+                return;
+            }
+            selectedStaffId = resolved;
+            if (!renderOnly) {
+                renderSelectedRowHighlights();
+            }
+            renderDetailPanel(selectedRow());
+        }
+
+        function renderSelectedRowHighlights() {
+            document.querySelectorAll("[data-staff-id]").forEach((node) => {
+                const matches = String(node.dataset.staffId || "") === String(selectedStaffId || "");
+                node.classList.toggle("is-selected", matches);
+            });
+        }
+
+        function rowHtmlAttributes(row) {
+            return `data-staff-id="${escapeHtml(String(row?.id || ""))}" class="hc-performance-sheet-row js-performance-row${String(row?.id || "") === String(selectedStaffId || "") ? " is-selected" : ""}"`;
+        }
+
+        function renderDetailCard(title, value, note = "", tone = "muted") {
+            return `
+                <div class="hc-performance-detail-card">
+                    <span class="mf-db2-kicker">${escapeHtml(title)}</span>
+                    <strong>${escapeHtml(value || "--")}</strong>
+                    ${note ? `<small class="text-${escapeHtml(tone)}">${escapeHtml(note)}</small>` : ""}
+                </div>
+            `;
+        }
+
+        function renderDetailPanel(row) {
+            if (!detailGridNode || !detailTitleNode || !detailSubtitleNode || !detailRailNode) {
+                return;
+            }
+            if (!row) {
+                detailTitleNode.textContent = "Select a staff row to inspect the full performance stack";
+                detailSubtitleNode.textContent = "Click any row in any sheet to open the staff snapshot, follow-up behavior, quality pressure, salary basics, and current session details.";
+                detailGridNode.innerHTML = '<div class="hc-performance-detail-empty">Choose a row from the sheet above to see the detailed performance breakdown.</div>';
+                detailRailNode.innerHTML = "";
+                return;
+            }
+
+            const followup = followupStats(row);
+            const currentCall = row.current_call || null;
+            const currentCallLabel = currentCall?.lead_name || row.current_call_lead_name || "--";
+            const currentCallMeta = currentCall
+                ? `${currentCallLabel} · ${currentCall.duration_label || row.current_call_duration_label || "--"}`
+                : (row.status_note || "No active call right now.");
+            const salaryLabel = [
+                row.compensation_type_label || "--",
+                row.hourly_rate && row.hourly_rate !== "--" ? row.hourly_rate : null,
+                row.weekly_salary && row.weekly_salary !== "--" ? `Weekly ${row.weekly_salary}` : null,
+                row.monthly_salary && row.monthly_salary !== "--" ? `Monthly ${row.monthly_salary}` : null,
+            ].filter(Boolean).join(" · ");
+            const detailPills = [
+                row.online_label ? `Live: ${row.online_label}` : "",
+                row.lead_intake_label ? `Intake: ${row.lead_intake_label}` : "",
+                row.session_state_label ? `Session: ${row.session_state_label}` : "",
+                row.status_note ? row.status_note : "",
+            ].filter(Boolean);
+            const noteLine = [
+                row.quality_note || "",
+                row.attempt_review_label && row.attempt_review_label !== "--" ? row.attempt_review_label : "",
+                row.away_review_label && row.away_review_label !== "Within limit" ? row.away_review_label : "",
+            ].filter(Boolean).join(" · ");
+
+            detailTitleNode.textContent = `${row.name || "Staff"} performance detail`;
+            detailSubtitleNode.textContent = `${row.phone || "--"} · ${row.quality_label || "No Recent Activity"} · ${row.last_seen || "--"}`;
+            detailGridNode.innerHTML = [
+                renderDetailCard("Live Status", row.online_label || "--", row.status_note || "", row.status_tone || "muted"),
+                renderDetailCard("Lead Intake", row.lead_intake_label || "--", "Whether new leads can be assigned to this staff member.", row.lead_intake_tone || "muted"),
+                renderDetailCard("Work Time", row.active_hours_today || "0m", `Calls today: ${asNumber(row.calls_today)} · Converted: ${asNumber(row.converted_today)}`),
+                renderDetailCard("Follow-Up", `${followup.completed}/${followup.total}`, `Rate ${followup.rateLabel} · Missed ${followup.missed}`, followup.rate !== null && followup.rate >= 70 ? "success" : (followup.rate !== null && followup.rate >= 45 ? "warning" : "danger")),
+                renderDetailCard("Quality", `${row.quality_score ?? 0}`, row.quality_label || "--", row.quality_tone || "muted"),
+                renderDetailCard("Queue & Pay", salaryLabel || "--", `Assigned: ${asNumber(row.assigned_leads)} · Penalty ${asNumber(row.total_penalty_points)}`),
+                renderDetailCard("Current Call", currentCallMeta, currentCall ? `Started ${currentCall.started_at || row.current_call_started_at || "--"} · ${currentCall.status_label || row.current_call_status_label || "--"}` : "No customer call is running right now.", currentCall ? "success" : "muted"),
+                renderDetailCard("Gap Monitor", `${asNumber(row.gap_count)} gaps`, `${row.gap_total_label || "0s"} total · ${row.gap_uncounted_label || "0s"} uncounted · ${row.gap_buffer_label || "0s"} buffer`),
+                renderDetailCard("Penalties", `${asNumber(row.total_penalty_points)} points`, `Invalid short ${asNumber(row.invalid_short_count)} · Zero ${asNumber(row.zero_only_block_count)} · Suspicious ${asNumber(row.suspicious_block_count)} · Away ${asNumber(row.long_away_count)}`),
+            ].join("");
+            detailRailNode.innerHTML = detailPills
+                .map((pill) => `<span class="hc-performance-detail-pill">${escapeHtml(pill)}</span>`)
+                .join("");
+            if (noteLine) {
+                detailRailNode.innerHTML += `<span class="hc-performance-detail-pill">${escapeHtml(noteLine)}</span>`;
+            }
+        }
+
         function summarizeTeam(payload) {
             const summary = payload?.summary || {};
             if (liveStaffNode) {
@@ -5420,15 +5552,16 @@
             }
             const totalFollowupCalls = latestRows.reduce((sum, row) => sum + asNumber(row.callback_total), 0);
             const totalFollowupMissed = latestRows.reduce((sum, row) => sum + asNumber(row.missed_callbacks), 0);
+            const totalFollowupCompleted = Math.max(totalFollowupCalls - totalFollowupMissed, 0);
             const followupRate = totalFollowupCalls > 0
-                ? ((totalFollowupCalls - totalFollowupMissed) / totalFollowupCalls) * 100
+                ? (totalFollowupCompleted / totalFollowupCalls) * 100
                 : null;
             if (followupRateNode) {
                 followupRateNode.textContent = followupRate === null ? "--" : `${Math.max(0, Math.min(100, Math.round(followupRate)))}%`;
             }
             if (followupMetaNode) {
                 followupMetaNode.textContent = totalFollowupCalls > 0
-                    ? `${totalFollowupCalls} follow-up calls / ${totalFollowupMissed} missed`
+                    ? `${totalFollowupCalls} follow-up calls / ${totalFollowupMissed} missed / ${totalFollowupCompleted} completed`
                     : "No follow-up calling has been recorded yet";
             }
         }
@@ -5448,7 +5581,7 @@
             overviewBody.innerHTML = ranked.map((row) => {
                 const width = Math.max(12, Math.round((buildPerformanceScore(row) / maxScore) * 100));
                 return `
-                    <tr>
+                    <tr ${rowHtmlAttributes(row)}>
                         <td>
                             <strong>${escapeHtml(row.name || "Staff")}</strong>
                             <div class="small text-muted">${escapeHtml(row.phone || "--")}</div>
@@ -5470,6 +5603,107 @@
                                 <span style="width:${width}%"></span>
                             </div>
                             <div class="small text-muted mt-1">${escapeHtml(row.status_note || "Live tracking")}</div>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+        }
+
+        function renderDetailedSheet(rows) {
+            if (!detailedBody) {
+                return;
+            }
+            if (!rows.length) {
+                detailedBody.innerHTML = '<tr><td colspan="23" class="text-center py-4">No detailed staff performance rows are available yet.</td></tr>';
+                return;
+            }
+            const ranked = rows
+                .slice()
+                .sort((left, right) => {
+                    const rightFollowup = followupStats(right);
+                    const leftFollowup = followupStats(left);
+                    if ((rightFollowup.rate ?? -1) !== (leftFollowup.rate ?? -1)) {
+                        return (rightFollowup.rate ?? -1) - (leftFollowup.rate ?? -1);
+                    }
+                    if (asNumber(right.calls_today) !== asNumber(left.calls_today)) {
+                        return asNumber(right.calls_today) - asNumber(left.calls_today);
+                    }
+                    if (asNumber(right.quality_score) !== asNumber(left.quality_score)) {
+                        return asNumber(right.quality_score) - asNumber(left.quality_score);
+                    }
+                    return String(left.name || "").localeCompare(String(right.name || ""));
+                });
+            detailedBody.innerHTML = ranked.map((row) => {
+                const followup = followupStats(row);
+                const qualityTone = row.needs_review ? "danger" : (row.quality_tone || "muted");
+                const liveTone = row.is_on_call ? "success" : (row.online_label === "Online" ? "success" : (row.online_label === "Away" ? "warning" : "muted"));
+                const intakeTone = row.lead_intake_tone || "muted";
+                const currentCall = row.current_call || null;
+                const currentCallLabel = currentCall?.lead_name || row.current_call_lead_name || "--";
+                const currentCallMeta = currentCall
+                    ? `${currentCallLabel} · ${currentCall.duration_label || row.current_call_duration_label || "--"}`
+                    : "No active call";
+                const note = row.status_note || row.quality_note || "--";
+                const salaryParts = [
+                    row.compensation_type_label || "--",
+                    row.hourly_rate && row.hourly_rate !== "--" ? row.hourly_rate : null,
+                    row.weekly_salary && row.weekly_salary !== "--" ? `W ${row.weekly_salary}` : null,
+                    row.monthly_salary && row.monthly_salary !== "--" ? `M ${row.monthly_salary}` : null,
+                ].filter(Boolean);
+                return `
+                    <tr ${rowHtmlAttributes(row)}>
+                        <td>
+                            <strong>${escapeHtml(row.name || "Staff")}</strong>
+                            <div class="small text-muted">${escapeHtml(row.phone || "--")}</div>
+                        </td>
+                        <td>
+                            <span class="hc-status hc-status-${escapeHtml(liveTone)} mb-1">${escapeHtml(row.online_label || "--")}</span>
+                            <div class="small text-muted">${escapeHtml(row.session_state_label || row.status_note || "--")}</div>
+                        </td>
+                        <td>
+                            <span class="hc-status hc-status-${escapeHtml(intakeTone)} mb-1">${escapeHtml(row.lead_intake_label || "--")}</span>
+                            <div class="small text-muted">${escapeHtml(row.compensation_type_label || "--")}</div>
+                        </td>
+                        <td>${asNumber(row.calls_today)}</td>
+                        <td>${asNumber(row.converted_today)}</td>
+                        <td>${escapeHtml(row.active_hours_today || "0m")}</td>
+                        <td>${asNumber(row.assigned_leads)}</td>
+                        <td>${asNumber(followup.total)}</td>
+                        <td>${escapeHtml(followup.rateLabel)}</td>
+                        <td>${asNumber(followup.missed)}</td>
+                        <td>${asNumber(row.followup_started_count)}</td>
+                        <td>${asNumber(row.followup_closed_count)}</td>
+                        <td>
+                            <span class="hc-status hc-status-${escapeHtml(qualityTone)} mb-1">${escapeHtml(row.quality_label || "--")}</span>
+                            <div class="small text-muted">${asNumber(row.quality_score)}</div>
+                        </td>
+                        <td>${asNumber(row.invalid_short_count)}</td>
+                        <td>${asNumber(row.zero_only_block_count)}</td>
+                        <td>${asNumber(row.suspicious_block_count)}</td>
+                        <td>
+                            <div>${asNumber(row.long_away_count)}</div>
+                            <div class="small text-muted">${escapeHtml(row.away_review_label || "--")}</div>
+                        </td>
+                        <td>
+                            <div>${asNumber(row.gap_count)}</div>
+                            <div class="small text-muted">${escapeHtml(row.gap_total_label || "0s")}</div>
+                        </td>
+                        <td>
+                            <div>${asNumber(row.total_penalty_points)}</div>
+                            <div class="small text-muted">Expired ${asNumber(row.expired_followup_count)} · ${asNumber(row.expired_followup_penalty_points)} pts</div>
+                        </td>
+                        <td>
+                            <div>${escapeHtml(salaryParts.join(" · ") || "--")}</div>
+                            <div class="small text-muted">Bonus ${escapeHtml(row.bonus_per_conversion || "--")}</div>
+                        </td>
+                        <td>${escapeHtml(row.last_seen || "--")}</td>
+                        <td>
+                            <div>${escapeHtml(currentCallMeta)}</div>
+                            <div class="small text-muted">${escapeHtml(row.current_call_started_at || row.current_call_status_label || "--")}</div>
+                        </td>
+                        <td>
+                            <div>${escapeHtml(note)}</div>
+                            <div class="small text-muted">${escapeHtml(row.attempt_review_label || "--")}</div>
                         </td>
                     </tr>
                 `;
@@ -5502,7 +5736,7 @@
                 const completed = Math.max(asNumber(row.callback_total) - asNumber(row.missed_callbacks), 0);
                 const width = Math.max(12, Math.round((asNumber(row.callback_total) / maxFollowup) * 100));
                 return `
-                    <tr>
+                    <tr ${rowHtmlAttributes(row)}>
                         <td>
                             <strong>${escapeHtml(row.name || "Staff")}</strong>
                             <div class="small text-muted">${escapeHtml(row.phone || "--")}</div>
@@ -5539,7 +5773,7 @@
             qualityBody.innerHTML = ranked.map((row) => {
                 const width = Math.max(12, Math.round((asNumber(row.quality_score) / maxScore) * 100));
                 return `
-                    <tr>
+                    <tr ${rowHtmlAttributes(row)}>
                         <td>
                             <strong>${escapeHtml(row.name || "Staff")}</strong>
                             <div class="small text-muted">${escapeHtml(row.quality_note || "--")}</div>
@@ -5585,7 +5819,7 @@
                 const stateLabel = row.needs_review ? "Review Needed" : (row.quality_label || "Attention");
                 const stateTone = row.needs_review ? "danger" : (row.quality_tone || "warning");
                 return `
-                    <tr>
+                    <tr ${rowHtmlAttributes(row)}>
                         <td>
                             <strong>${escapeHtml(row.name || "Staff")}</strong>
                             <div class="small text-muted">${escapeHtml(row.quality_label || "Monitoring")}</div>
@@ -5611,12 +5845,18 @@
 
         function renderPayload(payload) {
             latestPayload = payload || {};
-            latestRows = Array.isArray(latestPayload?.staff_rows) ? latestPayload.staff_rows : [];
+            latestRows = Array.isArray(latestPayload?.performance_rows)
+                ? latestPayload.performance_rows
+                : Array.isArray(latestPayload?.staff_rows)
+                    ? latestPayload.staff_rows
+                    : [];
             summarizeTeam(latestPayload);
             renderOverviewSheet(latestRows);
+            renderDetailedSheet(latestRows);
             renderFollowupSheet(latestRows);
             renderQualitySheet(latestRows);
             renderAttentionSheet(latestRows);
+            updateSelectedStaffId(selectedStaffId || latestRows[0]?.id || "");
             setActiveSheet(activeSheet);
         }
 
@@ -5642,6 +5882,16 @@
         sheetButtons.forEach((button) => {
             button.addEventListener("click", () => {
                 setActiveSheet(button.dataset.sheet || "overview");
+            });
+        });
+
+        [overviewBody, detailedBody, followupBody, qualityBody, attentionBody].forEach((body) => {
+            body?.addEventListener("click", (event) => {
+                const rowNode = event.target.closest("[data-staff-id]");
+                if (!rowNode) {
+                    return;
+                }
+                updateSelectedStaffId(rowNode.dataset.staffId || "");
             });
         });
 

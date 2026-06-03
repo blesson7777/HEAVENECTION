@@ -5936,6 +5936,7 @@ def build_live_monitoring_payload():
     active_hours_seconds = 0
     review_needed_now = 0
     alert_now = 0
+    performance_rows = []
     live_rows = []
 
     for row in team_rows:
@@ -5975,57 +5976,119 @@ def build_live_monitoring_payload():
             status_note = "Session is open, but the staff member is away from the app right now."
         elif has_worked_today:
             status_note = "Worked today and is currently offline from the app."
+        elif not is_live_now:
+            status_note = "No work has been recorded today yet."
+
+        callback_total = int(row.get("callback_total") or 0)
+        missed_callbacks = int(row.get("missed_callbacks") or 0)
+        completed_callbacks = max(callback_total - missed_callbacks, 0)
+        followup_rate = int(round((completed_callbacks / callback_total) * 100)) if callback_total > 0 else None
+
+        current_call_label = ""
+        current_call_duration_label = ""
+        current_call_started_at = ""
+        current_call_status_label = ""
+        current_call_lead_phone = ""
+        current_call_lead_id = ""
+        if current_call:
+            current_call_label = current_call.get("lead_name", "Lead")
+            current_call_duration_label = current_call.get("duration_label", "--")
+            current_call_started_at = current_call.get("started_at", "")
+            current_call_status_label = current_call.get("status_label", "Started")
+            current_call_lead_phone = current_call.get("lead_phone", "")
+            current_call_lead_id = current_call.get("lead_id", "")
+
+        row_payload = {
+            "id": row["id"],
+            "name": row["name"],
+            "phone": row["phone"],
+            "is_active": bool(row.get("is_active", True)),
+            "receives_new_leads": bool(row.get("receives_new_leads", True)),
+            "compensation_type": row.get("compensation_type", Staff.CompensationType.HOURLY),
+            "compensation_type_label": row.get("compensation_type_label", "Hourly"),
+            "lead_intake_label": row.get("lead_intake_label", "Receiving new leads"),
+            "lead_intake_tone": row.get("lead_intake_tone", "success"),
+            "online_label": online_label,
+            "status_tone": row.get("status_tone", "muted"),
+            "status_filter": row.get("status_filter", "inactive"),
+            "session_state": row.get("session_state", "stopped"),
+            "session_state_label": _session_status_label(session),
+            "active_hours_today": row.get("active_hours_today", "0.0h"),
+            "calls_today": calls_today,
+            "converted_today": int(row.get("converted_today") or 0),
+            "assigned_leads": int(row.get("assigned_leads") or 0),
+            "quality_score": int(row.get("quality_score") or 0),
+            "quality_label": quality_label,
+            "quality_tone": row.get("quality_tone", "muted"),
+            "quality_note": row.get("quality_note", "Build more recent call activity for a fuller review."),
+            "outcome_consistency_label": row.get("outcome_consistency_label", "--"),
+            "attempt_review_label": row.get("attempt_review_label", "--"),
+            "away_review_label": row.get("away_review_label", "No long away periods"),
+            "long_away_count": int(row.get("long_away_count") or 0),
+            "real_call_count": int(row.get("real_call_count") or 0),
+            "verified_attempt_count": int(row.get("verified_attempt_count") or 0),
+            "zero_second_attempt_count": int(row.get("zero_second_attempt_count") or 0),
+            "invalid_short_count": int(row.get("invalid_short_count") or 0),
+            "missed_callbacks": missed_callbacks,
+            "followup_total": callback_total,
+            "callback_total": callback_total,
+            "followup_completed_count": completed_callbacks,
+            "followup_rate": followup_rate,
+            "followup_rate_label": f"{followup_rate}%" if followup_rate is not None else "--",
+            "callback_discipline": row.get("callback_discipline"),
+            "callback_discipline_label": row.get("callback_discipline_label", "--"),
+            "followup_started_count": int(row.get("followup_started_count") or 0),
+            "followup_closed_count": int(row.get("followup_closed_count") or 0),
+            "suspicious_block_count": int(row.get("suspicious_block_count") or 0),
+            "zero_only_block_count": int(row.get("zero_only_block_count") or 0),
+            "gap_count": int(gap_summary.get("gap_count") or 0),
+            "gap_total_label": gap_summary.get("gap_total_label", "0s"),
+            "gap_uncounted_label": gap_summary.get("gap_uncounted_label", "0s"),
+            "gap_buffer_label": gap_summary.get("gap_buffer_label", "0s"),
+            "call_time_label": gap_summary.get("call_time_label", "0s"),
+            "last_seen": row.get("last_seen", "--"),
+            "status_note": status_note,
+            "is_on_call": bool(current_call),
+            "worked_today": has_worked_today,
+            "needs_review": needs_review,
+            "current_call": current_call,
+            "current_call_lead_name": current_call_label,
+            "current_call_lead_phone": current_call_lead_phone,
+            "current_call_started_at": current_call_started_at,
+            "current_call_duration_label": current_call_duration_label,
+            "current_call_status_label": current_call_status_label,
+            "current_call_lead_id": current_call_lead_id,
+            "hourly_rate": row.get("hourly_rate", "--"),
+            "weekly_salary": row.get("weekly_salary", "--"),
+            "monthly_salary": row.get("monthly_salary", "--"),
+            "target_hours_per_week": row.get("target_hours_per_week", 0),
+            "target_hours_per_month": row.get("target_hours_per_month", 0),
+            "call_rate": row.get("call_rate", "--"),
+            "bonus_per_conversion": row.get("bonus_per_conversion", "--"),
+            "expired_followup_count": int(row.get("expired_followup_count") or 0),
+            "expired_followup_penalty_points": int(row.get("expired_followup_penalty_points") or 0),
+            "total_penalty_points": int(row.get("total_penalty_points") or 0),
+        }
+        performance_rows.append(row_payload)
 
         if is_active_account and (has_worked_today or is_live_now or needs_review):
-            live_rows.append(
-                {
-                    "id": row["id"],
-                    "name": row["name"],
-                    "phone": row["phone"],
-                    "is_active": bool(row.get("is_active", True)),
-                    "compensation_type_label": row.get("compensation_type_label", "Hourly"),
-                    "online_label": online_label,
-                    "status_tone": row.get("status_tone", "muted"),
-                    "session_state": row.get("session_state", "stopped"),
-                    "session_state_label": _session_status_label(session),
-                    "active_hours_today": row.get("active_hours_today", "0.0h"),
-                    "calls_today": calls_today,
-                    "converted_today": int(row.get("converted_today") or 0),
-                    "assigned_leads": int(row.get("assigned_leads") or 0),
-                    "quality_score": int(row.get("quality_score") or 0),
-                    "quality_label": quality_label,
-                    "quality_tone": row.get("quality_tone", "muted"),
-                    "quality_note": row.get("quality_note", "Build more recent call activity for a fuller review."),
-                    "outcome_consistency_label": row.get("outcome_consistency_label", "--"),
-                    "attempt_review_label": row.get("attempt_review_label", "--"),
-                    "away_review_label": row.get("away_review_label", "No long away periods"),
-                    "long_away_count": int(row.get("long_away_count") or 0),
-                    "real_call_count": int(row.get("real_call_count") or 0),
-                    "verified_attempt_count": int(row.get("verified_attempt_count") or 0),
-                    "zero_second_attempt_count": int(row.get("zero_second_attempt_count") or 0),
-                    "invalid_short_count": int(row.get("invalid_short_count") or 0),
-                    "missed_callbacks": int(row.get("missed_callbacks") or 0),
-                    "suspicious_block_count": int(row.get("suspicious_block_count") or 0),
-                    "zero_only_block_count": int(row.get("zero_only_block_count") or 0),
-                    "gap_count": int(gap_summary.get("gap_count") or 0),
-                    "gap_total_label": gap_summary.get("gap_total_label", "0s"),
-                    "gap_uncounted_label": gap_summary.get("gap_uncounted_label", "0s"),
-                    "gap_buffer_label": gap_summary.get("gap_buffer_label", "0s"),
-                    "call_time_label": gap_summary.get("call_time_label", "0s"),
-                    "last_seen": row.get("last_seen", "--"),
-                    "status_note": status_note,
-                    "is_on_call": bool(current_call),
-                    "worked_today": has_worked_today,
-                    "needs_review": needs_review,
-                    "current_call": current_call,
-                }
-            )
+            live_rows.append(row_payload)
 
     live_rows.sort(
         key=lambda row: (
             0 if row["is_on_call"] else 1,
             0 if row["online_label"] == "Online" else 1,
             0 if row["worked_today"] else 1,
+            0 if row["needs_review"] else 1,
+            -row["calls_today"],
+            -row["quality_score"],
+            row["name"].lower(),
+        )
+    )
+    performance_rows.sort(
+        key=lambda row: (
+            0 if row["is_on_call"] else 1,
+            0 if row["online_label"] == "Online" else 1,
             0 if row["needs_review"] else 1,
             -row["calls_today"],
             -row["quality_score"],
@@ -6040,6 +6103,7 @@ def build_live_monitoring_payload():
         "summary": {
             "total_staff": team_payload["team_summary"]["total_staff"],
             "active_accounts": team_payload["team_summary"]["active_accounts"],
+            "lead_intake_paused": team_payload["team_summary"]["lead_intake_paused"],
             "online_now": online_now,
             "on_call_now": on_call_now,
             "away_now": away_now,
@@ -6053,6 +6117,7 @@ def build_live_monitoring_payload():
         },
         "spotlight_rows": spotlight_rows,
         "staff_rows": live_rows,
+        "performance_rows": performance_rows,
     }
 
 

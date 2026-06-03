@@ -7758,6 +7758,88 @@ body.hc-live-monitoring-focus .hc-cc-shell-v3 .hc-cc-stage {
     color: #eff7ff;
 }
 
+.hc-performance-detail-shell {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1rem;
+    border-radius: 24px;
+    border: 1px solid rgba(148, 175, 218, 0.18);
+    background: linear-gradient(180deg, rgba(8, 14, 28, 0.96), rgba(7, 12, 24, 0.92));
+    box-shadow: 0 22px 48px rgba(3, 7, 16, 0.24);
+}
+
+.hc-performance-detail-grid {
+    display: grid;
+    gap: 0.9rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.hc-performance-detail-card {
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.95rem;
+    border-radius: 18px;
+    border: 1px solid rgba(118, 147, 204, 0.14);
+    background: linear-gradient(180deg, rgba(10, 17, 31, 0.96), rgba(7, 12, 24, 0.9));
+}
+
+.hc-performance-detail-card strong {
+    color: #f5f9ff;
+}
+
+.hc-performance-detail-card small,
+.hc-performance-detail-card span {
+    color: rgba(214, 226, 255, 0.7);
+}
+
+.hc-performance-detail-card .hc-status {
+    width: fit-content;
+}
+
+.hc-performance-detail-card-wide {
+    grid-column: 1 / -1;
+}
+
+.hc-performance-detail-empty {
+    grid-column: 1 / -1;
+    padding: 1rem;
+    border-radius: 18px;
+    border: 1px dashed rgba(118, 147, 204, 0.18);
+    color: rgba(214, 226, 255, 0.76);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.hc-performance-detail-rail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.hc-performance-detail-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid rgba(118, 147, 204, 0.16);
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(237, 244, 255, 0.88);
+    font-size: 0.86rem;
+}
+
+.hc-performance-sheet-table.is-detailed {
+    min-width: 1880px;
+}
+
+.hc-performance-sheet-row {
+    cursor: pointer;
+}
+
+.hc-performance-sheet-row:hover,
+.hc-performance-sheet-row.is-selected {
+    background: rgba(76, 156, 255, 0.1) !important;
+}
+
 .hc-performance-sheet-panel {
     display: grid;
     gap: 0.95rem;
@@ -7989,6 +8071,10 @@ body.hc-live-monitoring-focus .hc-cc-shell-v3 .hc-cc-stage {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .hc-performance-detail-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .hc-performance-panel-head,
     .hc-performance-graph-head,
     .hc-performance-alert-top,
@@ -8039,6 +8125,10 @@ body.hc-live-monitoring-focus .hc-cc-shell-v3 .hc-cc-stage {
     .hc-performance-topbar,
     .hc-performance-funnel-step,
     .hc-performance-compare-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .hc-performance-detail-grid {
         grid-template-columns: 1fr;
     }
 

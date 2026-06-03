@@ -2553,7 +2553,7 @@ def performance_monitoring_page(request):
         active_page="performance-monitoring",
         page_title="Performance Monitoring",
         page_heading="Performance Monitoring",
-        page_subtitle="Spreadsheet-style staff performance sheets with separate follow-up, quality, and attention views.",
+        page_subtitle="Zoho-style performance sheets with detailed drill-downs for work, follow-up, quality, salary, and queue health.",
         extra_context={
             **payload,
             "performance_monitoring_payload": payload,
