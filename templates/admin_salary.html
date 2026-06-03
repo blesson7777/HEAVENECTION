@@ -103,6 +103,9 @@
                         <div class="text-muted small">Earned {{ row.due_earned_total }} | Paid {{ row.due_paid_total }}</div>
                         <div class="text-muted small">Hours {{ row.due_hours_label }}</div>
                         <div class="text-muted small">Base {{ row.due_base_pay }} | Bonus {{ row.due_bonus_earnings }}</div>
+                        {% if row.due_advance_credit and row.due_advance_credit != 'Rs. 0.00' %}
+                        <div class="text-success small">Advance credit applied {{ row.due_advance_credit }}</div>
+                        {% endif %}
                         <div class="text-muted small">This is the closed period amount that can be fully paid now.</div>
                     </td>
                     <td>

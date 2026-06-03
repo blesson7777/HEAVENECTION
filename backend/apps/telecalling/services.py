@@ -2378,6 +2378,9 @@ def build_staff_salary_details_payload(staff):
         previous_month_snapshot,
         current_snapshot["paid_total"],
     )
+    previous_month_subtitle = "Review the full earning and payment position from the last completed month."
+    if previous_month_advance_credit > Decimal("0.00"):
+        previous_month_subtitle += f" Advance credit applied: {_format_currency(previous_month_advance_credit)}."
 
     if staff.compensation_type == Staff.CompensationType.WEEKLY:
         pattern_title = "Recent weekly earnings"
@@ -2422,7 +2425,7 @@ def build_staff_salary_details_payload(staff):
         "previous_month": _staff_salary_snapshot_block(
             "Previous month earnings",
             previous_month_snapshot,
-            subtitle="Review the full earning and payment position from the last completed month.",
+            subtitle=previous_month_subtitle,
         ),
         "previous_month_advance_credit": _format_currency(previous_month_advance_credit),
         "pattern": {
