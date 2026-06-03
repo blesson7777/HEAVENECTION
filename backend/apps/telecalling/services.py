@@ -1698,14 +1698,32 @@ def _running_period_for_staff(staff, today):
     return _monthly_running_period(today)
 
 
+def _salary_records_for_period(staff, *, period_start, period_end, payout_cycle):
+    return Salary.objects.filter(
+        staff=staff,
+        period_start__gte=period_start,
+        period_end__lte=period_end,
+        payout_cycle=payout_cycle,
+    )
+
+
 def _salary_period_snapshot(staff, *, period_start, period_end, payout_cycle):
     breakdown = calculate_staff_payout_for_dates(staff, period_start, period_end)
-    record = Salary.objects.filter(
-        staff=staff,
+    period_records = _salary_records_for_period(
+        staff,
         period_start=period_start,
         period_end=period_end,
-    ).first()
-    paid_total = _salary_record_paid_total(record) if record else Decimal("0.00")
+        payout_cycle=payout_cycle,
+    )
+    record = (
+        period_records.filter(period_start=period_start, period_end=period_end).first()
+        or period_records.order_by("-period_end", "-updated_at").first()
+    )
+    paid_total = (
+        period_records.aggregate(total=Coalesce(Sum("paid_amount"), Decimal("0.00")))
+        .get("total")
+        or Decimal("0.00")
+    )
     earned_total = _money(breakdown["total_pay"])
     balance = max(earned_total - paid_total, Decimal("0.00"))
     conversion_reward_rows = _conversion_reward_rows_for_period(
