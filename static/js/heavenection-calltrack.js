@@ -4304,6 +4304,31 @@
             writeStoredIdSet(seenAlertIdsKey, seenAlertIds);
         }
 
+        function markVisibleAlertsSeen() {
+            if (!listNode) {
+                return;
+            }
+            const visibleAlertIds = Array.from(listNode.querySelectorAll("[data-alert-id]"))
+                .map((node) => String(node.getAttribute("data-alert-id") || "").trim())
+                .filter(Boolean);
+            if (!visibleAlertIds.length) {
+                return;
+            }
+
+            let didChange = false;
+            visibleAlertIds.forEach((alertId) => {
+                if (!seenAlertIds.has(alertId)) {
+                    seenAlertIds.add(alertId);
+                    didChange = true;
+                }
+            });
+
+            if (didChange) {
+                writeStoredIdSet(seenAlertIdsKey, seenAlertIds);
+                renderPayload(latestPayload);
+            }
+        }
+
         function isAlertSeen(alertId) {
             const normalizedId = String(alertId || "").trim();
             return normalizedId ? seenAlertIds.has(normalizedId) : false;
@@ -4585,6 +4610,13 @@
         lastAlertSignature = JSON.stringify((latestPayload.alerts || []).map((alert) => [alert.id, alert.severity]));
         refreshPayload({ silent: true });
         syncNotificationControls();
+
+        const dropdownRoot = button.closest(".dropdown");
+        const handleDropdownOpen = () => {
+            window.setTimeout(markVisibleAlertsSeen, 0);
+        };
+        button.addEventListener("click", handleDropdownOpen);
+        dropdownRoot?.addEventListener("shown.bs.dropdown", handleDropdownOpen);
 
         permissionButton?.addEventListener("click", async () => {
             if (!isNotificationSupported()) {

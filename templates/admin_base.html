@@ -333,7 +333,7 @@
                             <strong>Alerts</strong>
                             <small id="heavenectionAdminAlertStatus">
                                 {% if admin_alert_payload.summary.total_alerts %}
-                                    {{ admin_alert_payload.summary.total_alerts }} active warning{{ admin_alert_payload.summary.total_alerts|pluralize }}
+                                    {{ admin_alert_payload.summary.total_alerts }} active alert{{ admin_alert_payload.summary.total_alerts|pluralize }}
                                 {% else %}
                                     No active alerts
                                 {% endif %}
