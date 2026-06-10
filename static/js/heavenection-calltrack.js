@@ -5211,10 +5211,62 @@
     bindTrainingCrud();
     bindSalaryControlCrud();
     bindLiveMonitoringPage();
+    bindStaffProfileCallActivityFilters();
     bindPerformanceMonitoringPage();
     bindAdminAlertCenter();
     bindSidebarSections();
     bindEmiCalculator();
+
+    function bindStaffProfileCallActivityFilters() {
+        const callSearchInput = document.getElementById("staffCallActivitySearch");
+        const callDateFilter = document.getElementById("staffCallActivityDateFilter");
+        const callBody = document.getElementById("staffCallActivityBody");
+        const callEmptyState = document.getElementById("staffCallActivityEmpty");
+        if (!callBody) {
+            return;
+        }
+
+        const callRows = Array.from(callBody.querySelectorAll("tr[data-search-text]"));
+        const callGroupHeaders = Array.from(callBody.querySelectorAll("tr[data-group-header]"));
+        if (!callRows.length && !callGroupHeaders.length) {
+            return;
+        }
+
+        const applyCallFilters = () => {
+            const query = callSearchInput ? callSearchInput.value.trim().toLowerCase() : "";
+            const selectedDate = callDateFilter ? callDateFilter.value : "";
+            let visibleCount = 0;
+            const visibleGroups = new Map();
+
+            callRows.forEach((row) => {
+                const rowText = row.dataset.searchText || "";
+                const rowDate = row.dataset.dateGroup || "";
+                const matchesQuery = !query || rowText.includes(query);
+                const matchesDate = !selectedDate || rowDate === selectedDate;
+                const isVisible = matchesQuery && matchesDate;
+                row.classList.toggle("d-none", !isVisible);
+                if (isVisible) {
+                    visibleCount += 1;
+                    visibleGroups.set(rowDate, (visibleGroups.get(rowDate) || 0) + 1);
+                }
+            });
+
+            callGroupHeaders.forEach((header) => {
+                const groupKey = header.dataset.groupHeader || "";
+                header.classList.toggle("d-none", (visibleGroups.get(groupKey) || 0) === 0);
+            });
+
+            if (callEmptyState) {
+                callEmptyState.classList.toggle("d-none", visibleCount !== 0);
+            }
+        };
+
+        callSearchInput?.addEventListener("input", applyCallFilters);
+        callSearchInput?.addEventListener("change", applyCallFilters);
+        callDateFilter?.addEventListener("input", applyCallFilters);
+        callDateFilter?.addEventListener("change", applyCallFilters);
+        applyCallFilters();
+    }
 
     function bindPerformanceMonitoringPage() {
         const root = document.getElementById("heavenectionPerformanceMonitoringPage");
