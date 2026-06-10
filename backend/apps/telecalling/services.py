@@ -3314,9 +3314,10 @@ def _is_active_queue_status(status):
 
 
 def _follow_up_queryset():
-    return Lead.objects.filter(
-        Q(status__in=FOLLOW_UP_STATUSES) | Q(followup_moved_back_at__isnull=False)
-    )
+    # Keep the live queue limited to actual follow-up work.
+    # Rejected / closed leads may still have historical follow-up metadata,
+    # but they should not reappear in the queue once their status changes.
+    return Lead.objects.filter(status__in=FOLLOW_UP_STATUSES)
 
 
 def _followup_expiry_settings(*, company_profile=None):
